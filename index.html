@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkFlow</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1a1a1a; --muted: #5c5c5c; --bg: #fbfbfa; --line: #e3e3e0; --link: #2f5fd0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e8e8e6; --muted: #9a9a96; --bg: #17171a; --line: #2e2e33; --link: #8fb0ff; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 4rem 1.5rem; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 38rem; margin: 0 auto; }
+  h1 { font-size: 1.75rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 2.5rem; }
+  h2 { font-size: 1rem; margin: 2.5rem 0 .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  ul { padding-left: 1.15rem; margin: 0; }
+  li { margin: .35rem 0; }
+  a { color: var(--link); }
+  footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
+  .en { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <h1>WorkFlow</h1>
+  <p class="sub">Личный менеджер задач: канбан-доски и сведённый календарь нескольких Google-аккаунтов в одном окне.</p>
+
+  <h2>Что это</h2>
+  <p>
+    Приложение для одного человека — его автора. Оно показывает задачи на канбан-досках
+    и рядом с ними — события из подключённых календарей Google, чтобы planning и расписание
+    не жили в двух разных вкладках. Регистрации, совместной работы и многопользовательского
+    режима в нём нет и не планируется.
+  </p>
+
+  <h2>Доступ к Google Calendar</h2>
+  <ul>
+    <li>Список календарей аккаунта — только чтение.</li>
+    <li>События календаря — чтение, а также создание, изменение и удаление тех событий, которые пользователь заводит через приложение.</li>
+  </ul>
+  <p>Других разрешений приложение не запрашивает.</p>
+
+  <h2>Где живут данные</h2>
+  <p>
+    Приложение запускается пользователем на своём компьютере или собственном сервере.
+    Данные хранятся в его базе, у автора приложения нет к ним доступа: сервиса, куда бы
+    они отправлялись, не существует.
+  </p>
+
+  <h2>Ещё</h2>
+  <ul>
+    <li><a href="privacy.html">Политика конфиденциальности</a></li>
+    <li><a href="https://github.com/ev-climb/workflow">Исходный код</a></li>
+  </ul>
+
+  <div class="en">
+    <h1>WorkFlow</h1>
+    <p class="sub">A personal task manager: kanban boards next to a merged view of several Google Calendar accounts.</p>
+    <p>
+      A single-user application, built by its author for their own use. It shows tasks on kanban
+      boards alongside events from connected Google calendars. There is no sign-up, no collaboration
+      and no multi-user mode.
+    </p>
+    <p>
+      It requests read access to the account's calendar list, and read/write access to calendar
+      events so that events created in the app can be kept in sync. Nothing else.
+    </p>
+    <p>
+      The application runs on the user's own machine or server, and stores data in the user's own
+      database. There is no hosted service the data is sent to.
+    </p>
+    <p>
+      <a href="privacy.html">Privacy policy</a> ·
+      <a href="https://github.com/ev-climb/workflow">Source code</a>
+    </p>
+  </div>
+
+  <footer>WorkFlow · <a href="https://github.com/ev-climb/workflow">github.com/ev-climb/workflow</a></footer>
+</main>
+</body>
+</html>

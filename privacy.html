@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WorkFlow — политика конфиденциальности</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1a1a1a; --muted: #5c5c5c; --bg: #fbfbfa; --line: #e3e3e0; --link: #2f5fd0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e8e8e6; --muted: #9a9a96; --bg: #17171a; --line: #2e2e33; --link: #8fb0ff; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 4rem 1.5rem; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 38rem; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 2.5rem; font-size: .95rem; }
+  h2 { font-size: 1rem; margin: 2.25rem 0 .6rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  ul { padding-left: 1.15rem; margin: 0; }
+  li { margin: .35rem 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+  a { color: var(--link); }
+  footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
+  .en { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Политика конфиденциальности WorkFlow</h1>
+  <p class="sub">Действует с 25 августа 2026 года</p>
+
+  <p>
+    WorkFlow — приложение для одного пользователя, которое он запускает на своём компьютере
+    или собственном сервере. Централизованного сервиса, который принимал бы данные
+    пользователей, не существует, и автор приложения не имеет доступа к данным тех, кто его
+    запускает.
+  </p>
+
+  <h2>Какие данные Google приложение получает</h2>
+  <p>После явного разрешения владельца аккаунта приложение обращается к Google Calendar API:</p>
+  <ul>
+    <li><code>calendar.calendarlist.readonly</code> — список календарей аккаунта: названия, идентификаторы, цвета, признак видимости.</li>
+    <li><code>calendar.events</code> — события календарей: название, описание, время начала и конца, признак «на весь день», статус, ссылка на серию повторов, служебные поля версии.</li>
+  </ul>
+  <p>
+    Адрес электронной почты подключённого аккаунта приложение берёт из идентификатора
+    основного календаря — чтобы отличать подключённые аккаунты друг от друга. Отдельного
+    разрешения на чтение профиля оно не запрашивает.
+  </p>
+
+  <h2>Зачем они используются</h2>
+  <ul>
+    <li>Показать события нескольких аккаунтов в одном окне рядом с задачами.</li>
+    <li>Создавать, переносить и удалять события по действию пользователя в приложении.</li>
+  </ul>
+  <p>
+    Ни для чего другого данные календаря не используются. В частности: не анализируются,
+    не используются для рекламы, не применяются для обучения моделей и не передаются
+    третьим лицам.
+  </p>
+
+  <h2>Хранение и защита</h2>
+  <ul>
+    <li>Данные хранятся в базе данных на машине пользователя или на его сервере.</li>
+    <li>Токены доступа Google хранятся в этой базе зашифрованными.</li>
+    <li>Никакой передачи данных на серверы автора приложения не происходит — таких серверов нет.</li>
+  </ul>
+
+  <h2>Отзыв доступа и удаление</h2>
+  <ul>
+    <li>Доступ отзывается в любой момент на странице <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. После этого приложение теряет возможность обращаться к календарю.</li>
+    <li>Локальные копии удаляются вместе с базой данных приложения, которой распоряжается сам пользователь.</li>
+  </ul>
+
+  <h2>Изменения</h2>
+  <p>
+    Новая редакция публикуется на этой странице с новой датой вступления в силу. История
+    изменений видна в репозитории проекта.
+  </p>
+
+  <h2>Связь</h2>
+  <p>
+    Вопросы — через <a href="https://github.com/ev-climb/workflow/issues">issues репозитория</a>.
+  </p>
+
+  <div class="en">
+    <h1>WorkFlow Privacy Policy</h1>
+    <p class="sub">Effective 25 August 2026</p>
+
+    <p>
+      WorkFlow is a single-user application that its user runs on their own computer or server.
+      There is no central service receiving user data, and the author of the application has no
+      access to the data of anyone running it.
+    </p>
+
+    <h2>Google data accessed</h2>
+    <p>With the account owner's explicit consent, the application calls the Google Calendar API:</p>
+    <ul>
+      <li><code>calendar.calendarlist.readonly</code> — the account's calendar list: names, identifiers, colors, visibility.</li>
+      <li><code>calendar.events</code> — calendar events: title, description, start and end times, all-day flag, status, recurring-series reference, and version metadata.</li>
+    </ul>
+    <p>
+      The email address of a connected account is taken from the identifier of its primary calendar,
+      solely to tell connected accounts apart. No separate profile scope is requested.
+    </p>
+
+    <h2>How the data is used</h2>
+    <ul>
+      <li>To display events from several accounts in one view alongside tasks.</li>
+      <li>To create, move and delete events in response to the user's actions in the application.</li>
+    </ul>
+    <p>
+      Calendar data is not used for anything else. It is not analysed, not used for advertising,
+      not used to train models, and not shared with third parties.
+    </p>
+
+    <h2>Storage and protection</h2>
+    <ul>
+      <li>Data is stored in a database on the user's own machine or server.</li>
+      <li>Google access tokens are stored encrypted in that database.</li>
+      <li>No data is transmitted to servers operated by the author — no such servers exist.</li>
+    </ul>
+
+    <h2>Revoking access and deletion</h2>
+    <ul>
+      <li>Access can be revoked at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>, after which the application can no longer reach the calendar.</li>
+      <li>Local copies are removed together with the application's database, which the user controls.</li>
+    </ul>
+
+    <h2>Changes</h2>
+    <p>Any new revision is published on this page with a new effective date; its history is visible in the project repository.</p>
+
+    <h2>Contact</h2>
+    <p>Questions via the <a href="https://github.com/ev-climb/workflow/issues">repository issues</a>.</p>
+  </div>
+
+  <footer><a href="./">WorkFlow</a> · <a href="https://github.com/ev-climb/workflow">github.com/ev-climb/workflow</a></footer>
+</main>
+</body>
+</html>
