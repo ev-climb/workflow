@@ -1,0 +1,26 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+.env
+.env.local
+.env.*.local
+
+# токены и артефакты разведки из фазы 01
+scripts/.spike-tokens.json
+*.tokens.json
+
+# вложения карточек — монтируются томом, в репозиторий не идут
+/attachments/
+
+.DS_Store
+*.log
+coverage/
+playwright-report/
+test-results/
+
+# ВНИМАНИЕ: .docs/ здесь НЕТ и быть не должно.
+# Она исключается через .git/info/exclude — этот файл трекается,
+# и строка в нём унесла бы с собой сам факт существования папки.
