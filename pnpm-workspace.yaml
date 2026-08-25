@@ -1,0 +1,4 @@
+# vitest и drizzle-kit тянут esbuild: без разрешения на его postinstall
+# бинарник не распакуется и оба падают при запуске
+allowBuilds:
+  esbuild: true
