@@ -561,15 +561,15 @@ async function showIncremental(store: Store, account: Account, calendarId: strin
   }
 }
 
-async function cmdSync(mode?: string): Promise<void> {
+async function cmdSync(mode?: string, args: string[] = []): Promise<void> {
   const { store, accounts } = requireAccounts()
   for (const account of accounts) {
     console.log(`\n  ${account.email}`)
     for (const calendar of await listCalendars(store, account)) {
       const name = calendar.summary ?? calendar.id
-      // Протухший токен подделать нельзя: Google отличает свой истёкший (410) от чужой
-      // строки (400). Проверяем то, что проверяемо, — что оба отказа переживаются.
-      if (mode === 'stale') account.syncTokens[calendar.id] = 'nonsense-sync-token'
+      // Какой из двух отказов придёт, зависит от формы строки: ASCII-подделка даёт 410,
+      // строка с кириллицей — 400. Так что обе ветки проверяются подстановкой.
+      if (mode === 'stale') account.syncTokens[calendar.id] = args.includes('cyrillic') ? 'НЕТОКЕН' : 'nonsense-sync-token'
       if (!account.syncTokens[calendar.id]) {
         const full = await listEvents(store, account, calendar.id, {
           singleEvents: 'true',
@@ -578,7 +578,13 @@ async function cmdSync(mode?: string): Promise<void> {
         })
         if (full.nextSyncToken) account.syncTokens[calendar.id] = full.nextSyncToken
         saveStore(store)
-        console.log(`    ${name}: полная синхронизация, событий ${full.items.length}`)
+        // Горизонт разворачивания повторов: ADR-004 синхронизирует «вперёд без
+        // ограничения», и сколько это в днях, из одного числа событий не видно
+        const dates = full.items.map(sortKey).filter(Boolean).sort()
+        const horizon = dates.length
+          ? `, от ${dates[0]!.slice(0, 10)} до ${dates[dates.length - 1]!.slice(0, 10)}`
+          : ''
+        console.log(`    ${name}: полная синхронизация, событий ${full.items.length}${horizon}`)
         continue
       }
       await showIncremental(store, account, calendar.id, `  ${name}`)
@@ -622,10 +628,10 @@ const USAGE = `
     roundtrip [calendarId]
                 полная синхронизация → создать → перенести → устаревший etag → удалить,
                 с инкрементальной синхронизацией после каждого шага
-    sync [stale]
-                инкрементальная синхронизация по сохранённым токенам; без токена —
-                полная. sync stale подсовывает негодный токен: Google отвечает 400,
-                истёкший токен (410) подделать нельзя
+    sync [stale [cyrillic]]
+                инкрементальная синхронизация по сохранённым токенам; без токена — полная.
+                sync stale подсовывает негодный токен и получает 410, sync stale cyrillic —
+                400: ответ зависит от формы строки, а не от того, чей это токен
     probe       восьмой день: жив ли refresh-токен
 
   SPIKE_DEBUG=1 добавляет стектрейс к сообщению об ошибке.
@@ -645,7 +651,7 @@ const commands: Record<string, () => Promise<void>> = {
   events: cmdEvents,
   samples: cmdSamples,
   roundtrip: () => cmdRoundtrip(arg),
-  sync: () => cmdSync(arg),
+  sync: () => cmdSync(arg, process.argv.slice(4)),
   probe: cmdProbe,
 }
 
