@@ -1,5 +1,5 @@
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing'
-import { ConflictError, InvalidInputError } from './errors'
+import { ConflictError, InvalidInputError } from './errors.ts'
 
 /**
  * Ранги упорядочивают доски, списки, карточки, чек-листы и пункты (ADR-001).

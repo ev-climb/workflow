@@ -16,7 +16,8 @@
     "build": "next build",
     "start": "next start",
     "test:watch": "vitest",
-    "auth:hash": "node scripts/hash-password.ts"
+    "auth:hash": "node scripts/hash-password.ts",
+    "import:trello": "node scripts/import-trello.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

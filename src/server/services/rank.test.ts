@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { InvalidInputError, ConflictError } from './errors'
+import { InvalidInputError, ConflictError } from './errors.ts'
 import {
   isRankCollision,
   rankAfter,
@@ -7,7 +7,7 @@ import {
   rankBetween,
   rankSequence,
   withRankRetry,
-} from './rank'
+} from './rank.ts'
 
 /** Ранги сравниваются побайтно — так же, как колонки с `collate "C"` в базе. */
 const byBytes = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)

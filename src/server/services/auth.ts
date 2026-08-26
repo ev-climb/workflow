@@ -1,6 +1,6 @@
-import { verifyPassword } from '@/lib/password'
-import { issueSession, isSessionValid } from '@/lib/session'
-import { UnauthorizedError } from './errors'
+import { verifyPassword } from '../../lib/password.ts'
+import { issueSession, isSessionValid } from '../../lib/session.ts'
+import { UnauthorizedError } from './errors.ts'
 
 /**
  * Пользователь ровно один, регистрации нет: пароль сверяется с `APP_PASSWORD_HASH`.

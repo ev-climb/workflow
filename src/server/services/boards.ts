@@ -1,8 +1,8 @@
 import { and, asc, desc, eq, isNull } from 'drizzle-orm'
-import { db } from '@/server/db/client'
-import { boards, cards, lists } from '@/server/db/schema'
-import { InvalidInputError, NotFoundError } from './errors'
-import { rankAfter, withRankRetry } from './rank'
+import { db } from '../db/client.ts'
+import { boards, cards, lists } from '../db/schema.ts'
+import { InvalidInputError, NotFoundError } from './errors.ts'
+import { rankAfter, withRankRetry } from './rank.ts'
 
 const TITLE_MAX = 512
 
