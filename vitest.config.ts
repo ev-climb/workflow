@@ -8,5 +8,9 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    globalSetup: ['./vitest.global-setup.ts'],
+    setupFiles: ['./vitest.setup.ts'],
+    // тесты сервисов делят одну базу и чистят её целиком перед каждым — параллель их перемешает
+    fileParallelism: false,
   },
 })

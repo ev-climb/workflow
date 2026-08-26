@@ -1,6 +1,14 @@
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.ts'
-import { boards, cards, lists } from '../db/schema.ts'
+import {
+  boards,
+  cardLabels,
+  cards,
+  checklistItems,
+  checklists,
+  labels,
+  lists,
+} from '../db/schema.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, withRankRetry } from './rank.ts'
 
@@ -15,26 +23,41 @@ function title(raw: string, what: string): string {
   return value
 }
 
-export type BoardSummary = {
+function wipLimit(value: number | null | undefined): number | null {
+  if (value === null || value === undefined) return null
+  if (!Number.isInteger(value) || value < 1) {
+    throw new InvalidInputError(`лимит списка: нужно целое от единицы, а не ${value}`)
+  }
+  return value
+}
+
+export type BoardSummary = { id: string; title: string; rank: string }
+
+export type LabelSummary = { id: string; name: string; color: string }
+
+export type BoardCard = {
   id: string
   title: string
   rank: string
+  dueAt: Date | null
+  dueDone: boolean
+  hasDescription: boolean
+  checklistDone: number
+  checklistTotal: number
+  labels: LabelSummary[]
+}
+
+export type BoardList = {
+  id: string
+  title: string
+  rank: string
+  wipLimit: number | null
+  cards: BoardCard[]
 }
 
 export type BoardWithLists = BoardSummary & {
-  lists: {
-    id: string
-    title: string
-    rank: string
-    wipLimit: number | null
-    cards: {
-      id: string
-      title: string
-      rank: string
-      dueAt: Date | null
-      dueDone: boolean
-    }[]
-  }[]
+  labels: LabelSummary[]
+  lists: BoardList[]
 }
 
 /** Доски в порядке рангов. Заархивированные не показываются. */
@@ -48,8 +71,8 @@ export async function listBoards(): Promise<BoardSummary[]> {
 
 /**
  * Доска со списками и карточками, всё в порядке рангов. Заархивированное скрыто.
- * Три запроса вместо джойна: карточек на порядок больше, чем списков, и джойн
- * размножил бы заголовок списка на каждую карточку.
+ * Метки, описание и прогресс чек-листов приходят значками: списку карточек нужен факт
+ * «описание есть», а не сам текст на полтора килобайта.
  */
 export async function getBoard(boardId: string): Promise<BoardWithLists> {
   const [board] = await db
@@ -59,43 +82,94 @@ export async function getBoard(boardId: string): Promise<BoardWithLists> {
 
   if (!board) throw new NotFoundError(`доски ${boardId} нет`)
 
+  const boardLabels = await db
+    .select({ id: labels.id, name: labels.name, color: labels.color })
+    .from(labels)
+    .where(eq(labels.boardId, boardId))
+    .orderBy(asc(labels.name), asc(labels.color))
+
   const boardLists = await db
-    .select({
-      id: lists.id,
-      title: lists.title,
-      rank: lists.rank,
-      wipLimit: lists.wipLimit,
-    })
+    .select({ id: lists.id, title: lists.title, rank: lists.rank, wipLimit: lists.wipLimit })
     .from(lists)
     .where(and(eq(lists.boardId, boardId), isNull(lists.archivedAt)))
     .orderBy(asc(lists.rank))
 
-  const boardCards = boardLists.length
-    ? await db
-        .select({
-          id: cards.id,
-          listId: cards.listId,
-          title: cards.title,
-          rank: cards.rank,
-          dueAt: cards.dueAt,
-          dueDone: cards.dueDone,
-        })
-        .from(cards)
-        .innerJoin(lists, eq(cards.listId, lists.id))
-        .where(and(eq(lists.boardId, boardId), isNull(cards.archivedAt), isNull(lists.archivedAt)))
-        .orderBy(asc(cards.rank))
-    : []
+  if (!boardLists.length) return { ...board, labels: boardLabels, lists: [] }
 
-  const byList = new Map<string, BoardWithLists['lists'][number]['cards']>()
+  const visible = and(
+    eq(lists.boardId, boardId),
+    isNull(cards.archivedAt),
+    isNull(lists.archivedAt),
+  )
+
+  const boardCards = await db
+    .select({
+      id: cards.id,
+      listId: cards.listId,
+      title: cards.title,
+      rank: cards.rank,
+      dueAt: cards.dueAt,
+      dueDone: cards.dueDone,
+      hasDescription: sql<boolean>`${cards.description} is not null and ${cards.description} <> ''`,
+    })
+    .from(cards)
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .where(visible)
+    .orderBy(asc(cards.rank))
+
+  const progress = await db
+    .select({
+      cardId: checklists.cardId,
+      total: count(checklistItems.id),
+      done: sql<number>`count(*) filter (where ${checklistItems.done})`,
+    })
+    .from(checklists)
+    .innerJoin(checklistItems, eq(checklistItems.checklistId, checklists.id))
+    .innerJoin(cards, eq(checklists.cardId, cards.id))
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .where(visible)
+    .groupBy(checklists.cardId)
+
+  const marks = await db
+    .select({
+      cardId: cardLabels.cardId,
+      id: labels.id,
+      name: labels.name,
+      color: labels.color,
+    })
+    .from(cardLabels)
+    .innerJoin(labels, eq(cardLabels.labelId, labels.id))
+    .innerJoin(cards, eq(cardLabels.cardId, cards.id))
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .where(visible)
+    .orderBy(asc(labels.name), asc(labels.color))
+
+  const progressByCard = new Map(progress.map((p) => [p.cardId, p]))
+  const labelsByCard = new Map<string, LabelSummary[]>()
+  for (const { cardId, ...label } of marks) {
+    const bucket = labelsByCard.get(cardId)
+    if (bucket) bucket.push(label)
+    else labelsByCard.set(cardId, [label])
+  }
+
+  const cardsByList = new Map<string, BoardCard[]>()
   for (const { listId, ...card } of boardCards) {
-    const bucket = byList.get(listId)
-    if (bucket) bucket.push(card)
-    else byList.set(listId, [card])
+    const counted = progressByCard.get(card.id)
+    const enriched: BoardCard = {
+      ...card,
+      checklistDone: Number(counted?.done ?? 0),
+      checklistTotal: Number(counted?.total ?? 0),
+      labels: labelsByCard.get(card.id) ?? [],
+    }
+    const bucket = cardsByList.get(listId)
+    if (bucket) bucket.push(enriched)
+    else cardsByList.set(listId, [enriched])
   }
 
   return {
     ...board,
-    lists: boardLists.map((list) => ({ ...list, cards: byList.get(list.id) ?? [] })),
+    labels: boardLabels,
+    lists: boardLists.map((list) => ({ ...list, cards: cardsByList.get(list.id) ?? [] })),
   }
 }
 
@@ -132,11 +206,13 @@ export async function renameBoard(boardId: string, newTitle: string): Promise<Bo
   return updated
 }
 
-export type ListSummary = {
-  id: string
-  title: string
-  rank: string
-  wipLimit: number | null
+export type ListSummary = { id: string; title: string; rank: string; wipLimit: number | null }
+
+const LIST_SELECT = {
+  id: lists.id,
+  title: lists.title,
+  rank: lists.rank,
+  wipLimit: lists.wipLimit,
 }
 
 /** Новый список встаёт в конец доски. */
@@ -146,10 +222,7 @@ export async function createList(input: {
   wipLimit?: number | null
 }): Promise<ListSummary> {
   const name = title(input.title, 'список')
-  const wipLimit = input.wipLimit ?? null
-  if (wipLimit !== null && (!Number.isInteger(wipLimit) || wipLimit < 1)) {
-    throw new InvalidInputError(`лимит списка: нужно целое от единицы, а не ${wipLimit}`)
-  }
+  const limit = wipLimit(input.wipLimit)
 
   const [board] = await db
     .select({ id: boards.id })
@@ -171,14 +244,9 @@ export async function createList(input: {
         boardId: input.boardId,
         title: name,
         rank: rankAfter(last?.rank ?? null),
-        wipLimit,
+        wipLimit: limit,
       })
-      .returning({
-        id: lists.id,
-        title: lists.title,
-        rank: lists.rank,
-        wipLimit: lists.wipLimit,
-      })
+      .returning(LIST_SELECT)
 
     return created
   })
@@ -191,13 +259,84 @@ export async function renameList(listId: string, newTitle: string): Promise<List
     .update(lists)
     .set({ title: name, updatedAt: new Date() })
     .where(and(eq(lists.id, listId), isNull(lists.archivedAt)))
-    .returning({
-      id: lists.id,
-      title: lists.title,
-      rank: lists.rank,
-      wipLimit: lists.wipLimit,
-    })
+    .returning(LIST_SELECT)
 
-  if (!updated) throw new NotFoundError(`списка ${listId} нет`)
+  if (!updated) throw new NotFoundError(`списка ${listId} нет или он в архиве`)
   return updated
+}
+
+/** Список уезжает в архив вместе с содержимым: карточки внутри остаются как были. */
+export async function archiveList(listId: string): Promise<{ id: string }> {
+  const now = new Date()
+
+  const [archived] = await db
+    .update(lists)
+    .set({ archivedAt: now, updatedAt: now })
+    .where(and(eq(lists.id, listId), isNull(lists.archivedAt)))
+    .returning({ id: lists.id })
+
+  if (!archived) throw new NotFoundError(`списка ${listId} нет или он уже в архиве`)
+  return archived
+}
+
+/** Возвращает список в конец доски: прежнее место могли занять. */
+export async function restoreList(listId: string): Promise<ListSummary> {
+  const [found] = await db
+    .select({ id: lists.id, boardId: lists.boardId })
+    .from(lists)
+    .where(and(eq(lists.id, listId), sql`${lists.archivedAt} is not null`))
+
+  if (!found) throw new NotFoundError(`списка ${listId} нет в архиве`)
+
+  return withRankRetry(async () => {
+    const [last] = await db
+      .select({ rank: lists.rank })
+      .from(lists)
+      .where(and(eq(lists.boardId, found.boardId), isNull(lists.archivedAt)))
+      .orderBy(desc(lists.rank))
+      .limit(1)
+
+    const [restored] = await db
+      .update(lists)
+      .set({ archivedAt: null, rank: rankAfter(last?.rank ?? null), updatedAt: new Date() })
+      .where(eq(lists.id, listId))
+      .returning(LIST_SELECT)
+
+    return restored
+  })
+}
+
+export type Archive = {
+  lists: { id: string; title: string; archivedAt: Date }[]
+  cards: { id: string; title: string; listId: string; listTitle: string; archivedAt: Date }[]
+}
+
+/** Отдельный экран: что уехало в архив и откуда. Свежее сверху. */
+export async function getArchive(boardId: string): Promise<Archive> {
+  const [board] = await db.select({ id: boards.id }).from(boards).where(eq(boards.id, boardId))
+  if (!board) throw new NotFoundError(`доски ${boardId} нет`)
+
+  const archivedLists = await db
+    .select({ id: lists.id, title: lists.title, archivedAt: lists.archivedAt })
+    .from(lists)
+    .where(and(eq(lists.boardId, boardId), sql`${lists.archivedAt} is not null`))
+    .orderBy(desc(lists.archivedAt))
+
+  const archivedCards = await db
+    .select({
+      id: cards.id,
+      title: cards.title,
+      listId: cards.listId,
+      listTitle: lists.title,
+      archivedAt: cards.archivedAt,
+    })
+    .from(cards)
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .where(and(eq(lists.boardId, boardId), sql`${cards.archivedAt} is not null`))
+    .orderBy(desc(cards.archivedAt))
+
+  return {
+    lists: archivedLists as Archive['lists'],
+    cards: archivedCards as Archive['cards'],
+  }
 }

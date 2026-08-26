@@ -1,0 +1,316 @@
+import { and, eq, sql } from 'drizzle-orm'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { db } from '../db/client.ts'
+import { cardLabels, cards, labels } from '../db/schema.ts'
+import { createBoard, createList, getBoard } from './boards.ts'
+import {
+  archiveCard,
+  createCard,
+  moveCard,
+  moveCardToBoard,
+  previewBoardMove,
+  restoreCard,
+} from './cards.ts'
+import { InvalidInputError, NotFoundError } from './errors.ts'
+import { rankBetween } from './rank.ts'
+
+type Fixture = Awaited<ReturnType<typeof board>>
+
+async function board(title: string, listTitles: string[]) {
+  const created = await createBoard({ title })
+  const lists: Record<string, string> = {}
+  for (const listTitle of listTitles) {
+    lists[listTitle] = (await createList({ boardId: created.id, title: listTitle })).id
+  }
+  return { id: created.id, lists }
+}
+
+async function fill(listId: string, titles: string[]): Promise<Record<string, string>> {
+  const ids: Record<string, string> = {}
+  for (const title of titles) ids[title] = (await createCard({ listId, title })).id
+  return ids
+}
+
+async function order(fixture: Fixture, listTitle: string): Promise<string[]> {
+  const full = await getBoard(fixture.id)
+  return full.lists.find((l) => l.title === listTitle)!.cards.map((c) => c.title)
+}
+
+/**
+ * Сколько строк таблицы реально обновилось. Считаем построчным триггером, а не счётчиком
+ * `pg_stat_user_tables`: тот обновляется с задержкой и сразу после операции отдаёт ноль.
+ * Считать надо именно строки — инвариант 1 про них, и перенумерация колонки одним
+ * запросом нарушила бы его ровно так же, как десять запросов.
+ */
+async function updatedRows(table: string, run: () => Promise<unknown>): Promise<number> {
+  await db.execute(sql.raw('create table if not exists _row_audit (n int)'))
+  await db.execute(sql.raw('truncate _row_audit'))
+  await db.execute(
+    sql.raw(`create or replace function _row_audit_fn() returns trigger language plpgsql as $$
+             begin insert into _row_audit values (1); return null; end $$`),
+  )
+  await db.execute(
+    sql.raw(
+      `create trigger _row_audit_trg after update on "${table}" for each row execute function _row_audit_fn()`,
+    ),
+  )
+
+  try {
+    await run()
+  } finally {
+    await db.execute(sql.raw(`drop trigger _row_audit_trg on "${table}"`))
+  }
+
+  const rows = await db.execute<{ n: number }>(sql.raw('select count(*)::int as n from _row_audit'))
+  return Number(rows[0].n)
+}
+
+describe('создание карточки', () => {
+  it('встаёт в конец списка', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    await fill(b.lists['Бэклог'], ['первая', 'вторая', 'третья'])
+    expect(await order(b, 'Бэклог')).toEqual(['первая', 'вторая', 'третья'])
+  })
+
+  it('в несуществующем списке — ошибка', async () => {
+    await expect(
+      createCard({ listId: '00000000-0000-0000-0000-000000000000', title: 'x' }),
+    ).rejects.toThrow(NotFoundError)
+  })
+
+  it('пустой заголовок — ошибка', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    await expect(createCard({ listId: b.lists['Бэклог'], title: '   ' })).rejects.toThrow(
+      InvalidInputError,
+    )
+  })
+})
+
+describe('перемещение внутри списка', () => {
+  let b: Fixture
+  let ids: Record<string, string>
+
+  beforeEach(async () => {
+    b = await board('Доска', ['Бэклог'])
+    ids = await fill(b.lists['Бэклог'], ['a', 'b', 'c', 'd'])
+  })
+
+  it('в начало', async () => {
+    await moveCard({ cardId: ids.d, listId: b.lists['Бэклог'], nextCardId: ids.a })
+    expect(await order(b, 'Бэклог')).toEqual(['d', 'a', 'b', 'c'])
+  })
+
+  it('в середину', async () => {
+    await moveCard({
+      cardId: ids.a,
+      listId: b.lists['Бэклог'],
+      prevCardId: ids.b,
+      nextCardId: ids.c,
+    })
+    expect(await order(b, 'Бэклог')).toEqual(['b', 'a', 'c', 'd'])
+  })
+
+  it('в конец', async () => {
+    await moveCard({ cardId: ids.a, listId: b.lists['Бэклог'], prevCardId: ids.d })
+    expect(await order(b, 'Бэклог')).toEqual(['b', 'c', 'd', 'a'])
+  })
+
+  it('трогает ровно одну строку', async () => {
+    const touched = await updatedRows('cards', () =>
+      moveCard({
+        cardId: ids.a,
+        listId: b.lists['Бэклог'],
+        prevCardId: ids.c,
+        nextCardId: ids.d,
+      }),
+    )
+    expect(touched).toBe(1)
+  })
+
+  it('соседом самой себе быть не может', async () => {
+    await expect(
+      moveCard({ cardId: ids.a, listId: b.lists['Бэклог'], prevCardId: ids.a }),
+    ).rejects.toThrow(InvalidInputError)
+  })
+
+  it('сосед из чужого списка — ошибка входа', async () => {
+    const other = await createList({ boardId: b.id, title: 'Готово' })
+    const stranger = await createCard({ listId: other.id, title: 'чужая' })
+    await expect(
+      moveCard({ cardId: ids.a, listId: b.lists['Бэклог'], prevCardId: stranger.id }),
+    ).rejects.toThrow(InvalidInputError)
+  })
+
+  it('архивная карточка не двигается', async () => {
+    await archiveCard(ids.a)
+    await expect(moveCard({ cardId: ids.a, listId: b.lists['Бэклог'] })).rejects.toThrow(
+      NotFoundError,
+    )
+  })
+})
+
+describe('перемещение между списками одной доски', () => {
+  it('карточка уходит в другой список на нужное место', async () => {
+    const b = await board('Доска', ['Бэклог', 'Ревью'])
+    const backlog = await fill(b.lists['Бэклог'], ['a', 'b'])
+    const review = await fill(b.lists['Ревью'], ['x', 'y'])
+
+    await moveCard({
+      cardId: backlog.a,
+      listId: b.lists['Ревью'],
+      prevCardId: review.x,
+      nextCardId: review.y,
+    })
+
+    expect(await order(b, 'Бэклог')).toEqual(['b'])
+    expect(await order(b, 'Ревью')).toEqual(['x', 'a', 'y'])
+  })
+
+  it('в пустой список', async () => {
+    const b = await board('Доска', ['Бэклог', 'Готово'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await moveCard({ cardId: ids.a, listId: b.lists['Готово'] })
+    expect(await order(b, 'Готово')).toEqual(['a'])
+  })
+})
+
+describe('перемещение на чужую доску', () => {
+  it('перетаскиванием запрещено и объяснено', async () => {
+    const from = await board('Откуда', ['Бэклог'])
+    const to = await board('Куда', ['Бэклог'])
+    const ids = await fill(from.lists['Бэклог'], ['a'])
+
+    await expect(moveCard({ cardId: ids.a, listId: to.lists['Бэклог'] })).rejects.toThrow(
+      /ADR-005/,
+    )
+  })
+})
+
+describe('коллизия ранга', () => {
+  it('занятый ранг перегенерируется, порядок остаётся верным', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a', 'b', 'c', 'd'])
+
+    const rankOf = async (id: string) => {
+      const [row] = await db.select({ rank: cards.rank }).from(cards).where(eq(cards.id, id))
+      return row.rank
+    }
+
+    // ранг, который moveCard попробует занять первым, уже занят посторонней карточкой
+    const squatted = rankBetween(await rankOf(ids.a), await rankOf(ids.b))
+    await db
+      .insert(cards)
+      .values({ listId: b.lists['Бэклог'], title: 'занял место', rank: squatted })
+
+    await moveCard({
+      cardId: ids.d,
+      listId: b.lists['Бэклог'],
+      prevCardId: ids.a,
+      nextCardId: ids.b,
+    })
+
+    const titles = await order(b, 'Бэклог')
+    expect(titles).toEqual(['a', 'd', 'занял место', 'b', 'c'])
+    expect(new Set(titles).size).toBe(titles.length)
+  })
+})
+
+describe('перенос на другую доску через меню', () => {
+  async function twoBoards() {
+    const from = await board('Откуда', ['Бэклог'])
+    const to = await board('Куда', ['Входящие'])
+
+    const [срочно, личное, срочноТам] = await db
+      .insert(labels)
+      .values([
+        { boardId: from.id, name: 'срочно', color: 'red' },
+        { boardId: from.id, name: 'личное', color: 'blue' },
+        { boardId: to.id, name: 'срочно', color: 'red' },
+      ])
+      .returning({ id: labels.id })
+
+    const ids = await fill(from.lists['Бэклог'], ['карточка'])
+    await db.insert(cardLabels).values([
+      { cardId: ids.карточка, labelId: срочно.id },
+      { cardId: ids.карточка, labelId: личное.id },
+    ])
+
+    return { from, to, cardId: ids.карточка, twinId: срочноТам.id }
+  }
+
+  it('предупреждает, какие метки снимутся', async () => {
+    const { to, cardId } = await twoBoards()
+    const preview = await previewBoardMove(cardId, to.lists['Входящие'])
+
+    expect(preview.droppedLabels.map((l) => l.name)).toEqual(['личное'])
+    expect(preview.keptLabels.map((l) => l.name)).toEqual(['срочно'])
+  })
+
+  it('снимает чужие метки, а одноимённую переводит на метку доски-приёмника', async () => {
+    const { to, cardId, twinId } = await twoBoards()
+    const moved = await moveCardToBoard({ cardId, listId: to.lists['Входящие'] })
+
+    expect(moved.droppedLabels.map((l) => l.name)).toEqual(['личное'])
+
+    const left = await db
+      .select({ labelId: cardLabels.labelId })
+      .from(cardLabels)
+      .where(eq(cardLabels.cardId, cardId))
+
+    expect(left.map((l) => l.labelId)).toEqual([twinId])
+    expect(await order(to, 'Входящие')).toEqual(['карточка'])
+  })
+
+  it('внутри своей доски меток не трогает', async () => {
+    const b = await board('Доска', ['Бэклог', 'Готово'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    const [label] = await db
+      .insert(labels)
+      .values({ boardId: b.id, name: 'метка', color: 'green' })
+      .returning({ id: labels.id })
+    await db.insert(cardLabels).values({ cardId: ids.a, labelId: label.id })
+
+    const moved = await moveCardToBoard({ cardId: ids.a, listId: b.lists['Готово'] })
+
+    expect(moved.droppedLabels).toEqual([])
+    const left = await db
+      .select({ labelId: cardLabels.labelId })
+      .from(cardLabels)
+      .where(eq(cardLabels.cardId, ids.a))
+    expect(left).toHaveLength(1)
+  })
+})
+
+describe('архив карточки', () => {
+  it('уходит из списка и возвращается в его конец', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a', 'b', 'c'])
+
+    await archiveCard(ids.a)
+    expect(await order(b, 'Бэклог')).toEqual(['b', 'c'])
+
+    await restoreCard(ids.a)
+    expect(await order(b, 'Бэклог')).toEqual(['b', 'c', 'a'])
+  })
+
+  it('повторная архивация — ошибка', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await archiveCard(ids.a)
+    await expect(archiveCard(ids.a)).rejects.toThrow(NotFoundError)
+  })
+
+  it('не восстанавливается в заархивированный список', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await archiveCard(ids.a)
+    await db
+      .update(cards)
+      .set({ archivedAt: new Date() })
+      .where(and(eq(cards.id, ids.a), sql`true`))
+    const { archiveList } = await import('./boards.ts')
+    await archiveList(b.lists['Бэклог'])
+
+    await expect(restoreCard(ids.a)).rejects.toThrow(InvalidInputError)
+  })
+})

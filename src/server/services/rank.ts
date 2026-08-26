@@ -37,11 +37,27 @@ export function rankSequence(count: number): string[] {
   return generateNKeysBetween(null, null, count)
 }
 
-/** Уникальный индекс «родитель + ранг» назван `*_rank_key` — по нему и опознаём. */
+const CAUSE_DEPTH = 5
+
+/**
+ * Уникальный индекс «родитель + ранг» назван `*_rank_key` — по нему и опознаём.
+ * Цепочку `cause` разбирать обязательно: drizzle заворачивает ошибку драйвера в свою,
+ * и проверка одного верхнего уровня не срабатывает никогда.
+ */
 export function isRankCollision(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false
-  const { code, constraint_name: constraint } = error as Record<string, unknown>
-  return code === '23505' && typeof constraint === 'string' && constraint.endsWith('_rank_key')
+  let current: unknown = error
+
+  for (let depth = 0; depth < CAUSE_DEPTH; depth++) {
+    if (typeof current !== 'object' || current === null) return false
+
+    const { code, constraint_name: constraint } = current as Record<string, unknown>
+    if (code === '23505' && typeof constraint === 'string' && constraint.endsWith('_rank_key')) {
+      return true
+    }
+    current = (current as { cause?: unknown }).cause
+  }
+
+  return false
 }
 
 const RANK_ATTEMPTS = 5

@@ -106,6 +106,12 @@ describe('последовательность рангов для импорт�
 })
 
 describe('коллизия ранга', () => {
+  it('опознаётся под обёрткой drizzle: она прячет ошибку драйвера в cause', () => {
+    const wrapped = new Error('Failed query: update "cards" set ...', { cause: collision() })
+    expect(isRankCollision(wrapped)).toBe(true)
+    expect(isRankCollision(new Error('внешняя', { cause: new Error('внутренняя') }))).toBe(false)
+  })
+
   it('опознаётся по коду и имени индекса', () => {
     expect(isRankCollision(collision())).toBe(true)
     expect(isRankCollision(collision('checklists_card_id_rank_key'))).toBe(true)
