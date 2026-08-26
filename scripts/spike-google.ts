@@ -46,6 +46,8 @@ type GoogleEvent = {
   start?: GoogleDate
   end?: GoogleDate
   recurringEventId?: string
+  eventType?: string
+  recurrence?: string[]
   organizer?: { email?: string; self?: boolean }
   htmlLink?: string
 }
@@ -413,7 +415,10 @@ async function cmdEvents(): Promise<void> {
 async function cmdSamples(): Promise<void> {
   const { store, accounts } = requireAccounts()
   const wanted: Record<string, (e: GoogleEvent) => boolean> = {
-    'на весь день': (e) => Boolean(e.start?.date),
+    // Дни рождения тоже приходят на весь день и тоже повторяются, и первым же
+    // совпадением закрывали обе категории. Обычное событие на весь день — это то,
+    // что заводят руками, поэтому здесь оно и одиночное, и не сгенерированное.
+    'на весь день': (e) => Boolean(e.start?.date) && !e.recurringEventId && e.eventType !== 'birthday',
     'экземпляр повторяющегося': (e) => Boolean(e.recurringEventId),
     'чужое приглашение': (e) => Boolean(e.organizer) && e.organizer?.self !== true,
     отменённое: (e) => e.status === 'cancelled',
@@ -617,6 +622,266 @@ async function cmdProbe(): Promise<void> {
   )
 }
 
+// Ни в одном календаре не нашлось события на весь день, заведённого руками: samples
+// отдавал день рождения, а он и повтор, и сгенерированный. Заводим своё, смотрим сырой
+// ответ и заодно проверяем, как Google принимает такое событие на запись.
+async function cmdAllDay(): Promise<void> {
+  const { store, accounts } = requireAccounts()
+  const account = accounts[0]!
+  const calendars = await listCalendars(store, account)
+  const calendar = calendars.find((c) => c.primary)
+  if (!calendar) fail(`у ${account.email} нет primary-календаря`)
+  const at = `/calendars/${encodeURIComponent(calendar.id)}/events`
+  const day = isoDatePlusDays(2)
+  const nextDay = isoDatePlusDays(3)
+  console.log(`\n  ${account.email} → ${calendar.summary ?? calendar.id}\n`)
+
+  const created = await gapi<GoogleEvent>(store, account, at, {
+    method: 'POST',
+    body: JSON.stringify({
+      summary: 'WorkFlow: событие на весь день',
+      description: 'создано скриптом разведки, фаза 01; удаляется тем же прогоном',
+      start: { date: day },
+      end: { date: nextDay },
+    }),
+  })
+  console.log(`  1. создано одним днём ${day}, отправляли end.date ${nextDay}`)
+  console.log(JSON.stringify(created, null, 2))
+
+  try {
+    const { items } = await listEvents(store, account, calendar.id, {
+      singleEvents: 'true',
+      timeMin: new Date(Date.now() - 86_400_000).toISOString(),
+      timeMax: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+    })
+    const back = items.find((event) => event.id === created.id)
+    console.log(`\n  2. тем же списком: ${back ? showWhen(back).trim() : 'не пришло'}`)
+    console.log(`     start ${JSON.stringify(back?.start)}  end ${JSON.stringify(back?.end)}`)
+
+    // Если end.date не исключающая, а включающая, однодневное событие можно было бы
+    // завести с end = start. Проверяем, что нельзя, — иначе инвариант 3 держится на вере.
+    try {
+      const same = await gapi<GoogleEvent>(store, account, at, {
+        method: 'POST',
+        body: JSON.stringify({ summary: 'WorkFlow: end = start', start: { date: day }, end: { date: day } }),
+      })
+      console.log(`\n  3. end.date = start.date принят: ${JSON.stringify(same.start)} → ${JSON.stringify(same.end)}`)
+      // Принят — значит вопрос в том, чинит ли Google такое на чтении. Если нет,
+      // отрисовка «от start до end» покажет событие нулевой длины, то есть ничего.
+      const listed = await listEvents(store, account, calendar.id, {
+        singleEvents: 'true',
+        timeMin: new Date(Date.now() - 86_400_000).toISOString(),
+        timeMax: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+      })
+      const sameBack = listed.items.find((event) => event.id === same.id)
+      console.log(
+        sameBack
+          ? `     списком: start ${JSON.stringify(sameBack.start)}  end ${JSON.stringify(sameBack.end)}`
+          : '     списком не пришло вовсе',
+      )
+      await gapi(store, account, `${at}/${same.id}`, { method: 'DELETE' })
+    } catch (error) {
+      if (error instanceof GoogleApiError) {
+        console.log(`\n  3. end.date = start.date отвергнут: ${error.status}`)
+        console.log(`     ${error.body.replace(/\s+/g, ' ').slice(0, 200)}`)
+      } else throw error
+    }
+  } finally {
+    await gapi(store, account, `${at}/${created.id}`, { method: 'DELETE' })
+    console.log('\n  4. удалено')
+  }
+  console.log()
+}
+
+// Ограниченный горизонт (timeMax) и sync-токен друг о друге не знают: с токеном
+// timeMin/timeMax слать нельзя, Google берёт их из первого запроса. Значит окно
+// оказывается прибитым к моменту полной синхронизации и само вперёд не едет. Проверяем,
+// что именно попадает и не попадает в инкрементальную выдачу при таком окне.
+async function cmdWindow(daysArg?: string): Promise<void> {
+  const { store, accounts } = requireAccounts()
+  const account = accounts[0]!
+  const calendars = await listCalendars(store, account)
+  const calendar = calendars.find((c) => c.primary)
+  if (!calendar) fail(`у ${account.email} нет primary-календаря`)
+  const at = `/calendars/${encodeURIComponent(calendar.id)}/events`
+  const days = Number(daysArg ?? 30)
+  if (!Number.isFinite(days) || days < 2) fail(`ширина окна ${daysArg} — нужно число дней больше 1`)
+  const timeMin = new Date(Date.now() - 30 * 86_400_000).toISOString()
+  const timeMax = new Date(Date.now() + days * 86_400_000).toISOString()
+  console.log(`\n  ${account.email} → ${calendar.summary ?? calendar.id}`)
+  console.log(`  окно: до ${timeMax.slice(0, 10)} (${days} дн. вперёд)\n`)
+
+  const full = await listEvents(store, account, calendar.id, {
+    singleEvents: 'true',
+    showDeleted: 'true',
+    timeMin,
+    timeMax,
+  })
+  if (!full.nextSyncToken) fail('полная синхронизация с timeMax не вернула nextSyncToken')
+  let token = full.nextSyncToken
+  console.log(`  1. полная синхронизация с timeMax: событий ${full.items.length}, токен получен`)
+
+  const step = async (label: string): Promise<void> => {
+    const res = await listEvents(store, account, calendar.id, {
+      syncToken: token,
+      singleEvents: 'true',
+      showDeleted: 'true',
+    })
+    if (res.nextSyncToken) token = res.nextSyncToken
+    const what = res.items.map((e) => `${showWhen(e).trim()} ${e.status ?? ''}`).join('; ')
+    console.log(`  ${label}: пришло ${res.items.length}${what ? ` — ${what}` : ''}`)
+  }
+
+  const outside = await gapi<GoogleEvent>(store, account, at, {
+    method: 'POST',
+    body: JSON.stringify({
+      summary: 'WorkFlow: за горизонтом',
+      start: { dateTime: `${isoDatePlusDays(days + 30)}T09:00:00+03:00`, timeZone: TZ },
+      end: { dateTime: `${isoDatePlusDays(days + 30)}T09:30:00+03:00`, timeZone: TZ },
+    }),
+  })
+  console.log(`  2. создано ЗА горизонтом, на ${isoDatePlusDays(days + 30)}`)
+  await step('     инкрементальная')
+
+  const inside = await gapi<GoogleEvent>(store, account, at, {
+    method: 'POST',
+    body: JSON.stringify({
+      summary: 'WorkFlow: внутри горизонта',
+      start: { dateTime: `${isoDatePlusDays(2)}T09:00:00+03:00`, timeZone: TZ },
+      end: { dateTime: `${isoDatePlusDays(2)}T09:30:00+03:00`, timeZone: TZ },
+    }),
+  })
+  console.log(`  3. создано ВНУТРИ горизонта, на ${isoDatePlusDays(2)}`)
+  await step('     инкрементальная')
+
+  await gapi(store, account, `${at}/${outside.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      start: { dateTime: `${isoDatePlusDays(3)}T09:00:00+03:00`, timeZone: TZ },
+      end: { dateTime: `${isoDatePlusDays(3)}T09:30:00+03:00`, timeZone: TZ },
+    }),
+  })
+  console.log(`  4. дальнее событие перенесено ВНУТРЬ окна, на ${isoDatePlusDays(3)}`)
+  await step('     инкрементальная')
+
+  await gapi(store, account, `${at}/${inside.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      start: { dateTime: `${isoDatePlusDays(days + 40)}T09:00:00+03:00`, timeZone: TZ },
+      end: { dateTime: `${isoDatePlusDays(days + 40)}T09:30:00+03:00`, timeZone: TZ },
+    }),
+  })
+  console.log(`  5. ближнее событие уехало ЗА окно, на ${isoDatePlusDays(days + 40)}`)
+  await step('     инкрементальная')
+
+  for (const event of [outside, inside]) {
+    await gapi(store, account, `${at}/${event.id}`, { method: 'DELETE' })
+  }
+  console.log('  6. оба удалены')
+  await step('     инкрементальная')
+  console.log()
+}
+
+async function cmdHorizon(): Promise<void> {
+  const { store, accounts } = requireAccounts()
+  const timeMin = new Date(Date.now() - 30 * 86_400_000).toISOString()
+
+  for (const account of accounts) {
+    console.log(`\n  ${account.email}`)
+    for (const calendar of await listCalendars(store, account)) {
+      const name = calendar.summary ?? calendar.id
+      const { items } = await listEvents(store, account, calendar.id, { singleEvents: 'true', timeMin })
+      const dated = items
+        .map((event) => ({ key: sortKey(event), event }))
+        .filter((row) => row.key)
+        .sort((a, b) => a.key.localeCompare(b.key))
+      if (dated.length === 0) {
+        console.log(`    ${name}: пусто`)
+        continue
+      }
+      const first = dated[0]!
+      const last = dated[dated.length - 1]!
+      const byYear = new Map<string, number>()
+      for (const row of dated) {
+        const year = row.key.slice(0, 4)
+        byYear.set(year, (byYear.get(year) ?? 0) + 1)
+      }
+      console.log(`    ${name}: ${dated.length}, от ${first.key.slice(0, 10)} до ${last.key.slice(0, 10)}`)
+      console.log(`      по годам: ${[...byYear].map(([year, count]) => `${year}×${count}`).join('  ')}`)
+      // Сколько строк стоит каждый вариант горизонта — считаем по уже полученным
+      // событиям, без единого лишнего запроса
+      const cuts: Array<[string, number]> = [['90 дн', 90], ['1 год', 365], ['2 года', 730], ['5 лет', 1826]]
+      const priced = cuts.map(([label, days]) => {
+        const edge = new Intl.DateTimeFormat('sv-SE', { timeZone: TZ }).format(new Date(Date.now() + days * 86_400_000))
+        return `${label}: ${dated.filter((row) => row.key.slice(0, 10) <= edge).length}`
+      })
+      console.log(`      цена горизонта: ${priced.join('  ·  ')}  ·  без границы: ${dated.length}`)
+      for (const row of dated.slice(-3)) {
+        const kind = row.event.eventType ?? 'default'
+        const series = row.event.recurringEventId ? ' повтор' : ''
+        console.log(`      хвост ${row.key.slice(0, 10)}  ${kind}${series}  ${row.event.summary ?? '(без названия)'}`)
+      }
+    }
+  }
+  console.log()
+}
+
+// Годовые повторы (дни рождения, праздники) дают по одному экземпляру в год, и по ним
+// не видно цены «вперёд без ограничения» из ADR-004. Цену показывает серия без даты
+// окончания: сколько экземпляров Google развернёт, если не задать timeMax. Частота —
+// аргумент, потому что по одной частоте не отличить предел по числу от предела по сроку.
+async function cmdSeries(freqArg?: string): Promise<void> {
+  const { store, accounts } = requireAccounts()
+  const account = accounts[0]!
+  const calendars = await listCalendars(store, account)
+  const calendar = calendars.find((c) => c.primary)
+  if (!calendar) fail(`у ${account.email} нет primary-календаря`)
+  const at = `/calendars/${encodeURIComponent(calendar.id)}/events`
+  const day = isoDatePlusDays(1)
+  const freq = (freqArg ?? 'daily').toUpperCase()
+  if (!['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq)) fail(`частота ${freq} не из RRULE`)
+  console.log(`\n  ${account.email} → ${calendar.summary ?? calendar.id}\n`)
+
+  const created = await gapi<GoogleEvent>(store, account, at, {
+    method: 'POST',
+    body: JSON.stringify({
+      summary: `WorkFlow: серия ${freq} без конца`,
+      description: 'создано скриптом разведки, фаза 01; удаляется тем же прогоном',
+      start: { dateTime: `${day}T07:00:00+03:00`, timeZone: TZ },
+      end: { dateTime: `${day}T07:15:00+03:00`, timeZone: TZ },
+      recurrence: [`RRULE:FREQ=${freq}`],
+    }),
+  })
+  console.log(`  1. серия создана: ${created.id}, ${created.recurrence?.join(' ') ?? 'без recurrence в ответе'}`)
+
+  try {
+    const started = Date.now()
+    const { items } = await listEvents(store, account, calendar.id, {
+      singleEvents: 'true',
+      timeMin: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+    })
+    const mine = items
+      .filter((event) => event.recurringEventId === created.id)
+      .map(sortKey)
+      .filter(Boolean)
+      .sort()
+    const seconds = ((Date.now() - started) / 1000).toFixed(1)
+    if (mine.length === 0) {
+      console.log('  2. экземпляров серии не пришло вовсе — Google не развернул её без timeMax')
+    } else {
+      const from = mine[0]!.slice(0, 10)
+      const to = mine[mine.length - 1]!.slice(0, 10)
+      const years = ((Date.parse(to) - Date.parse(from)) / (365.25 * 86_400_000)).toFixed(1)
+      console.log(`  2. экземпляров серии ${mine.length}, от ${from} до ${to} — это ${years} года вперёд`)
+      console.log(`     весь календарь целиком: ${items.length} событий за ${seconds} с`)
+    }
+  } finally {
+    await gapi(store, account, `${at}/${created.id}`, { method: 'DELETE' })
+    console.log('  3. серия удалена')
+  }
+  console.log()
+}
+
 const USAGE = `
   node scripts/spike-google.ts <команда>
 
@@ -628,6 +893,15 @@ const USAGE = `
     roundtrip [calendarId]
                 полная синхронизация → создать → перенести → устаревший etag → удалить,
                 с инкрементальной синхронизацией после каждого шага
+    allday      завести событие на весь день, посмотреть сырой ответ и убрать
+    window [дней]
+                ограниченный горизонт: полная синхронизация с timeMax, потом события
+                внутри окна, за окном и переезжающие через границу
+    horizon     насколько далеко вперёд Google отдаёт события без timeMax: разброс дат,
+                события по годам и хвост списка по каждому календарю
+    series [daily|weekly|monthly|yearly]
+                цена «вперёд без ограничения»: завести серию без даты окончания,
+                посчитать развёрнутые экземпляры и удалить её
     sync [stale [cyrillic]]
                 инкрементальная синхронизация по сохранённым токенам; без токена — полная.
                 sync stale подсовывает негодный токен и получает 410, sync stale cyrillic —
@@ -650,6 +924,10 @@ const commands: Record<string, () => Promise<void>> = {
   calendars: cmdCalendars,
   events: cmdEvents,
   samples: cmdSamples,
+  allday: cmdAllDay,
+  window: () => cmdWindow(arg),
+  horizon: cmdHorizon,
+  series: () => cmdSeries(arg),
   roundtrip: () => cmdRoundtrip(arg),
   sync: () => cmdSync(arg, process.argv.slice(4)),
   probe: cmdProbe,
