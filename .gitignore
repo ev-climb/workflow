@@ -5,9 +5,10 @@ build/
 dist/
 *.tsbuildinfo
 
+# всё семейство .env, кроме примера: .env.bak и .env.old — та же утечка, что и .env
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # токены и артефакты разведки из фазы 01
 scripts/.spike-tokens.json

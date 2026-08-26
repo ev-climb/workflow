@@ -29,6 +29,7 @@ pnpm test:e2e               # playwright, дымовой сценарий
 pnpm db:generate            # drizzle-kit generate после правки схемы
 pnpm db:migrate             # накатить миграции
 pnpm db:studio              # посмотреть данные глазами
+pnpm auth:hash              # хеш пароля для APP_PASSWORD_HASH, пароль читается с stdin
 pnpm mcp:stdio              # MCP-сервер поверх stdio, для Claude Desktop
 ```
 

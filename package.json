@@ -7,14 +7,16 @@
   "scripts": {
     "dev": "next dev",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'нет сервисов и тестов к ним: pnpm test заработает в фазе 02 (.docs/phases/02-skelet.md)' >&2; exit 1",
+    "test": "vitest run",
     "test:e2e": "echo 'нет интерфейса и дымового сценария: pnpm test:e2e заработает в фазе 03 (.docs/phases/03-doski.md)' >&2; exit 1",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "mcp:stdio": "echo 'нет bin/mcp-stdio.ts: pnpm mcp:stdio заработает в фазе 06 (.docs/phases/06-mcp.md)' >&2; exit 1",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test:watch": "vitest",
+    "auth:hash": "node scripts/hash-password.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
