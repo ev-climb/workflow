@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { BoardView } from '@/lib/board-view'
 import { clampRatio } from '@/lib/split-ratio'
 import type { BoardSummary } from '@/server/services/boards'
 import type { Slot } from '@/server/services/workspace'
@@ -13,12 +14,20 @@ const SAVE_DELAY_MS = 400
 
 type Props = {
   boards: BoardSummary[]
+  /** Доски слотов, прочитанные на сервере: первая отрисовка идёт без похода в сеть. */
+  initialBoards: Record<string, BoardView>
   topBoardId: string | null
   bottomBoardId: string | null
   topBoardRatio: number
 }
 
-export function Workspace({ boards, topBoardId, bottomBoardId, topBoardRatio }: Props) {
+export function Workspace({
+  boards,
+  initialBoards,
+  topBoardId,
+  bottomBoardId,
+  topBoardRatio,
+}: Props) {
   const [slots, setSlots] = useState<Record<Slot, string | null>>({
     top: topBoardId,
     bottom: bottomBoardId,
@@ -106,6 +115,7 @@ export function Workspace({ boards, topBoardId, bottomBoardId, topBoardRatio }: 
             slot="top"
             boards={boards}
             boardId={slots.top}
+            initial={slots.top ? initialBoards[slots.top] : undefined}
             onChoose={(boardId) => void chooseBoard('top', boardId)}
           />
           <Splitter ratio={ratio} onDragTo={dragTo} onStep={(delta) => changeRatio(ratio + delta)} />
@@ -113,6 +123,7 @@ export function Workspace({ boards, topBoardId, bottomBoardId, topBoardRatio }: 
             slot="bottom"
             boards={boards}
             boardId={slots.bottom}
+            initial={slots.bottom ? initialBoards[slots.bottom] : undefined}
             onChoose={(boardId) => void chooseBoard('bottom', boardId)}
           />
         </div>
