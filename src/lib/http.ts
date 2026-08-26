@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
   ConflictError,
   InvalidInputError,
@@ -24,3 +25,28 @@ export function errorResponse(error: unknown): NextResponse {
   }
   throw error
 }
+
+/** Кривой JSON и несошедшаяся схема — такая же ошибка входа, как и всё остальное. */
+export async function jsonBody<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
+  let raw: unknown
+  try {
+    raw = await request.json()
+  } catch {
+    throw new InvalidInputError('тело запроса не разобралось как JSON')
+  }
+
+  const parsed = schema.safeParse(raw)
+  if (!parsed.success) throw new InvalidInputError(z.prettifyError(parsed.error))
+  return parsed.data
+}
+
+/** Кривой идентификатор — 400, а не пятисотка от базы на неверном формате uuid. */
+export function uuidParam(value: string, what: string): string {
+  if (!z.uuid().safeParse(value).success) {
+    throw new InvalidInputError(`идентификатор ${what} не uuid`)
+  }
+  return value
+}
+
+/** Заголовок сервис сам обрежет и проверит: схема следит только за формой запроса. */
+export const titleBody = z.object({ title: z.string() })

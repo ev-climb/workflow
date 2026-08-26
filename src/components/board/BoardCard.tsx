@@ -1,8 +1,17 @@
+'use client'
+
+import { useState } from 'react'
+import { useRenameCard } from '@/lib/board-mutations'
+import type { CardView } from '@/lib/board-view'
 import { formatDue, isOverdue } from '@/lib/due'
 import { labelColor } from '@/lib/label-colors'
-import type { CardView } from '@/lib/board-view'
+import { Failure } from './Failure'
+import { TitleField } from './TitleField'
 
-export function BoardCard({ card }: { card: CardView }) {
+export function BoardCard({ boardId, card }: { boardId: string; card: CardView }) {
+  const [renaming, setRenaming] = useState(false)
+  const rename = useRenameCard(boardId, card.id)
+
   const overdue = card.dueAt !== null && isOverdue(card.dueAt, card.dueDone)
   const checklistDone = card.checklistTotal > 0 && card.checklistDone === card.checklistTotal
 
@@ -21,7 +30,25 @@ export function BoardCard({ card }: { card: CardView }) {
         </div>
       ) : null}
 
-      <p className="text-sm leading-snug text-neutral-100">{card.title}</p>
+      {renaming ? (
+        <TitleField
+          initial={card.title}
+          label="Заголовок карточки"
+          onSubmit={(title) => rename.mutate(title)}
+          onClose={() => setRenaming(false)}
+          className="w-full rounded bg-neutral-800 px-1 text-sm leading-snug text-neutral-100"
+        />
+      ) : (
+        <p
+          onDoubleClick={() => setRenaming(true)}
+          title="Двойной клик — переименовать"
+          className="text-sm leading-snug text-neutral-100"
+        >
+          {card.title}
+        </p>
+      )}
+
+      <Failure error={rename.error} className="pt-1" />
 
       {card.hasDescription || card.checklistTotal > 0 || card.dueAt ? (
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500">

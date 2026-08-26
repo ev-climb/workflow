@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { sendJson } from '@/lib/api-client'
 import type { BoardView } from '@/lib/board-view'
 import { clampRatio } from '@/lib/split-ratio'
 import type { BoardSummary } from '@/server/services/boards'
@@ -39,21 +40,13 @@ export function Workspace({
 
   const save = useCallback(async (patch: Record<string, unknown>): Promise<boolean> => {
     try {
-      const response = await fetch('/api/workspace', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(patch),
-      })
-      if (response.ok) {
-        setFailure(null)
-        return true
-      }
-      const body = (await response.json().catch(() => null)) as { error?: string } | null
-      setFailure(body?.error ?? `сервер ответил ${response.status}`)
-    } catch {
-      setFailure('сервер не ответил')
+      await sendJson('PATCH', '/api/workspace', patch)
+      setFailure(null)
+      return true
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'сервер не ответил')
+      return false
     }
-    return false
   }, [])
 
   /** Запись отложена: на каждое движение мыши это сотни запросов в секунду. */
