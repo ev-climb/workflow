@@ -108,7 +108,12 @@ export function CardDragArea({ children }: { children: ReactNode }) {
       {children}
 
       {/* накладка живёт вне слотов: иначе её обрезала бы прокручиваемая область доски */}
-      <DragOverlay>
+      {/*
+        Приземление отключено: накладка летела бы к исходному узлу карточки, а тот на
+        момент отпускания ещё стоит на старом месте — доску перекладывает onMutate тактом
+        позже. Получался возврат в прежнюю колонку прямо перед исчезновением.
+      */}
+      <DragOverlay dropAnimation={null}>
         {dragged ? (
           <div
             className={`${CARD_FRAME} rotate-1 border-neutral-600 shadow-lg shadow-black/60`}
