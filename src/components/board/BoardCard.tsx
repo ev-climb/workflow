@@ -155,7 +155,12 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
       <Failure error={rename.error ?? archive.error} className="pt-1" />
 
       {opened ? (
-        <CardPanel cardId={card.id} title={card.title} onClose={() => setOpened(false)} />
+        <CardPanel
+          boardId={boardId}
+          cardId={card.id}
+          title={card.title}
+          onClose={() => setOpened(false)}
+        />
       ) : null}
 
       {transferring ? (

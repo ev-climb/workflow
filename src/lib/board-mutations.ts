@@ -6,11 +6,13 @@ import { archiveKey } from './archive-query'
 import { applyMove, type MovePlan } from './board-move'
 import { boardKey } from './board-query'
 import type { BoardView } from './board-view'
+import { cardsKey } from './card-query'
 
 /**
  * После правки доска перечитывается целиком. Оптимистично обновляется только
  * перетаскивание: там задержка видна глазом, а здесь поле и так закрывается сразу.
  * Архив перечитывается вместе с доской: любая правка перекладывает элемент между ними.
+ * Открытая панель гасится вся, корнем ключа, — тем же приёмом, что и в `useBoardEvents`.
  */
 function useBoardChange<T = void>(boardId: string, request: (input: T) => Promise<unknown>) {
   const client = useQueryClient()
@@ -20,6 +22,7 @@ function useBoardChange<T = void>(boardId: string, request: (input: T) => Promis
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: boardKey(boardId) })
       void client.invalidateQueries({ queryKey: archiveKey(boardId) })
+      void client.invalidateQueries({ queryKey: cardsKey })
     },
   })
 }
@@ -39,6 +42,11 @@ export const useCreateCard = (boardId: string, listId: string) =>
 
 export const useRenameCard = (boardId: string, cardId: string) =>
   useBoardChange(boardId, (title: string) => sendJson('PATCH', `/api/cards/${cardId}`, { title }))
+
+export const useDescribeCard = (boardId: string, cardId: string) =>
+  useBoardChange(boardId, (description: string | null) =>
+    sendJson('PATCH', `/api/cards/${cardId}`, { description }),
+  )
 
 const setArchived = (url: string, archived: boolean) => () => sendJson('PATCH', url, { archived })
 

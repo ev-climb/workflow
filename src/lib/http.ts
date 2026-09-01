@@ -66,10 +66,14 @@ const moveBody = z.object({
   nextCardId: z.uuid().nullable().optional(),
 })
 
-/** Правка карточки: то же, что у списка, плюс перемещение внутри доски. */
-export const cardPatchBody = z.union([titleBody, z.object({ archived: z.boolean() }), moveBody], {
-  error: 'ожидается {title}, {archived} или {listId}',
-})
+/** Описание сервис сам обрежет; `null` и пустая строка одинаково стирают его. */
+const describeBody = z.object({ description: z.string().nullable() })
+
+/** Правка карточки: то же, что у списка, плюс описание и перемещение внутри доски. */
+export const cardPatchBody = z.union(
+  [titleBody, describeBody, z.object({ archived: z.boolean() }), moveBody],
+  { error: 'ожидается {title}, {description}, {archived} или {listId}' },
+)
 
 /** Перенос карточки: только список-приёмник. Место — конец списка, ранг считает сервис. */
 export const transferBody = z.object({ listId: z.uuid() })

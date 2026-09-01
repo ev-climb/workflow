@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
 import { toCardView } from '@/lib/card-view'
 import { cardPatchBody, errorResponse, jsonBody, uuidParam } from '@/lib/http'
-import { archiveCard, getCard, moveCard, renameCard, restoreCard } from '@/server/services/cards'
+import {
+  archiveCard,
+  describeCard,
+  getCard,
+  moveCard,
+  renameCard,
+  restoreCard,
+} from '@/server/services/cards'
 
 type Params = { params: Promise<{ cardId: string }> }
 
@@ -25,6 +32,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const id = uuidParam(cardId, 'карточки')
 
     if ('title' in body) return NextResponse.json(await renameCard(id, body.title))
+    if ('description' in body) return NextResponse.json(await describeCard(id, body.description))
     if ('listId' in body) return NextResponse.json(await moveCard({ cardId: id, ...body }))
     return NextResponse.json(body.archived ? await archiveCard(id) : await restoreCard(id))
   } catch (error) {

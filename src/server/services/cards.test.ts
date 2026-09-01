@@ -6,6 +6,7 @@ import { createBoard, createList, getBoard } from './boards.ts'
 import {
   archiveCard,
   createCard,
+  describeCard,
   getCard,
   moveCard,
   moveCardToBoard,
@@ -288,6 +289,63 @@ describe('чтение карточки целиком', () => {
 
   it('несуществующей карточки нет', async () => {
     await expect(getCard('00000000-0000-0000-0000-000000000000')).rejects.toThrow(NotFoundError)
+  })
+})
+
+describe('описание карточки', () => {
+  it('сохраняется и переживает перечитывание', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+
+    await describeCard(ids.a, '# План\n\n- раз\n- два')
+
+    expect((await getCard(ids.a)).description).toBe('# План\n\n- раз\n- два')
+  })
+
+  it('пустой текст стирает описание в null, а не в пустую строку', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await describeCard(ids.a, 'было')
+
+    await describeCard(ids.a, '   ')
+
+    expect((await getCard(ids.a)).description).toBeNull()
+  })
+
+  it('null стирает описание', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await describeCard(ids.a, 'было')
+
+    await describeCard(ids.a, null)
+
+    expect((await getCard(ids.a)).description).toBeNull()
+  })
+
+  it('гасит значок описания в доске, когда описание стёрли', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+
+    await describeCard(ids.a, 'текст')
+    expect((await getBoard(b.id)).lists[0].cards[0].hasDescription).toBe(true)
+
+    await describeCard(ids.a, '')
+    expect((await getBoard(b.id)).lists[0].cards[0].hasDescription).toBe(false)
+  })
+
+  it('слишком длинное описание — ошибка входа', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+
+    await expect(describeCard(ids.a, 'я'.repeat(16_385))).rejects.toThrow(InvalidInputError)
+  })
+
+  it('архивной карточке описание не правится', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await archiveCard(ids.a)
+
+    await expect(describeCard(ids.a, 'текст')).rejects.toThrow(NotFoundError)
   })
 })
 

@@ -7,6 +7,9 @@ import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
 
 const TITLE_MAX = 512
 
+/** Столько же, сколько у описания в Trello: привезённое импортом должно влезать. */
+const DESCRIPTION_MAX = 16_384
+
 function title(raw: string): string {
   const value = raw.trim()
   if (!value) throw new InvalidInputError('карточка: заголовок пустой')
@@ -178,6 +181,30 @@ export async function renameCard(cardId: string, newTitle: string): Promise<Card
     .set({ title: name, updatedAt: new Date() })
     .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
     .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
+
+  if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
+
+  publishBoardChanged(card.boardId)
+  return updated
+}
+
+/**
+ * Описание карточки. Пустой текст ложится в базу как `null`, а не пустая строка: в доске
+ * значок «есть описание» смотрит именно на `null`, и пробел иначе зажигал бы его впустую.
+ */
+export async function describeCard(cardId: string, raw: string | null): Promise<{ id: string }> {
+  const value = raw?.trim() ?? ''
+  if (value.length > DESCRIPTION_MAX) {
+    throw new InvalidInputError(`карточка: описание длиннее ${DESCRIPTION_MAX} символов`)
+  }
+
+  const card = await locateCard(cardId)
+
+  const [updated] = await db
+    .update(cards)
+    .set({ description: value || null, updatedAt: new Date() })
+    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
+    .returning({ id: cards.id })
 
   if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
 
