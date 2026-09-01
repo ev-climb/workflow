@@ -1,6 +1,7 @@
 import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.ts'
 import { cardLabels, cards, labels, lists } from '../db/schema.ts'
+import { publishBoardChanged } from './board-events.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
 
@@ -38,6 +39,18 @@ async function locateList(listId: string): Promise<{ id: string; boardId: string
 
   if (!found) throw new NotFoundError(`списка ${listId} нет или он в архиве`)
   return found
+}
+
+/** Доска карточки без оглядки на архив: событие рассылается и после того, как её убрали. */
+async function boardOfCard(cardId: string): Promise<string> {
+  const [found] = await db
+    .select({ boardId: lists.boardId })
+    .from(cards)
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .where(eq(cards.id, cardId))
+
+  if (!found) throw new NotFoundError(`карточки ${cardId} нет`)
+  return found.boardId
 }
 
 /** Ранг соседа. Чужой список или архив — ошибка входа: позиция была бы выдумана. */
@@ -92,20 +105,24 @@ async function nextRankInList(listId: string, after: string | null): Promise<str
 
 export async function createCard(input: { listId: string; title: string }): Promise<CardPosition> {
   const name = title(input.title)
-  await locateList(input.listId)
+  const target = await locateList(input.listId)
 
-  return withRankRetry(async () => {
-    const [created] = await db
+  const created = await withRankRetry(async () => {
+    const [inserted] = await db
       .insert(cards)
       .values({ listId: input.listId, title: name, rank: rankAfter(await lastRank(input.listId)) })
       .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
 
-    return created
+    return inserted
   })
+
+  publishBoardChanged(target.boardId)
+  return created
 }
 
 export async function renameCard(cardId: string, newTitle: string): Promise<CardPosition> {
   const name = title(newTitle)
+  const card = await locateCard(cardId)
 
   const [updated] = await db
     .update(cards)
@@ -114,6 +131,8 @@ export async function renameCard(cardId: string, newTitle: string): Promise<Card
     .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
 
   if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
+
+  publishBoardChanged(card.boardId)
   return updated
 }
 
@@ -146,19 +165,22 @@ export async function moveCard(input: {
   let next = await neighbourRank(input.nextCardId, input.listId, 'справа')
   let attempt = 0
 
-  return withRankRetry(async () => {
+  const moved = await withRankRetry(async () => {
     // соседи те же, значит между ними успели встать: берём того, кто стоит там теперь
     if (attempt++) next = await nextRankInList(input.listId, prev)
 
-    const [moved] = await db
+    const [updated] = await db
       .update(cards)
       .set({ listId: input.listId, rank: rankBetween(prev, next), updatedAt: new Date() })
       .where(and(eq(cards.id, input.cardId), isNull(cards.archivedAt)))
       .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
 
-    if (!moved) throw new NotFoundError(`карточки ${input.cardId} нет или она в архиве`)
-    return moved
+    if (!updated) throw new NotFoundError(`карточки ${input.cardId} нет или она в архиве`)
+    return updated
   })
+
+  publishBoardChanged(card.boardId)
+  return moved
 }
 
 export type LabelRef = { id: string; name: string; color: string }
@@ -217,8 +239,8 @@ export async function moveCardToBoard(input: {
   const { droppedLabels, keptLabels } = await previewBoardMove(input.cardId, input.listId)
   const rank = rankAfter(await lastRank(input.listId))
 
-  return db.transaction(async (tx) => {
-    const [moved] = await tx
+  const moved = await db.transaction(async (tx) => {
+    const [updated] = await tx
       .update(cards)
       .set({ listId: input.listId, rank, updatedAt: new Date() })
       .where(eq(cards.id, input.cardId))
@@ -231,8 +253,13 @@ export async function moveCardToBoard(input: {
         .values(keptLabels.map((l) => ({ cardId: input.cardId, labelId: l.id })))
     }
 
-    return { ...moved, droppedLabels }
+    return { ...updated, droppedLabels }
   })
+
+  // карточка ушла с одной доски на другую: перечитать надо обе
+  publishBoardChanged(card.boardId)
+  publishBoardChanged(target.boardId)
+  return moved
 }
 
 export async function archiveCard(cardId: string): Promise<{ id: string }> {
@@ -245,13 +272,20 @@ export async function archiveCard(cardId: string): Promise<{ id: string }> {
     .returning({ id: cards.id })
 
   if (!archived) throw new NotFoundError(`карточки ${cardId} нет или она уже в архиве`)
+
+  publishBoardChanged(await boardOfCard(cardId))
   return archived
 }
 
 /** Возвращает карточку в конец её исходного списка. */
 export async function restoreCard(cardId: string): Promise<CardPosition> {
   const [found] = await db
-    .select({ id: cards.id, listId: cards.listId, listArchivedAt: lists.archivedAt })
+    .select({
+      id: cards.id,
+      listId: cards.listId,
+      boardId: lists.boardId,
+      listArchivedAt: lists.archivedAt,
+    })
     .from(cards)
     .innerJoin(lists, eq(cards.listId, lists.id))
     .where(and(eq(cards.id, cardId), sql`${cards.archivedAt} is not null`))
@@ -261,8 +295,8 @@ export async function restoreCard(cardId: string): Promise<CardPosition> {
     throw new InvalidInputError('список карточки в архиве — сначала восстанови список')
   }
 
-  return withRankRetry(async () => {
-    const [restored] = await db
+  const restored = await withRankRetry(async () => {
+    const [updated] = await db
       .update(cards)
       .set({
         archivedAt: null,
@@ -272,6 +306,9 @@ export async function restoreCard(cardId: string): Promise<CardPosition> {
       .where(eq(cards.id, cardId))
       .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
 
-    return restored
+    return updated
   })
+
+  publishBoardChanged(found.boardId)
+  return restored
 }

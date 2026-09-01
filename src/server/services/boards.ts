@@ -9,6 +9,7 @@ import {
   labels,
   lists,
 } from '../db/schema.ts'
+import { publishBoardChanged } from './board-events.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, withRankRetry } from './rank.ts'
 
@@ -203,6 +204,8 @@ export async function renameBoard(boardId: string, newTitle: string): Promise<Bo
     .returning({ id: boards.id, title: boards.title, rank: boards.rank })
 
   if (!updated) throw new NotFoundError(`доски ${boardId} нет`)
+
+  publishBoardChanged(boardId)
   return updated
 }
 
@@ -230,7 +233,7 @@ export async function createList(input: {
     .where(and(eq(boards.id, input.boardId), isNull(boards.archivedAt)))
   if (!board) throw new NotFoundError(`доски ${input.boardId} нет`)
 
-  return withRankRetry(async () => {
+  const created = await withRankRetry(async () => {
     const [last] = await db
       .select({ rank: lists.rank })
       .from(lists)
@@ -238,7 +241,7 @@ export async function createList(input: {
       .orderBy(desc(lists.rank))
       .limit(1)
 
-    const [created] = await db
+    const [inserted] = await db
       .insert(lists)
       .values({
         boardId: input.boardId,
@@ -248,8 +251,11 @@ export async function createList(input: {
       })
       .returning(LIST_SELECT)
 
-    return created
+    return inserted
   })
+
+  publishBoardChanged(input.boardId)
+  return created
 }
 
 export async function renameList(listId: string, newTitle: string): Promise<ListSummary> {
@@ -259,10 +265,13 @@ export async function renameList(listId: string, newTitle: string): Promise<List
     .update(lists)
     .set({ title: name, updatedAt: new Date() })
     .where(and(eq(lists.id, listId), isNull(lists.archivedAt)))
-    .returning(LIST_SELECT)
+    .returning({ ...LIST_SELECT, boardId: lists.boardId })
 
   if (!updated) throw new NotFoundError(`списка ${listId} нет или он в архиве`)
-  return updated
+
+  const { boardId, ...list } = updated
+  publishBoardChanged(boardId)
+  return list
 }
 
 /** Список уезжает в архив вместе с содержимым: карточки внутри остаются как были. */
@@ -273,10 +282,12 @@ export async function archiveList(listId: string): Promise<{ id: string }> {
     .update(lists)
     .set({ archivedAt: now, updatedAt: now })
     .where(and(eq(lists.id, listId), isNull(lists.archivedAt)))
-    .returning({ id: lists.id })
+    .returning({ id: lists.id, boardId: lists.boardId })
 
   if (!archived) throw new NotFoundError(`списка ${listId} нет или он уже в архиве`)
-  return archived
+
+  publishBoardChanged(archived.boardId)
+  return { id: archived.id }
 }
 
 /** Возвращает список в конец доски: прежнее место могли занять. */
@@ -288,7 +299,7 @@ export async function restoreList(listId: string): Promise<ListSummary> {
 
   if (!found) throw new NotFoundError(`списка ${listId} нет в архиве`)
 
-  return withRankRetry(async () => {
+  const restored = await withRankRetry(async () => {
     const [last] = await db
       .select({ rank: lists.rank })
       .from(lists)
@@ -296,14 +307,17 @@ export async function restoreList(listId: string): Promise<ListSummary> {
       .orderBy(desc(lists.rank))
       .limit(1)
 
-    const [restored] = await db
+    const [updated] = await db
       .update(lists)
       .set({ archivedAt: null, rank: rankAfter(last?.rank ?? null), updatedAt: new Date() })
       .where(eq(lists.id, listId))
       .returning(LIST_SELECT)
 
-    return restored
+    return updated
   })
+
+  publishBoardChanged(found.boardId)
+  return restored
 }
 
 export type Archive = {
