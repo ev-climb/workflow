@@ -16,3 +16,8 @@ const PALETTE: Record<string, string> = {
 export function labelColor(color: string): string {
   return PALETTE[color.replace(/_(light|dark)$/, '')] ?? '#6b7280'
 }
+
+/** Выбор цвета для новой метки: варианты из Trello сюда не входят, только основные. */
+export const LABEL_COLORS = Object.keys(PALETTE)
+
+export const isLabelColor = (value: string): boolean => Object.hasOwn(PALETTE, value)

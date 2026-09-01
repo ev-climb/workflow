@@ -73,3 +73,13 @@ export const cardPatchBody = z.union([titleBody, z.object({ archived: z.boolean(
 
 /** Перенос карточки: только список-приёмник. Место — конец списка, ранг считает сервис. */
 export const transferBody = z.object({ listId: z.uuid() })
+
+/** Новая метка доски: имя бывает пустым, цвет сервис сверяет с набором. */
+export const labelBody = z.object({ name: z.string(), color: z.string() })
+
+/** Правка метки: имя, цвет или оба сразу. */
+export const labelPatchBody = z
+  .object({ name: z.string().optional(), color: z.string().optional() })
+  .refine((body) => body.name !== undefined || body.color !== undefined, {
+    error: 'ожидается {name}, {color} или оба',
+  })
