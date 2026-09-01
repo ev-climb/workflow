@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.ts'
-import { cardLabels, cards, labels, lists } from '../db/schema.ts'
+import { boards, cardLabels, cards, labels, lists } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
@@ -17,6 +17,8 @@ function title(raw: string): string {
 }
 
 export type CardPosition = { id: string; listId: string; rank: string }
+
+export type LabelRef = { id: string; name: string; color: string }
 
 async function locateCard(
   cardId: string,
@@ -103,6 +105,53 @@ async function nextRankInList(listId: string, after: string | null): Promise<str
   return next?.rank ?? null
 }
 
+export type CardDetail = {
+  id: string
+  title: string
+  description: string | null
+  dueAt: Date | null
+  dueDone: boolean
+  boardId: string
+  boardTitle: string
+  listId: string
+  listTitle: string
+  labels: LabelRef[]
+}
+
+/**
+ * Карточка целиком: описание и собственные метки, которых в доске нет, — там лежат
+ * только значки, — плюс место, где карточка живёт. Панель читает её отдельным запросом.
+ */
+export async function getCard(cardId: string): Promise<CardDetail> {
+  const [found] = await db
+    .select({
+      id: cards.id,
+      title: cards.title,
+      description: cards.description,
+      dueAt: cards.dueAt,
+      dueDone: cards.dueDone,
+      boardId: boards.id,
+      boardTitle: boards.title,
+      listId: cards.listId,
+      listTitle: lists.title,
+    })
+    .from(cards)
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .innerJoin(boards, eq(lists.boardId, boards.id))
+    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
+
+  if (!found) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
+
+  const own = await db
+    .select({ id: labels.id, name: labels.name, color: labels.color })
+    .from(cardLabels)
+    .innerJoin(labels, eq(cardLabels.labelId, labels.id))
+    .where(eq(cardLabels.cardId, cardId))
+    .orderBy(asc(labels.name), asc(labels.color))
+
+  return { ...found, labels: own }
+}
+
 export async function createCard(input: { listId: string; title: string }): Promise<CardPosition> {
   const name = title(input.title)
   const target = await locateList(input.listId)
@@ -182,8 +231,6 @@ export async function moveCard(input: {
   publishBoardChanged(card.boardId)
   return moved
 }
-
-export type LabelRef = { id: string; name: string; color: string }
 
 /** Какие метки отвалятся при переносе. Диалог показывает это до подтверждения (ADR-005). */
 export async function previewBoardMove(

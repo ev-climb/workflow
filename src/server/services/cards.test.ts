@@ -6,6 +6,7 @@ import { createBoard, createList, getBoard } from './boards.ts'
 import {
   archiveCard,
   createCard,
+  getCard,
   moveCard,
   moveCardToBoard,
   previewBoardMove,
@@ -212,6 +213,81 @@ describe('коллизия ранга', () => {
     const titles = await order(b, 'Бэклог')
     expect(titles).toEqual(['a', 'd', 'занял место', 'b', 'c'])
     expect(new Set(titles).size).toBe(titles.length)
+  })
+})
+
+describe('чтение карточки целиком', () => {
+  it('отдаёт описание, срок, метки и место карточки', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['карточка'])
+
+    const due = new Date('2026-09-10T09:00:00Z')
+    await db
+      .update(cards)
+      .set({ description: 'что сделать', dueAt: due, dueDone: true })
+      .where(eq(cards.id, ids.карточка))
+
+    const [срочно, личное] = await db
+      .insert(labels)
+      .values([
+        { boardId: b.id, name: 'срочно', color: 'red' },
+        { boardId: b.id, name: 'личное', color: 'blue' },
+      ])
+      .returning({ id: labels.id })
+    await db.insert(cardLabels).values([
+      { cardId: ids.карточка, labelId: срочно.id },
+      { cardId: ids.карточка, labelId: личное.id },
+    ])
+
+    const card = await getCard(ids.карточка)
+
+    expect(card).toMatchObject({
+      id: ids.карточка,
+      title: 'карточка',
+      description: 'что сделать',
+      dueDone: true,
+      boardId: b.id,
+      boardTitle: 'Доска',
+      listId: b.lists['Бэклог'],
+      listTitle: 'Бэклог',
+    })
+    expect(card.dueAt?.toISOString()).toBe(due.toISOString())
+    expect(card.labels.map((l) => l.name)).toEqual(['личное', 'срочно'])
+  })
+
+  it('пустая карточка отдаётся без описания, срока и меток', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['голая'])
+
+    const card = await getCard(ids.голая)
+
+    expect(card.description).toBeNull()
+    expect(card.dueAt).toBeNull()
+    expect(card.labels).toEqual([])
+  })
+
+  it('чужие метки не приезжают', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['своя', 'чужая'])
+    const [метка] = await db
+      .insert(labels)
+      .values({ boardId: b.id, name: 'метка', color: 'green' })
+      .returning({ id: labels.id })
+    await db.insert(cardLabels).values({ cardId: ids.чужая, labelId: метка.id })
+
+    expect((await getCard(ids.своя)).labels).toEqual([])
+  })
+
+  it('архивная карточка не читается', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await archiveCard(ids.a)
+
+    await expect(getCard(ids.a)).rejects.toThrow(NotFoundError)
+  })
+
+  it('несуществующей карточки нет', async () => {
+    await expect(getCard('00000000-0000-0000-0000-000000000000')).rejects.toThrow(NotFoundError)
   })
 })
 

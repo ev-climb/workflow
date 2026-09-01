@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { archiveKey } from './archive-query'
 import { boardKey } from './board-query'
+import { cardsKey } from './card-query'
 
 /**
  * Подписка на поток `/api/events`: доска, изменённая в другой вкладке или через MCP,
@@ -20,6 +21,8 @@ export function useBoardEvents(): void {
       const { boardId } = JSON.parse((event as MessageEvent<string>).data) as { boardId: string }
       void client.invalidateQueries({ queryKey: boardKey(boardId) })
       void client.invalidateQueries({ queryKey: archiveKey(boardId) })
+      // какая карточка открыта в панели, здесь неизвестно, а открыта она в лучшем случае одна
+      void client.invalidateQueries({ queryKey: cardsKey })
     })
 
     return () => source.close()

@@ -2,7 +2,7 @@
 
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { useArchiveCard, useRenameCard } from '@/lib/board-mutations'
 import { dragId, type DragData } from '@/lib/board-move'
 import type { CardView } from '@/lib/board-view'
@@ -10,9 +10,13 @@ import { formatMoment, isOverdue } from '@/lib/dates'
 import { labelColor } from '@/lib/label-colors'
 import type { BoardSummary } from '@/server/services/boards'
 import { CardMenu } from './CardMenu'
+import { CardPanel } from './CardPanel'
 import { Failure } from './Failure'
 import { TitleField } from './TitleField'
 import { TransferDialog } from './TransferDialog'
+
+/** Столько ждём второго клика, прежде чем показать панель. */
+const DOUBLE_CLICK_MS = 250
 
 export const CARD_FRAME =
   'rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2 text-left'
@@ -80,9 +84,27 @@ type Props = {
 
 export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
   const [renaming, setRenaming] = useState(false)
+  const [opened, setOpened] = useState(false)
   const [transferring, setTransferring] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const rename = useRenameCard(boardId, card.id)
   const archive = useArchiveCard(boardId, card.id)
+
+  useEffect(() => () => clearTimeout(timer.current), [])
+
+  /**
+   * Одиночный клик открывает панель, двойной по заголовку — переименовывает. Открытие
+   * отложено на такт двойного клика: иначе первый из двух кликов успевал бы показать
+   * панель, и переименование становилось бы недостижимым. Настоящее перетаскивание сюда
+   * не долетает — dnd-kit гасит клик, как только сработал порог указателя.
+   */
+  function open(event: MouseEvent<HTMLElement>) {
+    clearTimeout(timer.current)
+    if (renaming || event.detail > 1) return
+    if ((event.target as HTMLElement).closest('button, input')) return
+
+    timer.current = setTimeout(() => setOpened(true), DOUBLE_CLICK_MS)
+  }
 
   const data: DragData = { type: 'card', boardId, listId, card }
   const drag = useSortable({ id: dragId(slot, 'card', card.id), data, disabled: renaming })
@@ -93,6 +115,7 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
       style={{ transform: CSS.Translate.toString(drag.transform), transition: drag.transition }}
       {...drag.attributes}
       {...(renaming ? {} : drag.listeners)}
+      onClick={open}
       className={`group/card relative ${CARD_FRAME} outline-none focus-visible:border-neutral-500 ${
         // место карточки остаётся видимым: под курсором её рисует накладка
         drag.isDragging ? 'opacity-30' : 'hover:border-neutral-700'
@@ -100,6 +123,7 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
     >
       <CardMenu
         archiving={archive.isPending}
+        onOpen={() => setOpened(true)}
         onTransfer={() => setTransferring(true)}
         onArchive={() => archive.mutate()}
         className="absolute top-1 right-1 bg-neutral-900 group-hover/card:opacity-100"
@@ -129,6 +153,10 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
       />
 
       <Failure error={rename.error ?? archive.error} className="pt-1" />
+
+      {opened ? (
+        <CardPanel cardId={card.id} title={card.title} onClose={() => setOpened(false)} />
+      ) : null}
 
       {transferring ? (
         <TransferDialog

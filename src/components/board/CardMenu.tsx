@@ -7,6 +7,7 @@ const ITEM =
 
 type Props = {
   archiving: boolean
+  onOpen: () => void
   onTransfer: () => void
   onArchive: () => void
   className?: string
@@ -14,9 +15,10 @@ type Props = {
 
 /**
  * Меню карточки. Как и кнопка архива у списка, прячется до наведения, но остаётся
- * в потоке табуляции: с клавиатуры её видно по фокусу.
+ * в потоке табуляции: с клавиатуры её видно по фокусу. Через «Открыть» панель карточки
+ * достижима без мыши: пробел и Enter на самой карточке заняты перетаскиванием.
  */
-export function CardMenu({ archiving, onTransfer, onArchive, className = '' }: Props) {
+export function CardMenu({ archiving, onOpen, onTransfer, onArchive, className = '' }: Props) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
@@ -32,6 +34,9 @@ export function CardMenu({ archiving, onTransfer, onArchive, className = '' }: P
           sideOffset={4}
           className="z-50 min-w-52 rounded border border-neutral-800 bg-neutral-900 p-1 shadow-lg"
         >
+          <DropdownMenu.Item className={ITEM} onSelect={onOpen}>
+            Открыть
+          </DropdownMenu.Item>
           <DropdownMenu.Item className={ITEM} onSelect={onTransfer}>
             Перенести на другую доску…
           </DropdownMenu.Item>
