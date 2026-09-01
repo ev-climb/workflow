@@ -40,13 +40,18 @@ export async function jsonBody<T>(request: Request, schema: z.ZodType<T>): Promi
   return parsed.data
 }
 
+export const isUuid = (value: string): boolean => z.uuid().safeParse(value).success
+
 /** Кривой идентификатор — 400, а не пятисотка от базы на неверном формате uuid. */
 export function uuidParam(value: string, what: string): string {
-  if (!z.uuid().safeParse(value).success) {
-    throw new InvalidInputError(`идентификатор ${what} не uuid`)
-  }
+  if (!isUuid(value)) throw new InvalidInputError(`идентификатор ${what} не uuid`)
   return value
 }
 
 /** Заголовок сервис сам обрежет и проверит: схема следит только за формой запроса. */
 export const titleBody = z.object({ title: z.string() })
+
+/** Правка списка или карточки: переименование либо переезд в архив и обратно. */
+export const patchBody = z.union([titleBody, z.object({ archived: z.boolean() })], {
+  error: 'ожидается либо {title}, либо {archived}',
+})

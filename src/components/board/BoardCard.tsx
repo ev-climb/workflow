@@ -1,22 +1,30 @@
 'use client'
 
 import { useState } from 'react'
-import { useRenameCard } from '@/lib/board-mutations'
+import { useArchiveCard, useRenameCard } from '@/lib/board-mutations'
 import type { CardView } from '@/lib/board-view'
-import { formatDue, isOverdue } from '@/lib/due'
+import { formatMoment, isOverdue } from '@/lib/dates'
 import { labelColor } from '@/lib/label-colors'
+import { ArchiveButton } from './ArchiveButton'
 import { Failure } from './Failure'
 import { TitleField } from './TitleField'
 
 export function BoardCard({ boardId, card }: { boardId: string; card: CardView }) {
   const [renaming, setRenaming] = useState(false)
   const rename = useRenameCard(boardId, card.id)
+  const archive = useArchiveCard(boardId, card.id)
 
   const overdue = card.dueAt !== null && isOverdue(card.dueAt, card.dueDone)
   const checklistDone = card.checklistTotal > 0 && card.checklistDone === card.checklistTotal
 
   return (
-    <article className="rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2 hover:border-neutral-700">
+    <article className="group/card relative rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2 hover:border-neutral-700">
+      <ArchiveButton
+        label="Карточку в архив"
+        disabled={archive.isPending}
+        onClick={() => archive.mutate()}
+        className="absolute top-1 right-1 bg-neutral-900 group-hover/card:opacity-100"
+      />
       {card.labels.length ? (
         <div className="mb-1.5 flex flex-wrap gap-1">
           {card.labels.map((label) => (
@@ -48,7 +56,7 @@ export function BoardCard({ boardId, card }: { boardId: string; card: CardView }
         </p>
       )}
 
-      <Failure error={rename.error} className="pt-1" />
+      <Failure error={rename.error ?? archive.error} className="pt-1" />
 
       {card.hasDescription || card.checklistTotal > 0 || card.dueAt ? (
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
@@ -72,7 +80,7 @@ export function BoardCard({ boardId, card }: { boardId: string; card: CardView }
                     : ''
               }`}
             >
-              {formatDue(card.dueAt)}
+              {formatMoment(card.dueAt)}
             </span>
           ) : null}
         </div>

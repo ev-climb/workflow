@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useCreateCard, useRenameList } from '@/lib/board-mutations'
+import { useArchiveList, useCreateCard, useRenameList } from '@/lib/board-mutations'
 import type { ListView } from '@/lib/board-view'
+import { ArchiveButton } from './ArchiveButton'
 import { BoardCard } from './BoardCard'
 import { Composer } from './Composer'
 import { Failure } from './Failure'
@@ -12,12 +13,13 @@ export function BoardColumn({ boardId, list }: { boardId: string; list: ListView
   const [renaming, setRenaming] = useState(false)
   const rename = useRenameList(boardId, list.id)
   const create = useCreateCard(boardId, list.id)
+  const archive = useArchiveList(boardId, list.id)
 
   // лимит превышен — счётчик подсвечен, но ничего не запрещено: это сигнал, а не запрет
   const over = list.wipLimit !== null && list.cards.length > list.wipLimit
 
   return (
-    <section className="flex max-h-full w-72 shrink-0 flex-col rounded-lg bg-neutral-900/60">
+    <section className="group/list flex max-h-full w-72 shrink-0 flex-col rounded-lg bg-neutral-900/60">
       <header className="flex shrink-0 items-center gap-2 px-3 py-2">
         {renaming ? (
           <TitleField
@@ -44,9 +46,16 @@ export function BoardColumn({ boardId, list }: { boardId: string; list: ListView
         >
           {list.wipLimit === null ? list.cards.length : `${list.cards.length}/${list.wipLimit}`}
         </span>
+        {/* карточки списка уезжают в архив вместе с ним: сколько именно — видно в подсказке */}
+        <ArchiveButton
+          label={`Список в архив${list.cards.length ? `, карточек внутри: ${list.cards.length}` : ''}`}
+          disabled={archive.isPending}
+          onClick={() => archive.mutate()}
+          className="group-hover/list:opacity-100"
+        />
       </header>
 
-      <Failure error={rename.error ?? create.error} />
+      <Failure error={rename.error ?? create.error ?? archive.error} />
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-2">
         {list.cards.map((card) => (

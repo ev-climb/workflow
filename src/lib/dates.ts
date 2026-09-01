@@ -18,7 +18,8 @@ const OTHER_YEAR = new Intl.DateTimeFormat('ru-RU', {
 const yearIn = (date: Date) =>
   new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', year: 'numeric' }).format(date)
 
-export function formatDue(iso: string, now = new Date()): string {
+/** Момент на экране: время внутри текущего года, одна дата — за его пределами. */
+export function formatMoment(iso: string, now = new Date()): string {
   const date = new Date(iso)
   return yearIn(date) === yearIn(now) ? SAME_YEAR.format(date) : OTHER_YEAR.format(date)
 }
