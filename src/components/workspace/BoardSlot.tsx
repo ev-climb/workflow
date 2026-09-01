@@ -34,7 +34,7 @@ export function BoardSlot({ slot, boards, boardId, initial, onChoose }: Props) {
       {/* колонки доски прокручиваются здесь: страница целиком не ездит ни вбок, ни вниз */}
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-2 pb-2">
         {boardId ? (
-          <Board boardId={boardId} initial={initial} />
+          <Board boardId={boardId} slot={slot} initial={initial} />
         ) : (
           <p className="px-1 text-sm text-neutral-500">Слот пуст: доска не выбрана.</p>
         )}

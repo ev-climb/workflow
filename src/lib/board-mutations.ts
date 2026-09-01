@@ -3,7 +3,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { sendJson } from './api-client'
 import { archiveKey } from './archive-query'
+import { applyMove, type MovePlan } from './board-move'
 import { boardKey } from './board-query'
+import type { BoardView } from './board-view'
 
 /**
  * После правки доска перечитывается целиком. Оптимистично обновляется только
@@ -51,3 +53,35 @@ export const useArchiveCard = (boardId: string, cardId: string) =>
 
 export const useRestoreCard = (boardId: string, cardId: string) =>
   useBoardChange(boardId, setArchived(`/api/cards/${cardId}`, false))
+
+export type MoveInput = MovePlan & { boardId: string; cardId: string }
+
+/**
+ * Единственная оптимистичная мутация: карточка встаёт на место мгновенно, запрос уходит
+ * следом, ошибка возвращает доску как была. Ранг с клиента не уходит — только соседи.
+ */
+export function useMoveCard() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ cardId, listId, prevCardId, nextCardId }: MoveInput) =>
+      sendJson('PATCH', `/api/cards/${cardId}`, { listId, prevCardId, nextCardId }),
+
+    onMutate: async ({ boardId, cardId, ...plan }) => {
+      // иначе ответ запроса, ушедшего до броска, перезапишет только что переложенную доску
+      await client.cancelQueries({ queryKey: boardKey(boardId) })
+
+      const previous = client.getQueryData<BoardView>(boardKey(boardId))
+      if (previous) client.setQueryData(boardKey(boardId), applyMove(previous, cardId, plan))
+      return { previous }
+    },
+
+    onError: (_error, { boardId }, context) => {
+      if (context?.previous) client.setQueryData(boardKey(boardId), context.previous)
+    },
+
+    onSettled: (_data, _error, { boardId }) => {
+      void client.invalidateQueries({ queryKey: boardKey(boardId) })
+    },
+  })
+}

@@ -51,7 +51,22 @@ export function uuidParam(value: string, what: string): string {
 /** Заголовок сервис сам обрежет и проверит: схема следит только за формой запроса. */
 export const titleBody = z.object({ title: z.string() })
 
-/** Правка списка или карточки: переименование либо переезд в архив и обратно. */
+/** Правка списка: переименование либо переезд в архив и обратно. */
 export const patchBody = z.union([titleBody, z.object({ archived: z.boolean() })], {
   error: 'ожидается либо {title}, либо {archived}',
+})
+
+/**
+ * Позиция карточки после броска: список-приёмник и соседи. Ранга здесь нет и не будет —
+ * его считает сервис, инвариант 2.
+ */
+const moveBody = z.object({
+  listId: z.uuid(),
+  prevCardId: z.uuid().nullable().optional(),
+  nextCardId: z.uuid().nullable().optional(),
+})
+
+/** Правка карточки: то же, что у списка, плюс перемещение внутри доски. */
+export const cardPatchBody = z.union([titleBody, z.object({ archived: z.boolean() }), moveBody], {
+  error: 'ожидается {title}, {archived} или {listId}',
 })

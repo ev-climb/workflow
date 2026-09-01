@@ -1,7 +1,10 @@
 'use client'
 
+import { useDroppable } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useState } from 'react'
 import { useArchiveList, useCreateCard, useRenameList } from '@/lib/board-mutations'
+import { dragId, type DragData } from '@/lib/board-move'
 import type { ListView } from '@/lib/board-view'
 import { ArchiveButton } from './ArchiveButton'
 import { BoardCard } from './BoardCard'
@@ -9,11 +12,16 @@ import { Composer } from './Composer'
 import { Failure } from './Failure'
 import { TitleField } from './TitleField'
 
-export function BoardColumn({ boardId, list }: { boardId: string; list: ListView }) {
+type Props = { boardId: string; slot: string; list: ListView }
+
+export function BoardColumn({ boardId, slot, list }: Props) {
   const [renaming, setRenaming] = useState(false)
   const rename = useRenameList(boardId, list.id)
   const create = useCreateCard(boardId, list.id)
   const archive = useArchiveList(boardId, list.id)
+
+  const data: DragData = { type: 'list', boardId, listId: list.id }
+  const drop = useDroppable({ id: dragId(slot, 'list', list.id), data })
 
   // лимит превышен — счётчик подсвечен, но ничего не запрещено: это сигнал, а не запрет
   const over = list.wipLimit !== null && list.cards.length > list.wipLimit
@@ -57,10 +65,21 @@ export function BoardColumn({ boardId, list }: { boardId: string; list: ListView
 
       <Failure error={rename.error ?? create.error ?? archive.error} />
 
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-2">
-        {list.cards.map((card) => (
-          <BoardCard key={card.id} boardId={boardId} card={card} />
-        ))}
+      <div
+        ref={drop.setNodeRef}
+        className={`${
+          // пустой список тоже должен быть целью: без высоты в него нечем попасть
+          list.cards.length ? 'min-h-0' : 'min-h-12'
+        } flex-1 space-y-2 overflow-y-auto rounded px-2 pb-2 ${drop.isOver ? 'bg-neutral-800/40' : ''}`}
+      >
+        <SortableContext
+          items={list.cards.map((card) => dragId(slot, 'card', card.id))}
+          strategy={verticalListSortingStrategy}
+        >
+          {list.cards.map((card) => (
+            <BoardCard key={card.id} boardId={boardId} slot={slot} listId={list.id} card={card} />
+          ))}
+        </SortableContext>
       </div>
 
       <footer className="shrink-0 px-2 pb-2">

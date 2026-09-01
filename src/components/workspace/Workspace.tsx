@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { CardDragArea } from '@/components/board/CardDragArea'
 import { sendJson } from '@/lib/api-client'
 import type { BoardView } from '@/lib/board-view'
 import { clampRatio } from '@/lib/split-ratio'
@@ -99,27 +100,33 @@ export function Workspace({
             Не сохранилось: {failure}
           </p>
         ) : null}
-        <div
-          ref={area}
-          className="grid min-h-0 min-w-0 flex-1"
-          style={{ gridTemplateRows: `${ratio}fr ${SPLITTER_PX}px ${1 - ratio}fr` }}
-        >
-          <BoardSlot
-            slot="top"
-            boards={boards}
-            boardId={slots.top}
-            initial={slots.top ? initialBoards[slots.top] : undefined}
-            onChoose={(boardId) => void chooseBoard('top', boardId)}
-          />
-          <Splitter ratio={ratio} onDragTo={dragTo} onStep={(delta) => changeRatio(ratio + delta)} />
-          <BoardSlot
-            slot="bottom"
-            boards={boards}
-            boardId={slots.bottom}
-            initial={slots.bottom ? initialBoards[slots.bottom] : undefined}
-            onChoose={(boardId) => void chooseBoard('bottom', boardId)}
-          />
-        </div>
+        <CardDragArea>
+          <div
+            ref={area}
+            className="grid min-h-0 min-w-0 flex-1"
+            style={{ gridTemplateRows: `${ratio}fr ${SPLITTER_PX}px ${1 - ratio}fr` }}
+          >
+            <BoardSlot
+              slot="top"
+              boards={boards}
+              boardId={slots.top}
+              initial={slots.top ? initialBoards[slots.top] : undefined}
+              onChoose={(boardId) => void chooseBoard('top', boardId)}
+            />
+            <Splitter
+              ratio={ratio}
+              onDragTo={dragTo}
+              onStep={(delta) => changeRatio(ratio + delta)}
+            />
+            <BoardSlot
+              slot="bottom"
+              boards={boards}
+              boardId={slots.bottom}
+              initial={slots.bottom ? initialBoards[slots.bottom] : undefined}
+              onChoose={(boardId) => void chooseBoard('bottom', boardId)}
+            />
+          </div>
+        </CardDragArea>
       </div>
     </div>
   )
