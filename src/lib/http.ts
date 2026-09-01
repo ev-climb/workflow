@@ -83,3 +83,17 @@ export const labelPatchBody = z
   .refine((body) => body.name !== undefined || body.color !== undefined, {
     error: 'ожидается {name}, {color} или оба',
   })
+
+/** Правка пункта чек-листа: заголовок, отметка либо перестановка внутри карточки. */
+export const checklistItemPatchBody = z.union(
+  [
+    titleBody,
+    z.object({ done: z.boolean() }),
+    z.object({
+      checklistId: z.uuid(),
+      prevItemId: z.uuid().nullable().optional(),
+      nextItemId: z.uuid().nullable().optional(),
+    }),
+  ],
+  { error: 'ожидается {title}, {done} или {checklistId}' },
+)
