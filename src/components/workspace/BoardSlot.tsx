@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { Board } from '@/components/board/Board'
+import { BoardLabels } from '@/components/board/BoardLabels'
 import type { BoardView } from '@/lib/board-view'
 import type { BoardSummary } from '@/server/services/boards'
 import type { Slot } from '@/server/services/workspace'
@@ -22,6 +23,7 @@ export function BoardSlot({ slot, boards, boardId, initial, onChoose }: Props) {
     <section data-slot={slot} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
       <header className="flex shrink-0 items-center gap-2 px-2 py-1.5">
         <BoardPicker boards={boards} boardId={boardId} label={LABEL[slot]} onChoose={onChoose} />
+        {boardId ? <BoardLabels boardId={boardId} /> : null}
         {boardId ? (
           <Link
             href={`/boards/${boardId}/archive`}

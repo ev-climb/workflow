@@ -18,10 +18,15 @@ export async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export function sendJson<T>(method: 'POST' | 'PATCH', url: string, body: unknown): Promise<T> {
+export function sendJson<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  url: string,
+  body?: unknown,
+): Promise<T> {
   return getJson<T>(url, {
     method,
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    ...(body === undefined
+      ? {}
+      : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
   })
 }
