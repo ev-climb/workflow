@@ -36,3 +36,9 @@ export const useUpdateLabel = (boardId: string, labelId: string) =>
 
 export const useDeleteLabel = (boardId: string, labelId: string) =>
   useLabelChange(boardId, () => sendJson('DELETE', `/api/labels/${labelId}`))
+
+/** Переключатель на карточке: метка берётся из набора доски, своей у карточки нет. */
+export const useToggleCardLabel = (boardId: string, cardId: string) =>
+  useLabelChange(boardId, ({ labelId, on }: { labelId: string; on: boolean }) =>
+    sendJson(on ? 'PUT' : 'DELETE', `/api/cards/${cardId}/labels/${labelId}`),
+  )

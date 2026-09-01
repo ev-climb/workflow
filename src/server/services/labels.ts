@@ -1,7 +1,7 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { isLabelColor } from '../../lib/label-colors.ts'
 import { db } from '../db/client.ts'
-import { boards, labels } from '../db/schema.ts'
+import { boards, cardLabels, cards, labels, lists } from '../db/schema.ts'
 import type { LabelSummary } from './boards.ts'
 import { publishBoardChanged } from './board-events.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
@@ -125,6 +125,52 @@ export async function deleteLabel(labelId: string): Promise<{ id: string }> {
 
   publishBoardChanged(removed.boardId)
   return { id: removed.id }
+}
+
+async function boardOfCard(cardId: string): Promise<string> {
+  const [found] = await db
+    .select({ boardId: lists.boardId })
+    .from(cards)
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
+
+  if (!found) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
+  return found.boardId
+}
+
+/**
+ * Метка вешается на карточку своей доски. Чужая — ошибка входа: набор принадлежит доске,
+ * и на другой доске та же по виду метка это другая строка (ADR-005).
+ * Повторное навешивание проходит молча — переключатель не должен падать на гонке.
+ */
+export async function attachLabel(
+  cardId: string,
+  labelId: string,
+): Promise<{ cardId: string; labelId: string }> {
+  const boardId = await boardOfCard(cardId)
+  if ((await boardOfLabel(labelId)) !== boardId) {
+    throw new InvalidInputError(`метки ${labelId} нет на доске карточки`)
+  }
+
+  await db.insert(cardLabels).values({ cardId, labelId }).onConflictDoNothing()
+
+  publishBoardChanged(boardId)
+  return { cardId, labelId }
+}
+
+/** Снятие метки. Метка проверяется не строже, чем нужно: снятой с карточки она и была. */
+export async function detachLabel(
+  cardId: string,
+  labelId: string,
+): Promise<{ cardId: string; labelId: string }> {
+  const boardId = await boardOfCard(cardId)
+
+  await db
+    .delete(cardLabels)
+    .where(and(eq(cardLabels.cardId, cardId), eq(cardLabels.labelId, labelId)))
+
+  publishBoardChanged(boardId)
+  return { cardId, labelId }
 }
 
 export async function listLabels(boardId: string): Promise<LabelSummary[]> {

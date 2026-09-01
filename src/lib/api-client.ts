@@ -19,7 +19,7 @@ export async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function sendJson<T>(
-  method: 'POST' | 'PATCH' | 'DELETE',
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   body?: unknown,
 ): Promise<T> {

@@ -6,8 +6,8 @@ import { useState, type ReactNode } from 'react'
 import { useRenameCard } from '@/lib/board-mutations'
 import { cardQuery } from '@/lib/card-query'
 import { formatMoment, isOverdue } from '@/lib/dates'
-import { labelColor } from '@/lib/label-colors'
 import { CardDescription } from './CardDescription'
+import { CardLabels } from './CardLabels'
 import { Failure } from './Failure'
 import { TitleField } from './TitleField'
 
@@ -87,24 +87,7 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
             </p>
           ) : isPending ? null : (
             <div className="mt-6 space-y-5">
-              {data.labels.length ? (
-                <Field name="Метки">
-                  <ul className="flex flex-wrap gap-1.5">
-                    {data.labels.map((label) => (
-                      <li
-                        key={label.id}
-                        className="flex items-center gap-1.5 rounded bg-neutral-900 px-1.5 py-0.5 text-xs text-neutral-300"
-                      >
-                        <span
-                          className="h-1.5 w-4 rounded-full"
-                          style={{ backgroundColor: labelColor(label.color) }}
-                        />
-                        {label.name || 'без названия'}
-                      </li>
-                    ))}
-                  </ul>
-                </Field>
-              ) : null}
+              <CardLabels boardId={boardId} cardId={cardId} labels={data.labels} />
 
               {data.dueAt ? (
                 <Field name="Срок">

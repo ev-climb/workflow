@@ -2,9 +2,16 @@ import { describe, expect, it } from 'vitest'
 import { db } from '../db/client.ts'
 import { cardLabels } from '../db/schema.ts'
 import { createBoard, createList, getBoard } from './boards.ts'
-import { createCard } from './cards.ts'
+import { archiveCard, createCard, getCard } from './cards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
-import { createLabel, deleteLabel, listLabels, updateLabel } from './labels.ts'
+import {
+  attachLabel,
+  createLabel,
+  deleteLabel,
+  detachLabel,
+  listLabels,
+  updateLabel,
+} from './labels.ts'
 
 async function boardWithCard() {
   const board = await createBoard({ title: 'Доска' })
@@ -103,5 +110,55 @@ describe('набор меток доски', () => {
     const [card] = (await getBoard(boardId)).lists[0].cards
     expect(card.labels).toEqual([blue])
     expect(await db.select().from(cardLabels)).toHaveLength(1)
+  })
+})
+
+describe('метки на карточке', () => {
+  it('метка вешается, снимается и видна и в карточке, и в доске', async () => {
+    const { boardId, cardId } = await boardWithCard()
+    const label = await createLabel({ boardId, name: 'срочно', color: 'red' })
+
+    await attachLabel(cardId, label.id)
+    expect((await getCard(cardId)).labels).toEqual([label])
+    expect((await getBoard(boardId)).lists[0].cards[0].labels).toEqual([label])
+
+    await detachLabel(cardId, label.id)
+    expect((await getCard(cardId)).labels).toEqual([])
+    expect((await getBoard(boardId)).lists[0].cards[0].labels).toEqual([])
+  })
+
+  it('повторное навешивание и снятие снятой не ломают переключатель', async () => {
+    const { boardId, cardId } = await boardWithCard()
+    const label = await createLabel({ boardId, name: 'срочно', color: 'red' })
+
+    await attachLabel(cardId, label.id)
+    await attachLabel(cardId, label.id)
+    expect(await db.select().from(cardLabels)).toHaveLength(1)
+
+    await detachLabel(cardId, label.id)
+    await detachLabel(cardId, label.id)
+    expect(await db.select().from(cardLabels)).toHaveLength(0)
+  })
+
+  it('метка соседней доски на карточку не вешается', async () => {
+    const { cardId } = await boardWithCard()
+    const other = await createBoard({ title: 'Соседняя' })
+    const alien = await createLabel({ boardId: other.id, name: 'чужая', color: 'blue' })
+
+    await expect(attachLabel(cardId, alien.id)).rejects.toBeInstanceOf(InvalidInputError)
+    expect(await db.select().from(cardLabels)).toHaveLength(0)
+  })
+
+  it('карточки нет или она в архиве — переключатель говорит об этом', async () => {
+    const { boardId, cardId } = await boardWithCard()
+    const label = await createLabel({ boardId, name: 'срочно', color: 'red' })
+    const missing = '00000000-0000-4000-8000-000000000000'
+
+    await expect(attachLabel(missing, label.id)).rejects.toBeInstanceOf(NotFoundError)
+    await expect(attachLabel(cardId, missing)).rejects.toBeInstanceOf(NotFoundError)
+
+    await archiveCard(cardId)
+    await expect(attachLabel(cardId, label.id)).rejects.toBeInstanceOf(NotFoundError)
+    await expect(detachLabel(cardId, label.id)).rejects.toBeInstanceOf(NotFoundError)
   })
 })
