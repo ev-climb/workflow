@@ -70,3 +70,6 @@ const moveBody = z.object({
 export const cardPatchBody = z.union([titleBody, z.object({ archived: z.boolean() }), moveBody], {
   error: 'ожидается {title}, {archived} или {listId}',
 })
+
+/** Перенос карточки: только список-приёмник. Место — конец списка, ранг считает сервис. */
+export const transferBody = z.object({ listId: z.uuid() })

@@ -85,3 +85,23 @@ export function useMoveCard() {
     },
   })
 }
+
+/**
+ * Перенос карточки на другую доску. Перечитываются обе доски: карточка ушла с одной
+ * и появилась на другой.
+ */
+export function useTransferCard(boardId: string, cardId: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ listId }: { listId: string; targetBoardId: string }) =>
+      sendJson('POST', `/api/cards/${cardId}/transfer`, { listId }),
+
+    onSuccess: (_data, { targetBoardId }) => {
+      for (const id of new Set([boardId, targetBoardId])) {
+        void client.invalidateQueries({ queryKey: boardKey(id) })
+        void client.invalidateQueries({ queryKey: archiveKey(id) })
+      }
+    },
+  })
+}

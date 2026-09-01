@@ -6,15 +6,16 @@ import { useState } from 'react'
 import { useArchiveList, useCreateCard, useRenameList } from '@/lib/board-mutations'
 import { dragId, type DragData } from '@/lib/board-move'
 import type { ListView } from '@/lib/board-view'
+import type { BoardSummary } from '@/server/services/boards'
 import { ArchiveButton } from './ArchiveButton'
 import { BoardCard } from './BoardCard'
 import { Composer } from './Composer'
 import { Failure } from './Failure'
 import { TitleField } from './TitleField'
 
-type Props = { boardId: string; slot: string; list: ListView }
+type Props = { boards: BoardSummary[]; boardId: string; slot: string; list: ListView }
 
-export function BoardColumn({ boardId, slot, list }: Props) {
+export function BoardColumn({ boards, boardId, slot, list }: Props) {
   const [renaming, setRenaming] = useState(false)
   const rename = useRenameList(boardId, list.id)
   const create = useCreateCard(boardId, list.id)
@@ -77,7 +78,14 @@ export function BoardColumn({ boardId, slot, list }: Props) {
           strategy={verticalListSortingStrategy}
         >
           {list.cards.map((card) => (
-            <BoardCard key={card.id} boardId={boardId} slot={slot} listId={list.id} card={card} />
+            <BoardCard
+              key={card.id}
+              boards={boards}
+              boardId={boardId}
+              slot={slot}
+              listId={list.id}
+              card={card}
+            />
           ))}
         </SortableContext>
       </div>

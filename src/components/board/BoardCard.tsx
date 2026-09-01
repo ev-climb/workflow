@@ -8,9 +8,11 @@ import { dragId, type DragData } from '@/lib/board-move'
 import type { CardView } from '@/lib/board-view'
 import { formatMoment, isOverdue } from '@/lib/dates'
 import { labelColor } from '@/lib/label-colors'
-import { ArchiveButton } from './ArchiveButton'
+import type { BoardSummary } from '@/server/services/boards'
+import { CardMenu } from './CardMenu'
 import { Failure } from './Failure'
 import { TitleField } from './TitleField'
+import { TransferDialog } from './TransferDialog'
 
 export const CARD_FRAME =
   'rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2 text-left'
@@ -68,10 +70,17 @@ export function CardFace({ card, title }: { card: CardView; title: ReactNode }) 
   )
 }
 
-type Props = { boardId: string; slot: string; listId: string; card: CardView }
+type Props = {
+  boards: BoardSummary[]
+  boardId: string
+  slot: string
+  listId: string
+  card: CardView
+}
 
-export function BoardCard({ boardId, slot, listId, card }: Props) {
+export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
   const [renaming, setRenaming] = useState(false)
+  const [transferring, setTransferring] = useState(false)
   const rename = useRenameCard(boardId, card.id)
   const archive = useArchiveCard(boardId, card.id)
 
@@ -89,10 +98,10 @@ export function BoardCard({ boardId, slot, listId, card }: Props) {
         drag.isDragging ? 'opacity-30' : 'hover:border-neutral-700'
       }`}
     >
-      <ArchiveButton
-        label="Карточку в архив"
-        disabled={archive.isPending}
-        onClick={() => archive.mutate()}
+      <CardMenu
+        archiving={archive.isPending}
+        onTransfer={() => setTransferring(true)}
+        onArchive={() => archive.mutate()}
         className="absolute top-1 right-1 bg-neutral-900 group-hover/card:opacity-100"
       />
 
@@ -120,6 +129,16 @@ export function BoardCard({ boardId, slot, listId, card }: Props) {
       />
 
       <Failure error={rename.error ?? archive.error} className="pt-1" />
+
+      {transferring ? (
+        <TransferDialog
+          boards={boards}
+          boardId={boardId}
+          listId={listId}
+          card={card}
+          onClose={() => setTransferring(false)}
+        />
+      ) : null}
     </article>
   )
 }
