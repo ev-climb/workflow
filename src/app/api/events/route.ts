@@ -1,4 +1,5 @@
 import { subscribeBoardChanged } from '@/server/services/board-events'
+import { trackViewer } from '@/server/services/viewers'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,7 @@ export function GET(request: Request): Response {
     start(controller) {
       let closed = false
       let unsubscribe = () => {}
+      let untrack = () => {}
       let heartbeat: ReturnType<typeof setInterval> | undefined
 
       const stop = () => {
@@ -23,6 +25,7 @@ export function GET(request: Request): Response {
         closed = true
         clearInterval(heartbeat)
         unsubscribe()
+        untrack()
         request.signal.removeEventListener('abort', stop)
         try {
           controller.close()
@@ -40,6 +43,9 @@ export function GET(request: Request): Response {
         }
       }
 
+      // открытый поток и есть признак «на стол сейчас смотрят»: по нему синхронизация
+      // выбирает, ходить ли в Google раз в минуту или раз в десять
+      untrack = trackViewer()
       unsubscribe = subscribeBoardChanged((event) => {
         send(`event: board-changed\ndata: ${JSON.stringify(event)}\n\n`)
       })

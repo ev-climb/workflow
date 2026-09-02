@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { publishBoardChanged } from '@/server/services/board-events'
+import { viewersOnline } from '@/server/services/viewers'
 import { GET } from './route.ts'
 
 /** Один кадр потока: первый — приветственный комментарий, дальше события. */
@@ -45,5 +46,19 @@ describe('поток событий', () => {
 
     // подписки не осталось: событие после обрыва никого не находит и не бросается
     expect(() => publishBoardChanged('доска-7')).not.toThrow()
+  })
+
+  it('пока поток жив, вкладка считается смотрящей', async () => {
+    const before = viewersOnline()
+    const abort = new AbortController()
+    const response = GET(new Request('http://localhost/api/events', { signal: abort.signal }))
+
+    expect(viewersOnline()).toBe(before + 1)
+
+    const reader = response.body!.getReader()
+    await reader.read()
+    abort.abort()
+
+    expect(viewersOnline()).toBe(before)
   })
 })
