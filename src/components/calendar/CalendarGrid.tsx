@@ -12,11 +12,13 @@ import {
 import {
   placeAllDay,
   placeDay,
+  placeDues,
   type PlacedAllDay,
+  type PlacedDue,
   type PlacedEvent,
 } from '@/lib/calendar-layout'
-import type { CalendarEventView } from '@/lib/calendar-view'
-import { moscowParts } from '@/lib/dates'
+import type { CalendarEventView, CardDueView } from '@/lib/calendar-view'
+import { isOverdue, moscowParts } from '@/lib/dates'
 
 const HOUR_PX = 44
 const DAY_PX = HOUR_PX * 24
@@ -30,12 +32,15 @@ const ALL_DAY_PX = 16
 /** Выше полоса не растёт, а прокручивается: сетка со временем важнее списка дат. */
 const ALL_DAY_MAX_PX = ALL_DAY_PX * 4
 
+const DUE_PX = 14
+const DUE_MAX_PX = DUE_PX * 4
+
 /** Ниже блок читается только как полоса цвета: время в нём уже не помещается. */
 const TIME_VISIBLE_PX = 28
 
-type Props = { days: string[]; events: CalendarEventView[] }
+type Props = { days: string[]; events: CalendarEventView[]; dues: CardDueView[] }
 
-export function CalendarGrid({ days, events }: Props) {
+export function CalendarGrid({ days, events, dues }: Props) {
   // на сервере момента нет: отрисуй его там — и разметка разойдётся с браузерной
   const [now, setNow] = useState<Date | null>(null)
   const scroll = useRef<HTMLDivElement>(null)
@@ -50,6 +55,8 @@ export function CalendarGrid({ days, events }: Props) {
   // события на весь день во временную сетку не попадают: они полосой сверху, инвариант 3
   const timed = events.filter(isTimed)
   const allDay = placeAllDay(events.filter(isAllDay), days)
+  // срок — не событие и не отрезок времени: своя полоса под событиями на весь день
+  const placedDues = placeDues(dues, days)
 
   const scrolled = useRef(false)
   useEffect(() => {
@@ -98,6 +105,26 @@ export function CalendarGrid({ days, events }: Props) {
           >
             {allDay.map((placed) => (
               <AllDayStripe key={placed.key} placed={placed} />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {placedDues.length > 0 ? (
+        <div
+          className="flex shrink-0 overflow-y-auto border-b border-neutral-800 pr-2"
+          style={{ maxHeight: DUE_MAX_PX }}
+        >
+          <div className={RAIL} />
+          <div
+            className="grid flex-1 gap-px py-px"
+            style={{
+              gridTemplateColumns: columns(days.length),
+              gridAutoRows: `${DUE_PX}px`,
+            }}
+          >
+            {placedDues.map((placed) => (
+              <DueStripe key={placed.due.id} placed={placed} now={now} />
             ))}
           </div>
         </div>
@@ -170,6 +197,39 @@ function AllDayStripe({ placed }: { placed: PlacedAllDay<AllDayView> }) {
     >
       <div className="truncate">{title}</div>
     </div>
+  )
+}
+
+/**
+ * Срок карточки. Событие — заливка цветом календаря, срок — пунктирный контур без
+ * заливки: с одного взгляда видно, что это не встреча, а граница работы.
+ *
+ * Ссылка обычная, не `next/link`: карточку открывает страница стола, подставляя её доску
+ * в слот, и делает это на серверной отрисовке. Мягкий переход состояние стола не
+ * пересобирает, и карточка чужой доски осталась бы неоткрытой.
+ */
+function DueStripe({ placed, now }: { placed: PlacedDue<CardDueView>; now: Date | null }) {
+  const { due, index, lane } = placed
+  const overdue = now !== null && isOverdue(due.dueAt, due.dueDone, due.dueHasTime, now.getTime())
+  const time = due.dueHasTime ? moscowParts(due.dueAt).time : null
+
+  return (
+    <a
+      href={`/?card=${due.id}`}
+      title={`Срок${time ? ` ${time}` : ''}: ${due.title} — ${due.boardTitle}`}
+      className={`flex items-center gap-1 overflow-hidden rounded-[3px] border border-dashed px-1 text-[10px] leading-[12px] outline-none focus-visible:ring-1 focus-visible:ring-neutral-500 ${
+        overdue
+          ? 'border-red-800 text-red-300 hover:bg-red-950/50'
+          : due.dueDone
+            ? 'border-neutral-800 text-neutral-500 line-through hover:bg-neutral-900'
+            : 'border-neutral-700 text-neutral-300 hover:bg-neutral-900'
+      }`}
+      style={{ gridColumn: index + 1, gridRow: lane + 1 }}
+    >
+      <span aria-hidden className="size-1.5 shrink-0 rotate-45 border border-current" />
+      {time ? <span className="shrink-0 tabular-nums">{time}</span> : null}
+      <span className="truncate">{due.title}</span>
+    </a>
   )
 }
 

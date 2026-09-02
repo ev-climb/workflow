@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { moscowParts } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
 import { cardLabels, cards, labels } from '../db/schema.ts'
-import { createBoard, createList, getBoard } from './boards.ts'
+import { archiveList, createBoard, createList, getBoard } from './boards.ts'
 import { createLabel } from './labels.ts'
 import {
   archiveCard,
@@ -12,6 +12,7 @@ import {
   describeCard,
   findCardBoard,
   getCard,
+  listDueCards,
   moveCard,
   moveCardToBoard,
   previewBoardMove,
@@ -604,5 +605,64 @@ describe('доска карточки по ссылке', () => {
 
     expect(await findCardBoard(ids.a)).toBeNull()
     expect(await findCardBoard('00000000-0000-4000-8000-000000000000')).toBeNull()
+  })
+})
+
+describe('сроки для календарной сетки', () => {
+  async function due(listId: string, title: string, date: string, time?: string) {
+    const [id] = Object.values(await fill(listId, [title]))
+    await setCardDue(id, time === undefined ? { date } : { date, time })
+    return id
+  }
+
+  it('срок без времени попадает в свой московский день, а не в предыдущий', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    await due(b.lists['Бэклог'], 'a', '2026-10-01')
+
+    // момент лежит в UTC на 30 сентября: по московским суткам это уже первое октября
+    expect((await listDueCards('2026-10-01', '2026-10-01')).map((c) => c.title)).toEqual(['a'])
+    expect(await listDueCards('2026-09-30', '2026-09-30')).toEqual([])
+  })
+
+  it('обе границы окна включительные', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    await due(b.lists['Бэклог'], 'первый', '2026-10-01', '00:00')
+    await due(b.lists['Бэклог'], 'последний', '2026-10-07', '23:59')
+    await due(b.lists['Бэклог'], 'за окном', '2026-10-08', '00:00')
+
+    const found = await listDueCards('2026-10-01', '2026-10-07')
+    expect(found.map((c) => c.title)).toEqual(['первый', 'последний'])
+  })
+
+  it('отдаёт срок по возрастанию момента с доской карточки', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    await due(b.lists['Бэклог'], 'вечер', '2026-10-01', '18:00')
+    await due(b.lists['Бэклог'], 'утро', '2026-10-01', '09:00')
+
+    const found = await listDueCards('2026-10-01', '2026-10-01')
+    expect(found.map((c) => c.title)).toEqual(['утро', 'вечер'])
+    expect(found[0]).toMatchObject({ boardId: b.id, boardTitle: 'Доска', dueHasTime: true })
+  })
+
+  it('карточка без срока в выборку не попадает', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    await fill(b.lists['Бэклог'], ['без срока'])
+
+    expect(await listDueCards('2026-10-01', '2026-10-07')).toEqual([])
+  })
+
+  it('не отдаёт срок из архива — ни карточки, ни списка', async () => {
+    const b = await board('Доска', ['Бэклог', 'Готово'])
+    const archived = await due(b.lists['Бэклог'], 'убрана', '2026-10-01')
+    await due(b.lists['Готово'], 'в архивном списке', '2026-10-01')
+    await archiveCard(archived)
+    await archiveList(b.lists['Готово'])
+
+    expect(await listDueCards('2026-10-01', '2026-10-01')).toEqual([])
+  })
+
+  it('кривые границы окна — ошибка входа', async () => {
+    await expect(listDueCards('01.10.2026', '2026-10-01')).rejects.toThrow(InvalidInputError)
+    await expect(listDueCards('2026-10-07', '2026-10-01')).rejects.toThrow(InvalidInputError)
   })
 })

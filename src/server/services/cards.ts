@@ -1,4 +1,5 @@
-import { and, asc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { addDays } from '../../lib/calendar-grid.ts'
 import { momentInMoscow, moscowParts } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
 import { boards, cardLabels, cards, labels, lists } from '../db/schema.ts'
@@ -353,6 +354,61 @@ export async function setCardDueDone(cardId: string, done: boolean): Promise<{ i
 
   publishBoardChanged(card.boardId)
   return updated
+}
+
+export type CardDue = {
+  id: string
+  title: string
+  dueAt: Date
+  dueHasTime: boolean
+  dueDone: boolean
+  boardId: string
+  boardTitle: string
+}
+
+/**
+ * Сроки живых карточек, попавшие в окно из московских дат (обе границы включительно).
+ * Срок — один момент (`due_has_time` только говорит, значимо ли в нём время), поэтому
+ * окно берётся моментами, как у событий со временем.
+ *
+ * Архив не отдаётся ни на одном уровне: срок карточки из архивного списка или архивной
+ * доски означал бы на сетке работу, которой уже нет.
+ */
+export async function listDueCards(from: string, to: string): Promise<CardDue[]> {
+  if (!DATE.test(from) || !DATE.test(to)) {
+    throw new InvalidInputError('границы окна — даты вида 2026-09-02')
+  }
+  if (to < from) throw new InvalidInputError('окно кончается не раньше, чем начинается')
+
+  const windowStart = momentInMoscow(from, '00:00')
+  const windowEnd = momentInMoscow(addDays(to, 1), '00:00')
+
+  const rows = await db
+    .select({
+      id: cards.id,
+      title: cards.title,
+      dueAt: cards.dueAt,
+      dueHasTime: cards.dueHasTime,
+      dueDone: cards.dueDone,
+      boardId: boards.id,
+      boardTitle: boards.title,
+    })
+    .from(cards)
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .innerJoin(boards, eq(lists.boardId, boards.id))
+    .where(
+      and(
+        isNull(cards.archivedAt),
+        isNull(lists.archivedAt),
+        isNull(boards.archivedAt),
+        gte(cards.dueAt, windowStart),
+        lt(cards.dueAt, windowEnd),
+      ),
+    )
+    .orderBy(asc(cards.dueAt), asc(cards.title))
+
+  // условие выборки уже отсекло карточки без срока, но в типе колонка остаётся нулевой
+  return rows.flatMap((row) => (row.dueAt === null ? [] : [{ ...row, dueAt: row.dueAt }]))
 }
 
 /**

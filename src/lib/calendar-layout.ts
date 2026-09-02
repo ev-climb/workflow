@@ -146,3 +146,36 @@ export function placeAllDay<T extends AllDayEvent>(
     return { ...draft, lane }
   })
 }
+
+export type DueItem = { id: string; dueAt: string }
+
+/** Срок на сетке: клетка своего дня и ряд внутри него. Ширину срок ни с кем не делит. */
+export type PlacedDue<T> = {
+  due: T
+  index: number
+  lane: number
+}
+
+/**
+ * Раскладка сроков карточек. Срок — граница дня, а не отрезок на нём: даже заданный со
+ * временем, он занимает одну клетку в полосе, а не место во временной сетке. День берётся
+ * московскими стенными часами, тем же боком, каким срок показан на самой карточке.
+ *
+ * Порядок сохраняется входной: сроки приезжают отсортированными по моменту, и ряд внутри
+ * дня набирается тем же порядком.
+ */
+export function placeDues<T extends DueItem>(
+  dues: readonly T[],
+  days: readonly string[],
+): PlacedDue<T>[] {
+  const taken = new Map<number, number>()
+
+  return dues.flatMap((due) => {
+    const index = days.indexOf(moscowParts(due.dueAt).date)
+    if (index === -1) return []
+
+    const lane = taken.get(index) ?? 0
+    taken.set(index, lane + 1)
+    return [{ due, index, lane }]
+  })
+}

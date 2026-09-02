@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { archiveKey } from './archive-query'
 import { boardKey } from './board-query'
-import { calendarKey } from './calendar-query'
+import { calendarKey, duesKey } from './calendar-query'
 import { cardsKey } from './card-query'
 
 /**
@@ -25,6 +25,7 @@ export function useBoardEvents(): void {
       void client.invalidateQueries({ queryKey: archiveKey(boardId) })
       // какая карточка открыта в панели, здесь неизвестно, а открыта она в лучшем случае одна
       void client.invalidateQueries({ queryKey: cardsKey })
+      void client.invalidateQueries({ queryKey: duesKey })
     })
 
     source.addEventListener('calendar-changed', () => {

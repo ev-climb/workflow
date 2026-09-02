@@ -1,3 +1,4 @@
+import type { CardDue } from '@/server/services/cards'
 import type { CalendarEvent } from '@/server/services/google-events'
 
 export type CalendarEventView = Omit<CalendarEvent, 'startsAt' | 'endsAt'> & {
@@ -12,4 +13,11 @@ export function toEventView(event: CalendarEvent): CalendarEventView {
     startsAt: event.startsAt?.toISOString() ?? null,
     endsAt: event.endsAt?.toISOString() ?? null,
   }
+}
+
+export type CardDueView = Omit<CardDue, 'dueAt'> & { dueAt: string }
+
+/** Вид срока для клиента: момент становится строкой, как и всюду после JSON. */
+export function toDueView(due: CardDue): CardDueView {
+  return { ...due, dueAt: due.dueAt.toISOString() }
 }
