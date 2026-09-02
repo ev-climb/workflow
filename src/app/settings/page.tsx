@@ -1,6 +1,8 @@
 import Link from 'next/link'
+import { AccountCalendars } from '@/components/settings/AccountCalendars'
 import { formatMoment } from '@/lib/dates'
 import { listGoogleAccounts } from '@/server/services/google-accounts'
+import { listGoogleCalendars } from '@/server/services/google-calendars'
 
 // список аккаунтов меняется прямо здесь же, возвратом из Google: прегенерация отдавала бы вчерашнее
 export const dynamic = 'force-dynamic'
@@ -8,7 +10,11 @@ export const dynamic = 'force-dynamic'
 type Props = { searchParams: Promise<{ connected?: string; error?: string }> }
 
 export default async function SettingsPage({ searchParams }: Props) {
-  const [{ connected, error }, accounts] = await Promise.all([searchParams, listGoogleAccounts()])
+  const [{ connected, error }, accounts, calendars] = await Promise.all([
+    searchParams,
+    listGoogleAccounts(),
+    listGoogleCalendars(),
+  ])
 
   return (
     <main className="mx-auto max-w-2xl p-6">
@@ -34,15 +40,20 @@ export default async function SettingsPage({ searchParams }: Props) {
         ) : (
           <ul className="mt-3 divide-y divide-neutral-800">
             {accounts.map((account) => (
-              <li key={account.id} className="flex items-baseline justify-between py-2">
-                <span className="text-sm">{account.email}</span>
-                {account.needsReauth ? (
-                  <span className="text-xs text-amber-400">нужна повторная авторизация</span>
-                ) : (
-                  <span className="text-xs text-neutral-500">
-                    подключён {formatMoment(account.connectedAt.toISOString())}
-                  </span>
-                )}
+              <li key={account.id} className="py-3">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm">{account.email}</span>
+                  {account.needsReauth ? (
+                    <span className="text-xs text-amber-400">нужна повторная авторизация</span>
+                  ) : (
+                    <span className="text-xs text-neutral-500">
+                      подключён {formatMoment(account.connectedAt.toISOString())}
+                    </span>
+                  )}
+                </div>
+                <AccountCalendars
+                  calendars={calendars.filter((calendar) => calendar.accountId === account.id)}
+                />
               </li>
             ))}
           </ul>

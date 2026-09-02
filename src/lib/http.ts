@@ -128,3 +128,10 @@ export const checklistItemPatchBody = z.union(
   ],
   { error: 'ожидается {title}, {done} или {checklistId}' },
 )
+
+/** Правка календаря: цвет, видимость или оба сразу. Цвет сервис сверяет с форматом. */
+export const calendarPatchBody = z
+  .object({ color: z.string().optional(), visible: z.boolean().optional() })
+  .refine((body) => body.color !== undefined || body.visible !== undefined, {
+    error: 'ожидается {color}, {visible} или оба',
+  })

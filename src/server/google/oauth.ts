@@ -1,6 +1,5 @@
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
-const CALENDAR_LIST = 'https://www.googleapis.com/calendar/v3/users/me/calendarList'
 
 /** Больше областей не запрашиваем: чтение и запись событий плюс список календарей. */
 const SCOPES = [
@@ -42,7 +41,7 @@ export function authUrl(state: string): string {
  * Тело ответа в сообщение об ошибке целиком не попадает: на удачном ответе там токены,
  * и одна общая ветка логирования вынесла бы их в лог. Берём только поля отказа.
  */
-function refuse(where: string, status: number, body: string): GoogleAuthError {
+export function refuse(where: string, status: number, body: string): GoogleAuthError {
   let reason = `код ${status}`
   try {
     const parsed = JSON.parse(body) as { error?: string; error_description?: string }
@@ -80,23 +79,4 @@ export async function exchangeCode(code: string): Promise<GoogleTokens> {
     refreshToken: tokens.refresh_token ?? null,
     expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
   }
-}
-
-/**
- * Адрес почты аккаунта — это идентификатор календаря с флагом `primary`. Отдельной области
- * доступа к профилю ради почты не просим: см. `.docs/02-technical.md`, раздел «OAuth».
- */
-export async function primaryEmail(accessToken: string): Promise<string> {
-  const response = await fetch(`${CALENDAR_LIST}?minAccessRole=owner`, {
-    headers: { authorization: `Bearer ${accessToken}` },
-  })
-
-  const body = await response.text()
-  if (!response.ok) throw refuse('список календарей', response.status, body)
-
-  const list = JSON.parse(body) as { items?: { id: string; primary?: boolean }[] }
-  const primary = list.items?.find((item) => item.primary)
-  if (!primary) throw new GoogleAuthError('у аккаунта нет основного календаря — почту брать неоткуда')
-
-  return primary.id
 }

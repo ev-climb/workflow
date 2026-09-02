@@ -1,17 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/client.ts'
 import { googleAccounts } from '../db/schema.ts'
+import type { GoogleCalendarEntry } from '../google/calendars.ts'
 import { GoogleAuthError, type GoogleTokens } from '../google/oauth.ts'
 import { decryptToken } from '../google/token-crypto.ts'
 import { InvalidInputError } from './errors.ts'
 import { connectGoogleAccount, listGoogleAccounts } from './google-accounts.ts'
+import {
+  type GoogleCalendarSummary,
+  listGoogleCalendars,
+  updateGoogleCalendar,
+} from './google-calendars.ts'
 
 vi.mock('../google/oauth.ts', async (importActual) => {
   const actual = await importActual<typeof import('../google/oauth.ts')>()
-  return { ...actual, exchangeCode: vi.fn(), primaryEmail: vi.fn() }
+  return { ...actual, exchangeCode: vi.fn() }
 })
+vi.mock('../google/calendars.ts', () => ({ fetchCalendarList: vi.fn() }))
 
-const { exchangeCode, primaryEmail } = vi.mocked(await import('../google/oauth.ts'))
+const { exchangeCode } = vi.mocked(await import('../google/oauth.ts'))
+const { fetchCalendarList } = vi.mocked(await import('../google/calendars.ts'))
+
+function entry(patch: Partial<GoogleCalendarEntry> = {}): GoogleCalendarEntry {
+  return {
+    googleCalendarId: 'ru.russian#holiday@group.v.calendar.google.com',
+    title: 'Праздники России',
+    color: '#16a765',
+    selected: true,
+    primary: false,
+    ...patch,
+  }
+}
 
 function tokens(patch: Partial<GoogleTokens> = {}): GoogleTokens {
   return {
@@ -22,9 +41,22 @@ function tokens(patch: Partial<GoogleTokens> = {}): GoogleTokens {
   }
 }
 
-function googleAnswers(email: string, patch: Partial<GoogleTokens> = {}) {
+function googleAnswers(
+  email: string,
+  patch: Partial<GoogleTokens> = {},
+  calendars: GoogleCalendarEntry[] = [],
+) {
   exchangeCode.mockResolvedValue(tokens(patch))
-  primaryEmail.mockResolvedValue(email)
+  fetchCalendarList.mockResolvedValue([
+    entry({ googleCalendarId: email, title: email, color: '#9fe1e7', primary: true }),
+    ...calendars,
+  ])
+}
+
+function byId(calendars: GoogleCalendarSummary[], googleCalendarId: string): GoogleCalendarSummary {
+  const found = calendars.find((calendar) => calendar.googleCalendarId === googleCalendarId)
+  if (!found) throw new Error(`календаря ${googleCalendarId} нет в списке`)
+  return found
 }
 
 beforeEach(() => {
@@ -79,6 +111,52 @@ describe('подключение аккаунта Google', () => {
       'first@gmail.com',
       'second@gmail.com',
     ])
+  })
+
+  it('календари аккаунта заводятся сразу за ним', async () => {
+    googleAnswers('me@gmail.com', {}, [entry({ selected: false })])
+
+    const account = await connectGoogleAccount('code')
+    const calendars = await listGoogleCalendars()
+
+    expect(calendars.map((calendar) => calendar.accountId)).toEqual([account.id, account.id])
+    expect(byId(calendars, 'me@gmail.com')).toMatchObject({
+      title: 'me@gmail.com',
+      color: '#9fe1e7',
+      visible: true,
+    })
+    // снятая в Google отметка — это «не показывать»
+    expect(byId(calendars, entry().googleCalendarId)).toMatchObject({
+      title: 'Праздники России',
+      color: '#16a765',
+      visible: false,
+    })
+  })
+
+  it('повторное подключение правит название, но не выбор цвета и видимости', async () => {
+    googleAnswers('me@gmail.com', {}, [entry()])
+    await connectGoogleAccount('code')
+
+    const holidays = byId(await listGoogleCalendars(), entry().googleCalendarId)
+    await updateGoogleCalendar(holidays.id, { color: '#d50000', visible: false })
+
+    googleAnswers('me@gmail.com', {}, [entry({ title: 'Праздники' })])
+    await connectGoogleAccount('code')
+
+    expect(byId(await listGoogleCalendars(), entry().googleCalendarId)).toMatchObject({
+      id: holidays.id,
+      title: 'Праздники',
+      color: '#d50000',
+      visible: false,
+    })
+  })
+
+  it('без основного календаря аккаунт не заводится: почту брать неоткуда', async () => {
+    exchangeCode.mockResolvedValue(tokens())
+    fetchCalendarList.mockResolvedValue([entry()])
+
+    await expect(connectGoogleAccount('code')).rejects.toThrow(InvalidInputError)
+    expect(await listGoogleAccounts()).toEqual([])
   })
 
   it('отказ Google — ошибка входа, а не пятисотка', async () => {
