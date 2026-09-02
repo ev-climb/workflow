@@ -19,7 +19,8 @@ function dateOf(at: Date): string {
   return at.toISOString().slice(0, 10)
 }
 
-function addDays(date: string, days: number): string {
+/** Соседняя дата. Нужна и там, где конец диапазона исключающий: следующий день после него. */
+export function addDays(date: string, days: number): string {
   const at = utcOf(date)
   at.setUTCDate(at.getUTCDate() + days)
   return dateOf(at)

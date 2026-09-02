@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/client.ts'
 import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts'
 import { EventEtagMismatchError, type GoogleEvent } from '../google/events.ts'
+import { DEFAULT_CALENDAR_COLOR } from '../../lib/calendar-colors.ts'
 import { ConflictError, InvalidInputError, NotFoundError } from './errors.ts'
-import { updateEvent } from './google-events.ts'
+import { listEvents, updateEvent } from './google-events.ts'
 
 vi.mock('../google/events.ts', async (importActual) => {
   const actual = await importActual<typeof import('../google/events.ts')>()
@@ -255,5 +256,154 @@ describe('правка события в Google', () => {
     await updateEvent(eventId, { title: 'Созвон' })
 
     expect(patchEvent.mock.calls[0][4]).toBeNull()
+  })
+})
+
+async function calendar(patch: { color?: string; visible?: boolean } = {}) {
+  const [account] = await db
+    .insert(googleAccounts)
+    .values({ email: `me${counter++}@gmail.com`, refreshTokenEncrypted: 'шифротекст' })
+    .returning({ id: googleAccounts.id })
+
+  const [row] = await db
+    .insert(googleCalendars)
+    .values({
+      accountId: account.id,
+      googleCalendarId: 'me@gmail.com',
+      title: 'Личный',
+      color: patch.color ?? null,
+      visible: patch.visible ?? true,
+    })
+    .returning({ id: googleCalendars.id })
+
+  return row.id
+}
+
+let counter = 0
+
+function put(calendarId: string, values: Partial<typeof calendarEvents.$inferInsert>) {
+  return db
+    .insert(calendarEvents)
+    .values({ calendarId, googleEventId: `e${counter++}`, title: 'Событие', ...values })
+    .returning({ id: calendarEvents.id })
+    .then(([row]) => row.id)
+}
+
+describe('события в окне сетки', () => {
+  it('отдаёт событие со временем вместе с цветом календаря', async () => {
+    const calendarId = await calendar({ color: '#039be5' })
+    const id = await put(calendarId, {
+      startsAt: new Date('2026-09-02T09:00:00Z'),
+      endsAt: new Date('2026-09-02T10:00:00Z'),
+    })
+
+    expect(await listEvents('2026-09-02', '2026-09-02')).toEqual([
+      {
+        id,
+        calendarId,
+        color: '#039be5',
+        title: 'Событие',
+        allDay: false,
+        startsAt: new Date('2026-09-02T09:00:00Z'),
+        endsAt: new Date('2026-09-02T10:00:00Z'),
+        startDate: null,
+        endDate: null,
+        recurringEventId: null,
+      },
+    ])
+  })
+
+  it('подставляет запасной цвет календарю без цвета', async () => {
+    const calendarId = await calendar()
+    await put(calendarId, {
+      startsAt: new Date('2026-09-02T09:00:00Z'),
+      endsAt: new Date('2026-09-02T10:00:00Z'),
+    })
+
+    const [event] = await listEvents('2026-09-02', '2026-09-02')
+    expect(event.color).toBe(DEFAULT_CALENDAR_COLOR)
+  })
+
+  it('не отдаёт события спрятанного календаря', async () => {
+    const calendarId = await calendar({ visible: false })
+    await put(calendarId, {
+      startsAt: new Date('2026-09-02T09:00:00Z'),
+      endsAt: new Date('2026-09-02T10:00:00Z'),
+    })
+
+    expect(await listEvents('2026-09-02', '2026-09-02')).toEqual([])
+  })
+
+  it('не отдаёт отменённое и мягко удалённое', async () => {
+    const calendarId = await calendar()
+    await put(calendarId, {
+      status: 'cancelled',
+      startsAt: new Date('2026-09-02T09:00:00Z'),
+      endsAt: new Date('2026-09-02T10:00:00Z'),
+    })
+    await put(calendarId, {
+      deletedAt: new Date(),
+      startsAt: new Date('2026-09-02T11:00:00Z'),
+      endsAt: new Date('2026-09-02T12:00:00Z'),
+    })
+
+    expect(await listEvents('2026-09-02', '2026-09-02')).toEqual([])
+  })
+
+  it('режет окно по московским суткам, а не по UTC', async () => {
+    const calendarId = await calendar()
+    // 21:30 UTC — это уже полпервого ночи третьего числа по-московски
+    await put(calendarId, {
+      startsAt: new Date('2026-09-02T21:30:00Z'),
+      endsAt: new Date('2026-09-02T22:30:00Z'),
+    })
+
+    expect(await listEvents('2026-09-02', '2026-09-02')).toEqual([])
+    expect(await listEvents('2026-09-03', '2026-09-03')).toHaveLength(1)
+  })
+
+  it('берёт событие, заезжающее в окно краем', async () => {
+    const calendarId = await calendar()
+    await put(calendarId, {
+      startsAt: new Date('2026-09-01T20:00:00Z'),
+      endsAt: new Date('2026-09-02T04:00:00Z'),
+    })
+
+    expect(await listEvents('2026-09-02', '2026-09-02')).toHaveLength(1)
+  })
+
+  it('ищет событие на весь день по датам и не двигает его на сутки', async () => {
+    const calendarId = await calendar()
+    // граница у Google исключающая: это ровно первое марта, и только оно
+    const id = await put(calendarId, {
+      allDay: true,
+      startDate: '2026-03-01',
+      endDate: '2026-03-02',
+    })
+
+    expect(await listEvents('2026-03-01', '2026-03-01')).toMatchObject([
+      { id, allDay: true, startDate: '2026-03-01', endDate: '2026-03-02' },
+    ])
+    expect(await listEvents('2026-02-28', '2026-02-28')).toEqual([])
+    expect(await listEvents('2026-03-02', '2026-03-02')).toEqual([])
+  })
+
+  it('внутри дня ставит событие на весь день впереди событий со временем', async () => {
+    const calendarId = await calendar()
+    await put(calendarId, {
+      startsAt: new Date('2026-09-02T06:00:00Z'),
+      endsAt: new Date('2026-09-02T07:00:00Z'),
+    })
+    await put(calendarId, { allDay: true, startDate: '2026-09-02', endDate: '2026-09-03' })
+
+    expect((await listEvents('2026-09-02', '2026-09-02')).map((one) => one.allDay)).toEqual([
+      true,
+      false,
+    ])
+  })
+
+  it('не принимает кривое окно', async () => {
+    await expect(listEvents('вчера', '2026-09-02')).rejects.toThrow(InvalidInputError)
+    await expect(listEvents('2026-09-03', '2026-09-02')).rejects.toThrow(InvalidInputError)
   })
 })

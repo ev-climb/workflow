@@ -9,6 +9,9 @@ import {
   nowOffset,
   weekdayLabel,
 } from '@/lib/calendar-grid'
+import { placeDay, type PlacedEvent } from '@/lib/calendar-layout'
+import type { CalendarEventView } from '@/lib/calendar-view'
+import { moscowParts } from '@/lib/dates'
 
 const HOUR_PX = 44
 const DAY_PX = HOUR_PX * 24
@@ -18,9 +21,12 @@ const SCROLL_ANCHOR = 0.35
 
 const RAIL = 'w-9 shrink-0'
 
-type Props = { days: string[] }
+/** Ниже блок читается только как полоса цвета: время в нём уже не помещается. */
+const TIME_VISIBLE_PX = 28
 
-export function CalendarGrid({ days }: Props) {
+type Props = { days: string[]; events: CalendarEventView[] }
+
+export function CalendarGrid({ days, events }: Props) {
   // на сервере момента нет: отрисуй его там — и разметка разойдётся с браузерной
   const [now, setNow] = useState<Date | null>(null)
   const scroll = useRef<HTMLDivElement>(null)
@@ -32,6 +38,8 @@ export function CalendarGrid({ days }: Props) {
   }, [])
 
   const line = now ? nowOffset(days, now) : null
+  // события на весь день во временную сетку не попадают: они полосой сверху, инвариант 3
+  const timed = events.filter(isTimed)
 
   const scrolled = useRef(false)
   useEffect(() => {
@@ -88,12 +96,48 @@ export function CalendarGrid({ days }: Props) {
                 }`}
                 style={{ backgroundImage: HOUR_LINES }}
               >
+                {placeDay(timed, day).map((placed) => (
+                  <EventBlock key={placed.key} placed={placed} />
+                ))}
                 {line?.date === day ? <NowLine minutes={line.minutes} /> : null}
               </div>
             ))}
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+type TimedView = CalendarEventView & { startsAt: string; endsAt: string }
+
+function isTimed(event: CalendarEventView): event is TimedView {
+  return !event.allDay && event.startsAt !== null && event.endsAt !== null
+}
+
+function EventBlock({ placed }: { placed: PlacedEvent<TimedView> }) {
+  const { event, start, end, column, columns } = placed
+  const height = ((end - start) / MINUTES_IN_DAY) * DAY_PX
+  const title = event.title ?? 'Без названия'
+  const time = moscowParts(event.startsAt).time
+
+  return (
+    <div
+      className="absolute overflow-hidden rounded-[3px] border-l-2 px-1 py-px text-[10px] leading-tight text-neutral-100"
+      style={{
+        top: (start / MINUTES_IN_DAY) * DAY_PX,
+        height,
+        left: `${(column / columns) * 100}%`,
+        width: `calc(${100 / columns}% - 2px)`,
+        borderColor: event.color,
+        backgroundColor: `${event.color}44`,
+      }}
+      title={`${time} ${title}`}
+    >
+      {height >= TIME_VISIBLE_PX ? (
+        <div className="truncate text-neutral-300 tabular-nums">{time}</div>
+      ) : null}
+      <div className="truncate font-medium">{title}</div>
     </div>
   )
 }

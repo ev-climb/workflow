@@ -1,4 +1,7 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, gt, isNull, lt, ne, or, sql } from 'drizzle-orm'
+import { DEFAULT_CALENDAR_COLOR } from '../../lib/calendar-colors.ts'
+import { addDays } from '../../lib/calendar-grid.ts'
+import { momentInMoscow } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
 import { calendarEvents, googleCalendars } from '../db/schema.ts'
 import {
@@ -14,6 +17,20 @@ import { accessTokenFor } from './google-accounts.ts'
 import { applyEvents } from './google-sync.ts'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
+
+export type CalendarEvent = {
+  id: string
+  calendarId: string
+  /** Цвет календаря, к которому событие относится: у события своего цвета нет. */
+  color: string
+  title: string | null
+  allDay: boolean
+  startsAt: Date | null
+  endsAt: Date | null
+  startDate: string | null
+  endDate: string | null
+  recurringEventId: string | null
+}
 
 export type EventWriteResult = {
   eventId: string
@@ -31,6 +48,62 @@ const EVENT = {
   deletedAt: calendarEvents.deletedAt,
   googleCalendarId: googleCalendars.googleCalendarId,
   accountId: googleCalendars.accountId,
+}
+
+const LISTED = {
+  id: calendarEvents.id,
+  calendarId: calendarEvents.calendarId,
+  color: googleCalendars.color,
+  title: calendarEvents.title,
+  allDay: calendarEvents.allDay,
+  startsAt: calendarEvents.startsAt,
+  endsAt: calendarEvents.endsAt,
+  startDate: calendarEvents.startDate,
+  endDate: calendarEvents.endDate,
+  recurringEventId: calendarEvents.recurringEventId,
+}
+
+/**
+ * События видимых календарей, задевающие окно из московских дат (обе границы включительно).
+ *
+ * Пары времени разведены: у события со временем окно берётся моментами, у события на весь
+ * день — датами как строками, без всякого перевода в момент. Инвариант 3: дата, прошедшая
+ * через часовой пояс, уезжает на сутки.
+ */
+export async function listEvents(from: string, to: string): Promise<CalendarEvent[]> {
+  if (!DATE.test(from) || !DATE.test(to)) {
+    throw new InvalidInputError('границы окна — даты вида 2026-09-02')
+  }
+  if (to < from) throw new InvalidInputError('окно кончается не раньше, чем начинается')
+
+  // граница окна исключающая с обеих сторон: событие, кончающееся ровно в полночь, к
+  // следующему дню уже не относится
+  const after = addDays(to, 1)
+  const windowStart = momentInMoscow(from, '00:00')
+  const windowEnd = momentInMoscow(after, '00:00')
+
+  const rows = await db
+    .select(LISTED)
+    .from(calendarEvents)
+    .innerJoin(googleCalendars, eq(googleCalendars.id, calendarEvents.calendarId))
+    .where(
+      and(
+        eq(googleCalendars.visible, true),
+        isNull(calendarEvents.deletedAt),
+        ne(calendarEvents.status, 'cancelled'),
+        or(
+          and(lt(calendarEvents.startsAt, windowEnd), gt(calendarEvents.endsAt, windowStart)),
+          and(lt(calendarEvents.startDate, after), gt(calendarEvents.endDate, from)),
+        ),
+      ),
+    )
+    // сортировка по московскому дню, внутри дня события на весь день идут первыми
+    .orderBy(
+      sql`coalesce(${calendarEvents.startDate}, (${calendarEvents.startsAt} at time zone 'Europe/Moscow')::date) asc`,
+      sql`${calendarEvents.startsAt} asc nulls first`,
+    )
+
+  return rows.map((row) => ({ ...row, color: row.color ?? DEFAULT_CALENDAR_COLOR }))
 }
 
 function checkTimes(times: EventTimes): void {

@@ -2,7 +2,8 @@ import { EventEmitter } from 'node:events'
 
 export type BoardChanged = { boardId: string }
 
-const CHANNEL = 'board-changed'
+const BOARD = 'board-changed'
+const CALENDAR = 'calendar-changed'
 
 /**
  * Шина висит на globalThis: в dev-режиме модуль пересоздаётся при горячей перезагрузке,
@@ -16,13 +17,29 @@ const bus = (store.boardEventBus ??= new EventEmitter().setMaxListeners(0))
  * потерянное событие переживается обновлением страницы, поэтому publish ничего не ждёт.
  */
 export function publishBoardChanged(boardId: string): void {
-  bus.emit(CHANNEL, { boardId } satisfies BoardChanged)
+  bus.emit(BOARD, { boardId } satisfies BoardChanged)
+}
+
+/**
+ * Сигнал «события календаря перечитать». Без календаря в теле: сетка показывает окно из
+ * нескольких календарей разом и перечитывает его целиком, а не по одному.
+ */
+export function publishCalendarChanged(): void {
+  bus.emit(CALENDAR)
 }
 
 /** Возвращает отписку: поток SSE обязан позвать её при обрыве, иначе слушатели копятся. */
 export function subscribeBoardChanged(listener: (event: BoardChanged) => void): () => void {
+  return subscribe(BOARD, listener)
+}
+
+export function subscribeCalendarChanged(listener: () => void): () => void {
+  return subscribe(CALENDAR, listener)
+}
+
+function subscribe<T>(channel: string, listener: (event: T) => void): () => void {
   // сорвавшийся слушатель не должен ронять ни соседей, ни мутацию, пославшую событие
-  const guarded = (event: BoardChanged) => {
+  const guarded = (event: T) => {
     try {
       listener(event)
     } catch {
@@ -30,8 +47,8 @@ export function subscribeBoardChanged(listener: (event: BoardChanged) => void): 
     }
   }
 
-  bus.on(CHANNEL, guarded)
+  bus.on(channel, guarded)
   return () => {
-    bus.off(CHANNEL, guarded)
+    bus.off(channel, guarded)
   }
 }

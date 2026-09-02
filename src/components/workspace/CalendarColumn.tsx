@@ -1,8 +1,10 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useState } from 'react'
 import { CalendarGrid } from '@/components/calendar/CalendarGrid'
+import { calendarQuery } from '@/lib/calendar-query'
 import {
   daysOf,
   moscowToday,
@@ -23,6 +25,7 @@ type Props = {
 export function CalendarColumn({ mode, today, onModeChange }: Props) {
   const [anchor, setAnchor] = useState(today)
   const days = daysOf(mode, anchor)
+  const events = useQuery(calendarQuery(days[0], days[days.length - 1]))
 
   return (
     <aside className="flex w-80 shrink-0 flex-col border-r border-neutral-800">
@@ -62,7 +65,7 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
         </div>
       </div>
 
-      <CalendarGrid days={days} />
+      <CalendarGrid days={days} events={events.data ?? []} />
     </aside>
   )
 }

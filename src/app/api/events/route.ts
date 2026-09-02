@@ -1,4 +1,4 @@
-import { subscribeBoardChanged } from '@/server/services/board-events'
+import { subscribeBoardChanged, subscribeCalendarChanged } from '@/server/services/board-events'
 import { trackViewer } from '@/server/services/viewers'
 
 export const dynamic = 'force-dynamic'
@@ -17,6 +17,7 @@ export function GET(request: Request): Response {
     start(controller) {
       let closed = false
       let unsubscribe = () => {}
+      let unsubscribeCalendar = () => {}
       let untrack = () => {}
       let heartbeat: ReturnType<typeof setInterval> | undefined
 
@@ -25,6 +26,7 @@ export function GET(request: Request): Response {
         closed = true
         clearInterval(heartbeat)
         unsubscribe()
+        unsubscribeCalendar()
         untrack()
         request.signal.removeEventListener('abort', stop)
         try {
@@ -48,6 +50,9 @@ export function GET(request: Request): Response {
       untrack = trackViewer()
       unsubscribe = subscribeBoardChanged((event) => {
         send(`event: board-changed\ndata: ${JSON.stringify(event)}\n\n`)
+      })
+      unsubscribeCalendar = subscribeCalendarChanged(() => {
+        send('event: calendar-changed\ndata: {}\n\n')
       })
       heartbeat = setInterval(() => send(': ping\n\n'), HEARTBEAT_MS)
       request.signal.addEventListener('abort', stop)

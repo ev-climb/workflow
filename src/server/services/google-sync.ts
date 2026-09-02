@@ -8,6 +8,7 @@ import {
   SyncTokenRejectedError,
   fetchEvents,
 } from '../google/events.ts'
+import { publishCalendarChanged } from './board-events.ts'
 import { NotFoundError, ReauthRequiredError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
 
@@ -133,6 +134,9 @@ export async function applyEvents(
 
   await saveEvents(calendarId, live)
   const cancelled = await markCancelled(calendarId, gone)
+
+  // единственное место, где события меняются: и синхронизация, и запись правки идут сюда
+  if (live.length > 0 || cancelled > 0) publishCalendarChanged()
 
   return { saved: live.length, cancelled, skipped: skipped + (gone.length - cancelled) }
 }
