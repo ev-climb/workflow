@@ -9,6 +9,14 @@ export type DragData =
   | { type: 'card'; boardId: string; listId: string; card: CardView }
   | { type: 'list'; boardId: string; listId: string; list: ListView }
 
+export type CardDrag = Extract<DragData, { type: 'card' }>
+
+/** Карточка под курсором: на календарь бросают только её — списку срок ставить некуда. */
+export function draggedCard(data: unknown): CardDrag | null {
+  const drag = data as DragData | undefined
+  return drag?.type === 'card' ? drag : null
+}
+
 /**
  * Одна и та же доска может стоять в обоих слотах, а идентификаторы перетаскивания должны
  * быть уникальны на весь стол: слот в ключе разводит две копии одной карточки.

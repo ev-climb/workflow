@@ -1,6 +1,11 @@
 'use client'
 
+import { useDndMonitor } from '@dnd-kit/core'
 import { useEffect, useRef, useState } from 'react'
+import { Failure } from '@/components/board/Failure'
+import { draggedCard } from '@/lib/board-move'
+import { useDropDue } from '@/lib/board-mutations'
+import { covers, dayAt, dropMinutes, dropTime, isDueDrop, pointerAt } from '@/lib/calendar-drop'
 import {
   HOURS,
   MINUTES_IN_DAY,
@@ -38,6 +43,9 @@ const DUE_MAX_PX = DUE_PX * 4
 /** Ниже блок читается только как полоса цвета: время в нём уже не помещается. */
 const TIME_VISIBLE_PX = 28
 
+/** Куда встанет срок, если отпустить карточку сейчас. Без минут — день без времени. */
+type Aim = { date: string; minutes: number | null }
+
 type Props = { days: string[]; events: CalendarEventView[]; dues: CardDueView[] }
 
 export function CalendarGrid({ days, events, dues }: Props) {
@@ -68,13 +76,72 @@ export function CalendarGrid({ days, events, dues }: Props) {
     box.scrollTop = (minutes / MINUTES_IN_DAY) * DAY_PX - box.clientHeight * SCROLL_ANCHOR
   }, [days, now])
 
+  const setDue = useDropDue()
+  const heads = useRef<HTMLDivElement>(null)
+  const cells = useRef<HTMLDivElement>(null)
+  const [aim, setAim] = useState<Aim | null>(null)
+
+  /**
+   * Куда встанет срок брошенной карточки: день — по колонке под курсором, время — по
+   * высоте точки в ней. Шапка дня даёт срок без времени. Мерки снимаются на месте:
+   * сетку за время жеста могли прокрутить.
+   */
+  function aimAt(): Aim | null {
+    const at = pointerAt()
+    if (at === null) return null
+
+    const head = dayAt(heads.current, at, days)
+    if (head !== null) return { date: head, minutes: null }
+
+    const box = scroll.current
+    const day = covers(box, at) ? dayAt(cells.current, at, days) : null
+    if (!box || day === null) return null
+
+    const offset = at.y - box.getBoundingClientRect().top + box.scrollTop
+    return { date: day, minutes: dropMinutes(offset, DAY_PX) }
+  }
+
+  useDndMonitor({
+    onDragMove: ({ active }) => setAim(draggedCard(active.data.current) ? aimAt() : null),
+
+    onDragEnd: ({ active, over }) => {
+      const card = draggedCard(active.data.current)
+      // цель календаря одна на всех, а куда именно попали — только что посчитано по сетке
+      const aimed = card && isDueDrop(over?.data.current) ? aimAt() : null
+      setAim(null)
+      if (!card || aimed === null) return
+
+      setDue.mutate({
+        boardId: card.boardId,
+        cardId: card.card.id,
+        date: aimed.date,
+        time: aimed.minutes === null ? null : dropTime(aimed.minutes),
+      })
+    },
+
+    onDragCancel: () => setAim(null),
+  })
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <Failure error={setDue.error} className="shrink-0 px-3 pb-1" />
+
       <div className="flex shrink-0 border-b border-neutral-800 pr-2">
         <div className={RAIL} />
-        <div className="grid flex-1" style={{ gridTemplateColumns: columns(days.length) }}>
+        <div
+          ref={heads}
+          className="grid flex-1"
+          style={{ gridTemplateColumns: columns(days.length) }}
+        >
           {days.map((day) => (
-            <div key={day} className="px-1 pb-1 text-center">
+            <div
+              key={day}
+              data-day-head={day}
+              className={`rounded px-1 pb-1 text-center ${
+                // шапка дня принимает карточку: срок встанет на этот день без времени
+                aim?.date === day && aim.minutes === null ? 'bg-neutral-700' : ''
+              }`}
+            >
               <div className="text-[10px] text-neutral-500">{weekdayLabel(day)}</div>
               <div
                 className={
@@ -143,7 +210,11 @@ export function CalendarGrid({ days, events, dues }: Props) {
               </div>
             ))}
           </div>
-          <div className="grid flex-1" style={{ gridTemplateColumns: columns(days.length) }}>
+          <div
+            ref={cells}
+            className="grid flex-1"
+            style={{ gridTemplateColumns: columns(days.length) }}
+          >
             {days.map((day) => (
               <div
                 key={day}
@@ -157,6 +228,9 @@ export function CalendarGrid({ days, events, dues }: Props) {
                   <EventBlock key={placed.key} placed={placed} />
                 ))}
                 {line?.date === day ? <NowLine minutes={line.minutes} /> : null}
+                {aim?.date === day && aim.minutes !== null ? (
+                  <DueMark minutes={aim.minutes} />
+                ) : null}
               </div>
             ))}
           </div>
@@ -256,6 +330,21 @@ function EventBlock({ placed }: { placed: PlacedEvent<TimedView> }) {
         <div className="truncate text-neutral-300 tabular-nums">{time}</div>
       ) : null}
       <div className="truncate font-medium">{title}</div>
+    </div>
+  )
+}
+
+/** Время, которое достанется сроку, если отпустить карточку здесь. */
+function DueMark({ minutes }: { minutes: number }) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute right-0 left-0 z-20 border-t border-dashed border-neutral-200"
+      style={{ top: (minutes / MINUTES_IN_DAY) * DAY_PX }}
+    >
+      <span className="absolute -top-2 left-0 rounded-sm bg-neutral-200 px-0.5 text-[10px] leading-4 font-medium text-neutral-900 tabular-nums">
+        {dropTime(minutes)}
+      </span>
     </div>
   )
 }

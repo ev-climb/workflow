@@ -1,9 +1,11 @@
 'use client'
 
+import { useDroppable } from '@dnd-kit/core'
 import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useState } from 'react'
 import { CalendarGrid } from '@/components/calendar/CalendarGrid'
+import { DUE_DROP, DUE_DROP_ID } from '@/lib/calendar-drop'
 import { calendarQuery, duesQuery } from '@/lib/calendar-query'
 import {
   daysOf,
@@ -27,9 +29,14 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
   const days = daysOf(mode, anchor)
   const events = useQuery(calendarQuery(days[0], days[days.length - 1]))
   const dues = useQuery(duesQuery(days[0], days[days.length - 1]))
+  // карточку принимает весь столбец: над ним она уже не попадёт обратно на доску
+  const drop = useDroppable({ id: DUE_DROP_ID, data: DUE_DROP })
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-r border-neutral-800">
+    <aside
+      ref={drop.setNodeRef}
+      className="flex w-80 shrink-0 flex-col border-r border-neutral-800"
+    >
       <div className="flex items-baseline justify-between px-3 pt-3">
         <h2 className="text-sm font-medium text-neutral-300">{rangeLabel(mode, days)}</h2>
         <Link href="/settings" className="text-xs text-neutral-500 hover:text-neutral-300">

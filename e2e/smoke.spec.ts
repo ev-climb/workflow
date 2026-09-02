@@ -147,3 +147,34 @@ test('переставить список мышью и найти его на �
 
   expect(await columnTitles(page)).toEqual([DOING, TODO])
 })
+
+/** Сегодняшняя дата по-московски: на ней открывается сетка, ею же подписана шапка дня. */
+const moscowToday = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow' }).format(new Date())
+
+/** Сроки карточек на сетке: ссылка на карточку и есть полоса срока. */
+const dueStripes = (page: Page) => page.locator('aside a[href^="/?card="]')
+
+test('перетащить карточку на календарь и найти её срок на сетке после перезагрузки', async ({
+  page,
+}) => {
+  await signIn(page)
+
+  const dated = TODO_CARDS[0]
+  await expect(dueStripes(page)).toHaveCount(0)
+
+  await saved(page, () =>
+    drag(
+      page,
+      cards(page, TODO).filter({ hasText: dated }),
+      page.locator(`[data-day-head="${moscowToday()}"]`),
+    ),
+  )
+
+  await expect(dueStripes(page)).toHaveCount(1)
+  await expect(dueStripes(page)).toContainText(dated)
+
+  await opened(page, () => page.reload())
+
+  await expect(dueStripes(page)).toContainText(dated)
+})
