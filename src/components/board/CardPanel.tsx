@@ -6,6 +6,7 @@ import { useState, type ReactNode } from 'react'
 import { useRenameCard } from '@/lib/board-mutations'
 import { cardQuery } from '@/lib/card-query'
 import { formatMoment, isOverdue } from '@/lib/dates'
+import { CardChecklists } from './CardChecklists'
 import { CardDescription } from './CardDescription'
 import { CardLabels } from './CardLabels'
 import { Failure } from './Failure'
@@ -22,6 +23,7 @@ type Props = { boardId: string; cardId: string; title: string; onClose: () => vo
 export function CardPanel({ boardId, cardId, title, onClose }: Props) {
   const { data, error, isPending } = useQuery(cardQuery(cardId))
   const [renaming, setRenaming] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const rename = useRenameCard(boardId, cardId)
   const overdue = data?.dueAt != null && isOverdue(data.dueAt, data.dueDone)
   const heading = data?.title ?? title
@@ -34,8 +36,9 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
         <Dialog.Content
           onEscapeKeyDown={(event) => {
             // Radix слушает Escape на документе в захвате, погасить его всплытием нельзя.
-            // Внутри поля Escape отменяет правку, панель закрывает только Escape снаружи.
-            if (document.activeElement?.tagName === 'TEXTAREA') event.preventDefault()
+            // Внутри поля Escape отменяет правку, под курсором — перетаскивание пункта;
+            // панель закрывает только Escape снаружи.
+            if (dragging || document.activeElement?.tagName === 'TEXTAREA') event.preventDefault()
           }}
           className="fixed top-0 right-0 z-50 flex h-full w-112 max-w-[calc(100vw-3rem)] flex-col overflow-y-auto border-l border-neutral-800 bg-neutral-950 p-4 shadow-xl outline-none"
         >
@@ -106,6 +109,8 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
               ) : null}
 
               <CardDescription boardId={boardId} cardId={cardId} description={data.description} />
+
+              <CardChecklists boardId={boardId} cardId={cardId} onDragging={setDragging} />
             </div>
           )}
         </Dialog.Content>
