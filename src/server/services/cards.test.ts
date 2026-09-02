@@ -143,6 +143,19 @@ describe('перемещение внутри списка', () => {
     ).rejects.toThrow(InvalidInputError)
   })
 
+  it('архивная карточка не мешает встать на её место', async () => {
+    // ранг архивной остаётся занятым: место между b и d — ровно её
+    await archiveCard(ids.c)
+    await moveCard({
+      cardId: ids.a,
+      listId: b.lists['Бэклог'],
+      prevCardId: ids.b,
+      nextCardId: ids.d,
+    })
+
+    expect(await order(b, 'Бэклог')).toEqual(['b', 'a', 'd'])
+  })
+
   it('архивная карточка не двигается', async () => {
     await archiveCard(ids.a)
     await expect(moveCard({ cardId: ids.a, listId: b.lists['Бэклог'] })).rejects.toThrow(

@@ -90,18 +90,16 @@ async function lastRank(listId: string): Promise<string | null> {
   return last?.rank ?? null
 }
 
-/** Ранг, который сейчас идёт следом за `after`. `null` слева — начало списка. */
+/**
+ * Ранг, который сейчас идёт следом за `after`. `null` слева — начало списка.
+ * Архив считается наравне с видимым: ранг архивной карточки занят в уникальном индексе,
+ * и место между двумя видимыми соседями бывает занято именно им.
+ */
 async function nextRankInList(listId: string, after: string | null): Promise<string | null> {
   const [next] = await db
     .select({ rank: cards.rank })
     .from(cards)
-    .where(
-      and(
-        eq(cards.listId, listId),
-        isNull(cards.archivedAt),
-        after === null ? undefined : gt(cards.rank, after),
-      ),
-    )
+    .where(and(eq(cards.listId, listId), after === null ? undefined : gt(cards.rank, after)))
     .orderBy(asc(cards.rank))
     .limit(1)
 
