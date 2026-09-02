@@ -9,6 +9,7 @@ type Props = {
   archiving: boolean
   onOpen: () => void
   onTransfer: () => void
+  onCopyLink: () => void
   onArchive: () => void
   className?: string
 }
@@ -18,7 +19,14 @@ type Props = {
  * в потоке табуляции: с клавиатуры её видно по фокусу. Через «Открыть» панель карточки
  * достижима без мыши: пробел и Enter на самой карточке заняты перетаскиванием.
  */
-export function CardMenu({ archiving, onOpen, onTransfer, onArchive, className = '' }: Props) {
+export function CardMenu({
+  archiving,
+  onOpen,
+  onTransfer,
+  onCopyLink,
+  onArchive,
+  className = '',
+}: Props) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger
@@ -39,6 +47,9 @@ export function CardMenu({ archiving, onOpen, onTransfer, onArchive, className =
           </DropdownMenu.Item>
           <DropdownMenu.Item className={ITEM} onSelect={onTransfer}>
             Перенести на другую доску…
+          </DropdownMenu.Item>
+          <DropdownMenu.Item className={ITEM} onSelect={onCopyLink}>
+            Скопировать ссылку
           </DropdownMenu.Item>
           <DropdownMenu.Item className={ITEM} disabled={archiving} onSelect={onArchive}>
             В архив

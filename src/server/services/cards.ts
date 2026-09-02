@@ -58,6 +58,17 @@ async function boardOfCard(cardId: string): Promise<string> {
   return found.boardId
 }
 
+/** Доска живой карточки. `null` — карточки нет или она в архиве: ссылка могла протухнуть. */
+export async function findCardBoard(cardId: string): Promise<string | null> {
+  const [found] = await db
+    .select({ boardId: lists.boardId })
+    .from(cards)
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
+
+  return found?.boardId ?? null
+}
+
 /** Ранг соседа. Чужой список или архив — ошибка входа: позиция была бы выдумана. */
 async function neighbourRank(
   cardId: string | null | undefined,

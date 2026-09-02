@@ -2,6 +2,7 @@
 
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { useArchiveCard, useRenameCard } from '@/lib/board-mutations'
 import { dragId, type DragData } from '@/lib/board-move'
@@ -17,6 +18,9 @@ import { TransferDialog } from './TransferDialog'
 
 /** Столько ждём второго клика, прежде чем показать панель. */
 const DOUBLE_CLICK_MS = 250
+
+/** Столько висит ответ на «скопировать ссылку». */
+const COPY_NOTE_MS = 2000
 
 export const CARD_FRAME =
   'rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2 text-left'
@@ -86,11 +90,39 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
   const [renaming, setRenaming] = useState(false)
   const [opened, setOpened] = useState(false)
   const [transferring, setTransferring] = useState(false)
+  const [copied, setCopied] = useState<boolean | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const copyTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const rename = useRenameCard(boardId, card.id)
   const archive = useArchiveCard(boardId, card.id)
+  const linked = useSearchParams().get('card')
 
-  useEffect(() => () => clearTimeout(timer.current), [])
+  useEffect(
+    () => () => {
+      clearTimeout(timer.current)
+      clearTimeout(copyTimer.current)
+    },
+    [],
+  )
+
+  // адрес с идентификатором карточки открывает её сам: доску под неё подставила страница
+  useEffect(() => {
+    if (linked === card.id) setOpened(true)
+  }, [linked, card.id])
+
+  /** Буфер обмена бывает недоступен — без разрешения или вне защищённого адреса. */
+  async function copyLink() {
+    let done = true
+    try {
+      await navigator.clipboard.writeText(`${location.origin}/?card=${card.id}`)
+    } catch {
+      done = false
+    }
+
+    setCopied(done)
+    clearTimeout(copyTimer.current)
+    copyTimer.current = setTimeout(() => setCopied(null), COPY_NOTE_MS)
+  }
 
   /**
    * Одиночный клик открывает панель, двойной по заголовку — переименовывает. Открытие
@@ -125,6 +157,7 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
         archiving={archive.isPending}
         onOpen={() => setOpened(true)}
         onTransfer={() => setTransferring(true)}
+        onCopyLink={() => void copyLink()}
         onArchive={() => archive.mutate()}
         className="absolute top-1 right-1 bg-neutral-900 group-hover/card:opacity-100"
       />
@@ -153,6 +186,12 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
       />
 
       <Failure error={rename.error ?? archive.error} className="pt-1" />
+
+      {copied === null ? null : (
+        <p role="status" className={`pt-1 text-xs ${copied ? 'text-neutral-400' : 'text-red-300'}`}>
+          {copied ? 'Ссылка скопирована' : 'Буфер обмена недоступен'}
+        </p>
+      )}
 
       {opened ? (
         <CardPanel

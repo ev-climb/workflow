@@ -7,6 +7,7 @@ import {
   archiveCard,
   createCard,
   describeCard,
+  findCardBoard,
   getCard,
   moveCard,
   moveCardToBoard,
@@ -459,5 +460,23 @@ describe('архив карточки', () => {
     await archiveList(b.lists['Бэклог'])
 
     await expect(restoreCard(ids.a)).rejects.toThrow(InvalidInputError)
+  })
+})
+
+describe('доска карточки по ссылке', () => {
+  it('находится по живой карточке', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+
+    expect(await findCardBoard(ids.a)).toBe(b.id)
+  })
+
+  it('архивная карточка и несуществующая дают null', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await archiveCard(ids.a)
+
+    expect(await findCardBoard(ids.a)).toBeNull()
+    expect(await findCardBoard('00000000-0000-4000-8000-000000000000')).toBeNull()
   })
 })

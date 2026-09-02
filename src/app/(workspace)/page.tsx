@@ -1,17 +1,41 @@
 import { Workspace } from '@/components/workspace/Workspace'
 import { toBoardView, type BoardView } from '@/lib/board-view'
+import { isUuid } from '@/lib/http'
 import { getBoard, listBoards } from '@/server/services/boards'
+import { findCardBoard } from '@/server/services/cards'
 import { getWorkspaceState } from '@/server/services/workspace'
 
 // состояние стола лежит в базе и меняется на каждый чих: прегенерация отдавала бы вчерашнее
 export const dynamic = 'force-dynamic'
 
-export default async function WorkspacePage() {
-  const [state, boards] = await Promise.all([getWorkspaceState(), listBoards()])
+type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> }
+
+export default async function WorkspacePage({ searchParams }: Props) {
+  const { card } = await searchParams
+  const cardId = typeof card === 'string' && isUuid(card) ? card : null
+
+  const [state, boards, cardBoardId] = await Promise.all([
+    getWorkspaceState(),
+    listBoards(),
+    cardId === null ? null : findCardBoard(cardId),
+  ])
 
   // доску слота могли заархивировать: тогда слот показывается пустым, а не роняет страницу
   const alive = new Set(boards.map((board) => board.id))
-  const ids = [...new Set([state.topBoardId, state.bottomBoardId])].filter(
+
+  /**
+   * Ссылка на карточку показывает её доску сверху, если ни в одном слоте её нет: иначе
+   * ссылка открывала бы стол, на котором карточки не видно. Выбор слотов при этом не
+   * переписывается — стол вернётся к своему виду, как только адрес станет обычным.
+   */
+  const linked =
+    cardBoardId !== null &&
+    alive.has(cardBoardId) &&
+    cardBoardId !== state.topBoardId &&
+    cardBoardId !== state.bottomBoardId
+  const topBoardId = linked ? cardBoardId : state.topBoardId
+
+  const ids = [...new Set([topBoardId, state.bottomBoardId])].filter(
     (id): id is string => id !== null && alive.has(id),
   )
 
@@ -23,7 +47,7 @@ export default async function WorkspacePage() {
     <Workspace
       boards={boards}
       initialBoards={initialBoards}
-      topBoardId={state.topBoardId}
+      topBoardId={topBoardId}
       bottomBoardId={state.bottomBoardId}
       topBoardRatio={state.topBoardRatio}
     />
