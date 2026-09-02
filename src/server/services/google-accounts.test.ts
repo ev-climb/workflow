@@ -6,7 +6,12 @@ import type { GoogleCalendarEntry } from '../google/calendars.ts'
 import { GoogleAuthError, GoogleGrantRevokedError, type GoogleTokens } from '../google/oauth.ts'
 import { decryptToken } from '../google/token-crypto.ts'
 import { InvalidInputError, ReauthRequiredError } from './errors.ts'
-import { accessTokenFor, connectGoogleAccount, listGoogleAccounts } from './google-accounts.ts'
+import {
+  accessTokenFor,
+  connectGoogleAccount,
+  listAccountsNeedingReauth,
+  listGoogleAccounts,
+} from './google-accounts.ts'
 import {
   type GoogleCalendarSummary,
   listGoogleCalendars,
@@ -252,5 +257,21 @@ describe('access-токен аккаунта', () => {
 
     await expect(accessTokenFor(account.id)).rejects.toThrow(ReauthRequiredError)
     expect(refreshAccessToken).not.toHaveBeenCalled()
+  })
+
+  it('полосу просит только отвалившийся аккаунт, и переподключение её убирает', async () => {
+    const revoked = await connected('first@gmail.com', new Date(Date.now() - 1000))
+    await connected('second@gmail.com')
+    refreshAccessToken.mockRejectedValue(
+      new GoogleGrantRevokedError('Google отказал: invalid_grant', 'invalid_grant'),
+    )
+    await expect(accessTokenFor(revoked.id)).rejects.toThrow(ReauthRequiredError)
+
+    expect(await listAccountsNeedingReauth()).toMatchObject([{ email: 'first@gmail.com' }])
+
+    googleAnswers('first@gmail.com')
+    await connectGoogleAccount('code')
+
+    expect(await listAccountsNeedingReauth()).toEqual([])
   })
 })

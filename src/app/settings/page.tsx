@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { AccountCalendars } from '@/components/settings/AccountCalendars'
 import { formatMoment } from '@/lib/dates'
+import { connectUrl } from '@/lib/google-oauth'
 import { listGoogleAccounts } from '@/server/services/google-accounts'
 import { listGoogleCalendars } from '@/server/services/google-calendars'
 
@@ -44,7 +45,12 @@ export default async function SettingsPage({ searchParams }: Props) {
                 <div className="flex items-baseline justify-between">
                   <span className="text-sm">{account.email}</span>
                   {account.needsReauth ? (
-                    <span className="text-xs text-amber-400">нужна повторная авторизация</span>
+                    <a
+                      href={connectUrl(account.email)}
+                      className="rounded border border-amber-800 px-2 py-1 text-xs text-amber-300 outline-none hover:bg-amber-950 focus-visible:ring-1 focus-visible:ring-amber-600"
+                    >
+                      Доступ отозван — подключить заново
+                    </a>
                   ) : (
                     <span className="text-xs text-neutral-500">
                       подключён {formatMoment(account.connectedAt.toISOString())}
@@ -60,7 +66,7 @@ export default async function SettingsPage({ searchParams }: Props) {
         )}
 
         <a
-          href="/api/auth/google/start"
+          href={connectUrl()}
           className="mt-4 inline-block rounded bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-white"
         >
           {accounts.length === 0 ? 'Подключить аккаунт' : 'Подключить ещё'}

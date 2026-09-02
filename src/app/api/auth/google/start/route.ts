@@ -4,7 +4,7 @@ import { beginGoogleConnect } from '@/server/services/google-accounts'
 
 /** Уводит на согласие Google, запомнив `state` в куке. Логики здесь нет — инвариант 2. */
 export function GET(request: NextRequest) {
-  const { url, state } = beginGoogleConnect()
+  const { url, state } = beginGoogleConnect(request.nextUrl.searchParams.get('email'))
 
   const response = NextResponse.redirect(url, { status: 303 })
   response.cookies.set(OAUTH_STATE_COOKIE, state, {

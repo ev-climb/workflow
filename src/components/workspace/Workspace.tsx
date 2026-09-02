@@ -106,7 +106,7 @@ export function Workspace({
   )
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex min-h-0 flex-1 overflow-hidden">
       <CalendarColumn mode={mode} today={today} onModeChange={(next) => void chooseMode(next)} />
       <div className="relative flex min-w-0 flex-1 flex-col">
         {failure ? (

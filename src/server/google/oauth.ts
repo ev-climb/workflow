@@ -43,7 +43,7 @@ function env(name: string): string {
   return value
 }
 
-export function authUrl(state: string): string {
+export function authUrl(state: string, loginHint?: string | null): string {
   const url = new URL(AUTH_ENDPOINT)
   url.searchParams.set('client_id', env('GOOGLE_CLIENT_ID'))
   url.searchParams.set('redirect_uri', env('GOOGLE_REDIRECT_URI'))
@@ -54,6 +54,9 @@ export function authUrl(state: string): string {
   url.searchParams.set('access_type', 'offline')
   url.searchParams.set('prompt', 'consent')
   url.searchParams.set('state', state)
+  // переподключение отвалившегося аккаунта: Google сразу предложит нужную почту, а не
+  // список всех, где легко согласиться не тем аккаунтом и завести третий
+  if (loginHint) url.searchParams.set('login_hint', loginHint)
   return url.toString()
 }
 

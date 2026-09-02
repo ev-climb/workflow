@@ -33,14 +33,27 @@ const SELECT = {
   connectedAt: googleAccounts.createdAt,
 }
 
-/** Начало потока: адрес согласия и одноразовый `state`, который проверяет обработчик возврата. */
-export function beginGoogleConnect(): { url: string; state: string } {
+/**
+ * Начало потока: адрес согласия и одноразовый `state`, который проверяет обработчик
+ * возврата. Почта задаётся при переподключении помеченного аккаунта — чтобы согласие
+ * прошло по нему, а не по соседнему.
+ */
+export function beginGoogleConnect(loginHint?: string | null): { url: string; state: string } {
   const state = randomUUID()
-  return { url: authUrl(state), state }
+  return { url: authUrl(state, loginHint), state }
 }
 
 export function listGoogleAccounts(): Promise<GoogleAccountSummary[]> {
   return db.select(SELECT).from(googleAccounts).orderBy(asc(googleAccounts.createdAt))
+}
+
+/** Аккаунты, отвалившиеся по отозванному доступу: по ним интерфейс показывает полосу. */
+export function listAccountsNeedingReauth(): Promise<GoogleAccountSummary[]> {
+  return db
+    .select(SELECT)
+    .from(googleAccounts)
+    .where(eq(googleAccounts.needsReauth, true))
+    .orderBy(asc(googleAccounts.createdAt))
 }
 
 /**
