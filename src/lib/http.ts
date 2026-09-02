@@ -84,10 +84,22 @@ const moveBody = z.object({
 /** Описание сервис сам обрежет; `null` и пустая строка одинаково стирают его. */
 const describeBody = z.object({ description: z.string().nullable() })
 
-/** Правка карточки: то же, что у списка, плюс описание и перемещение внутри доски. */
+/** Срок: дату и время сервис сам сведёт с часовым поясом, `null` снимает срок. */
+const dueBody = z.object({
+  due: z.object({ date: z.string(), time: z.string().nullable().optional() }).nullable(),
+})
+
+/** Правка карточки: то же, что у списка, плюс описание, срок и перемещение внутри доски. */
 export const cardPatchBody = z.union(
-  [titleBody, describeBody, z.object({ archived: z.boolean() }), moveBody],
-  { error: 'ожидается {title}, {description}, {archived} или {listId}' },
+  [
+    titleBody,
+    describeBody,
+    dueBody,
+    z.object({ dueDone: z.boolean() }),
+    z.object({ archived: z.boolean() }),
+    moveBody,
+  ],
+  { error: 'ожидается {title}, {description}, {due}, {dueDone}, {archived} или {listId}' },
 )
 
 /** Перенос карточки: только список-приёмник. Место — конец списка, ранг считает сервис. */

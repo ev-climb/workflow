@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm'
+import { momentInMoscow, moscowParts } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
 import { boards, cardLabels, cards, labels, lists } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
@@ -122,6 +123,7 @@ export type CardDetail = {
   title: string
   description: string | null
   dueAt: Date | null
+  dueHasTime: boolean
   dueDone: boolean
   boardId: string
   boardTitle: string
@@ -141,6 +143,7 @@ export async function getCard(cardId: string): Promise<CardDetail> {
       title: cards.title,
       description: cards.description,
       dueAt: cards.dueAt,
+      dueHasTime: cards.dueHasTime,
       dueDone: cards.dueDone,
       boardId: boards.id,
       boardTitle: boards.title,
@@ -216,6 +219,76 @@ export async function describeCard(cardId: string, raw: string | null): Promise<
     .returning({ id: cards.id })
 
   if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
+
+  publishBoardChanged(card.boardId)
+  return updated
+}
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/
+const TIME = /^\d{2}:\d{2}$/
+
+export type DueInput = { date: string; time?: string | null }
+
+/**
+ * Момент срока по московским дате и времени. Разложение обратно ловит и несуществующую
+ * дату вроде 31 февраля, и время вида 25:70: регулярка их пропускает, а зона — нет.
+ */
+function dueMoment(input: DueInput): { at: Date; hasTime: boolean } {
+  const time = input.time ?? null
+  if (!DATE.test(input.date)) {
+    throw new InvalidInputError('карточка: дата срока не вида ГГГГ-ММ-ДД')
+  }
+  if (time !== null && !TIME.test(time)) {
+    throw new InvalidInputError('карточка: время срока не вида ЧЧ:ММ')
+  }
+
+  const at = momentInMoscow(input.date, time)
+  const shown = Number.isNaN(at.getTime()) ? null : moscowParts(at.toISOString())
+  if (!shown || shown.date !== input.date || (time !== null && shown.time !== time)) {
+    const shownTime = time ? ` ${time}` : ''
+    throw new InvalidInputError(`карточка: такого срока нет — ${input.date}${shownTime}`)
+  }
+
+  return { at, hasTime: time !== null }
+}
+
+/**
+ * Срок карточки: дата и необязательное время. Момент из них собирает сервис, а не
+ * клиент, — иначе у MCP из фазы 06 появится вторая реализация сведения с часовым поясом.
+ * `null` снимает срок вместе с отметкой «выполнено»: без срока ей нечего значить.
+ */
+export async function setCardDue(cardId: string, input: DueInput | null): Promise<{ id: string }> {
+  const due = input === null ? null : dueMoment(input)
+  const card = await locateCard(cardId)
+
+  const [updated] = await db
+    .update(cards)
+    .set({
+      dueAt: due?.at ?? null,
+      dueHasTime: due?.hasTime ?? true,
+      dueDone: due === null ? false : undefined,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
+    .returning({ id: cards.id })
+
+  if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
+
+  publishBoardChanged(card.boardId)
+  return updated
+}
+
+/** Отметка «срок выполнен». Без срока отмечать нечего — это ошибка входа. */
+export async function setCardDueDone(cardId: string, done: boolean): Promise<{ id: string }> {
+  const card = await locateCard(cardId)
+
+  const [updated] = await db
+    .update(cards)
+    .set({ dueDone: done, updatedAt: new Date() })
+    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt), sql`${cards.dueAt} is not null`))
+    .returning({ id: cards.id })
+
+  if (!updated) throw new InvalidInputError(`у карточки ${cardId} нет срока`)
 
   publishBoardChanged(card.boardId)
   return updated

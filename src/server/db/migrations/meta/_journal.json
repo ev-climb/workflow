@@ -8,6 +8,13 @@
       "when": 1787768581827,
       "tag": "0000_soft_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788340165820,
+      "tag": "0001_past_vampiro",
+      "breakpoints": true
     }
   ]
 }

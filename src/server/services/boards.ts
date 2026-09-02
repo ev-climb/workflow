@@ -41,6 +41,7 @@ export type BoardCard = {
   title: string
   rank: string
   dueAt: Date | null
+  dueHasTime: boolean
   dueDone: boolean
   hasDescription: boolean
   checklistDone: number
@@ -110,6 +111,7 @@ export async function getBoard(boardId: string): Promise<BoardWithLists> {
       title: cards.title,
       rank: cards.rank,
       dueAt: cards.dueAt,
+      dueHasTime: cards.dueHasTime,
       dueDone: cards.dueDone,
       hasDescription: sql<boolean>`${cards.description} is not null and ${cards.description} <> ''`,
     })

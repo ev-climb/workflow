@@ -7,7 +7,7 @@ import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 're
 import { useArchiveCard, useRenameCard } from '@/lib/board-mutations'
 import { dragId, type DragData } from '@/lib/board-move'
 import type { CardView } from '@/lib/board-view'
-import { formatMoment, isOverdue } from '@/lib/dates'
+import { formatDue, isOverdue } from '@/lib/dates'
 import { labelColor } from '@/lib/label-colors'
 import type { BoardSummary } from '@/server/services/boards'
 import { CardMenu } from './CardMenu'
@@ -27,7 +27,7 @@ export const CARD_FRAME =
 
 /** Вид карточки: тот же и в списке, и под курсором во время перетаскивания. */
 export function CardFace({ card, title }: { card: CardView; title: ReactNode }) {
-  const overdue = card.dueAt !== null && isOverdue(card.dueAt, card.dueDone)
+  const overdue = card.dueAt !== null && isOverdue(card.dueAt, card.dueDone, card.dueHasTime)
   const checklistDone = card.checklistTotal > 0 && card.checklistDone === card.checklistTotal
 
   return (
@@ -69,7 +69,7 @@ export function CardFace({ card, title }: { card: CardView; title: ReactNode }) 
                     : ''
               }`}
             >
-              {formatMoment(card.dueAt)}
+              {formatDue(card.dueAt, card.dueHasTime)}
             </span>
           ) : null}
         </div>

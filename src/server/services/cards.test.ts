@@ -13,6 +13,8 @@ import {
   moveCardToBoard,
   previewBoardMove,
   restoreCard,
+  setCardDue,
+  setCardDueDone,
 } from './cards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankBetween } from './rank.ts'
@@ -360,6 +362,72 @@ describe('описание карточки', () => {
     await archiveCard(ids.a)
 
     await expect(describeCard(ids.a, 'текст')).rejects.toThrow(NotFoundError)
+  })
+})
+
+describe('срок карточки', () => {
+  it('дата без времени ложится на московскую полночь этого дня', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+
+    await setCardDue(ids.a, { date: '2026-10-01' })
+
+    const card = await getCard(ids.a)
+    expect(card.dueAt?.toISOString()).toBe('2026-09-30T21:00:00.000Z')
+    expect(card.dueHasTime).toBe(false)
+  })
+
+  it('дата со временем читается как московская', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+
+    await setCardDue(ids.a, { date: '2026-10-01', time: '14:30' })
+
+    const card = await getCard(ids.a)
+    expect(card.dueAt?.toISOString()).toBe('2026-10-01T11:30:00.000Z')
+    expect(card.dueHasTime).toBe(true)
+  })
+
+  it('несуществующая дата и кривое время — ошибка входа', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+
+    await expect(setCardDue(ids.a, { date: '2026-02-31' })).rejects.toThrow(InvalidInputError)
+    await expect(setCardDue(ids.a, { date: '01.10.2026' })).rejects.toThrow(InvalidInputError)
+    await expect(setCardDue(ids.a, { date: '2026-10-01', time: '25:70' })).rejects.toThrow(
+      InvalidInputError,
+    )
+  })
+
+  it('снятый срок снимает и отметку «выполнено»', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await setCardDue(ids.a, { date: '2026-10-01' })
+    await setCardDueDone(ids.a, true)
+
+    await setCardDue(ids.a, null)
+
+    const card = await getCard(ids.a)
+    expect(card.dueAt).toBeNull()
+    expect(card.dueDone).toBe(false)
+  })
+
+  it('отмечать нечего, пока срока нет', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+
+    await expect(setCardDueDone(ids.a, true)).rejects.toThrow(InvalidInputError)
+  })
+
+  it('доска отдаёт срок карточки вместе с признаком времени', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await setCardDue(ids.a, { date: '2026-10-01' })
+
+    const full = await getBoard(b.id)
+    const card = full.lists[0].cards.find((c) => c.id === ids.a)!
+    expect(card.dueAt?.toISOString()).toBe('2026-09-30T21:00:00.000Z')
+    expect(card.dueHasTime).toBe(false)
   })
 })
 

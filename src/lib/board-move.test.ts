@@ -13,6 +13,7 @@ const card = (id: string): CardView => ({
   title: id,
   rank: id,
   dueAt: null,
+  dueHasTime: true,
   dueDone: false,
   hasDescription: false,
   checklistDone: 0,

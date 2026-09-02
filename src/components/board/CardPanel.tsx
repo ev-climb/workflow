@@ -2,12 +2,12 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Dialog, VisuallyHidden } from 'radix-ui'
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useRenameCard } from '@/lib/board-mutations'
 import { cardQuery } from '@/lib/card-query'
-import { formatMoment, isOverdue } from '@/lib/dates'
 import { CardChecklists } from './CardChecklists'
 import { CardDescription } from './CardDescription'
+import { CardDue } from './CardDue'
 import { CardLabels } from './CardLabels'
 import { Failure } from './Failure'
 import { TitleField } from './TitleField'
@@ -25,7 +25,6 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
   const [renaming, setRenaming] = useState(false)
   const [dragging, setDragging] = useState(false)
   const rename = useRenameCard(boardId, cardId)
-  const overdue = data?.dueAt != null && isOverdue(data.dueAt, data.dueDone)
   const heading = data?.title ?? title
 
   return (
@@ -92,21 +91,13 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
             <div className="mt-6 space-y-5">
               <CardLabels boardId={boardId} cardId={cardId} labels={data.labels} />
 
-              {data.dueAt ? (
-                <Field name="Срок">
-                  <p
-                    className={`inline-block rounded px-1.5 py-0.5 text-sm tabular-nums ${
-                      overdue
-                        ? 'bg-red-950 text-red-300'
-                        : data.dueDone
-                          ? 'text-emerald-400 line-through'
-                          : 'text-neutral-200'
-                    }`}
-                  >
-                    {formatMoment(data.dueAt)}
-                  </p>
-                </Field>
-              ) : null}
+              <CardDue
+                boardId={boardId}
+                cardId={cardId}
+                dueAt={data.dueAt}
+                dueHasTime={data.dueHasTime}
+                dueDone={data.dueDone}
+              />
 
               <CardDescription boardId={boardId} cardId={cardId} description={data.description} />
 
@@ -116,14 +107,5 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  )
-}
-
-function Field({ name, children }: { name: string; children: ReactNode }) {
-  return (
-    <section>
-      <h3 className="mb-1.5 text-xs text-neutral-500">{name}</h3>
-      {children}
-    </section>
   )
 }

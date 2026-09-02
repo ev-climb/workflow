@@ -8,6 +8,8 @@ import {
   moveCard,
   renameCard,
   restoreCard,
+  setCardDue,
+  setCardDueDone,
 } from '@/server/services/cards'
 
 type Params = { params: Promise<{ cardId: string }> }
@@ -33,6 +35,8 @@ export async function PATCH(request: Request, { params }: Params) {
 
     if ('title' in body) return NextResponse.json(await renameCard(id, body.title))
     if ('description' in body) return NextResponse.json(await describeCard(id, body.description))
+    if ('due' in body) return NextResponse.json(await setCardDue(id, body.due))
+    if ('dueDone' in body) return NextResponse.json(await setCardDueDone(id, body.dueDone))
     if ('listId' in body) return NextResponse.json(await moveCard({ cardId: id, ...body }))
     return NextResponse.json(body.archived ? await archiveCard(id) : await restoreCard(id))
   } catch (error) {

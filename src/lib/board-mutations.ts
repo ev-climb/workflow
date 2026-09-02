@@ -48,6 +48,16 @@ export const useDescribeCard = (boardId: string, cardId: string) =>
     sendJson('PATCH', `/api/cards/${cardId}`, { description }),
   )
 
+export type DueDraft = { date: string; time: string | null } | null
+
+export const useSetCardDue = (boardId: string, cardId: string) =>
+  useBoardChange(boardId, (due: DueDraft) => sendJson('PATCH', `/api/cards/${cardId}`, { due }))
+
+export const useSetCardDueDone = (boardId: string, cardId: string) =>
+  useBoardChange(boardId, (dueDone: boolean) =>
+    sendJson('PATCH', `/api/cards/${cardId}`, { dueDone }),
+  )
+
 const setArchived = (url: string, archived: boolean) => () => sendJson('PATCH', url, { archived })
 
 export const useArchiveList = (boardId: string, listId: string) =>

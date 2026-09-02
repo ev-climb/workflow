@@ -77,6 +77,8 @@ export const cards = pgTable(
     description: text(),
     rank: rankText().notNull(),
     dueAt: tstz(),
+    // осмысленно только при заполненном dueAt: срок бывает и одной датой, без времени
+    dueHasTime: boolean().notNull().default(true),
     dueDone: boolean().notNull().default(false),
     archivedAt: tstz(),
     createdAt: createdAt(),
