@@ -14,7 +14,6 @@ export type WorkspaceState = {
   bottomBoardId: string | null
   topBoardRatio: number
   calendarMode: CalendarMode
-  hiddenCalendarIds: string[]
 }
 
 const SELECT = {
@@ -22,7 +21,6 @@ const SELECT = {
   bottomBoardId: workspaceState.bottomBoardId,
   topBoardRatio: workspaceState.topBoardRatio,
   calendarMode: workspaceState.calendarMode,
-  hiddenCalendarIds: workspaceState.hiddenCalendarIds,
 }
 
 /**

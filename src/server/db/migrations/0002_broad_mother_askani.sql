@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_state" DROP COLUMN "hidden_calendar_ids";

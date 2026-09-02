@@ -295,10 +295,6 @@ export const workspaceState = pgTable(
     bottomBoardId: uuid().references(() => boards.id, { onDelete: 'set null' }),
     topBoardRatio: real().notNull().default(0.5),
     calendarMode: text().$type<CalendarMode>().notNull().default('week'),
-    hiddenCalendarIds: uuid()
-      .array()
-      .notNull()
-      .default(sql`'{}'`),
     updatedAt: updatedAt(),
   },
   (t) => [
