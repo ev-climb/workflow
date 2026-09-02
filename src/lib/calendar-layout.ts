@@ -83,3 +83,66 @@ export function placeDay<T extends TimedEvent>(events: readonly T[], day: string
 
   return placed
 }
+
+export type AllDayEvent = { id: string; startDate: string; endDate: string }
+
+/** Полоса события на весь день: сколько дней окна она занимает и в каком ряду лежит. */
+export type PlacedAllDay<T> = {
+  event: T
+  key: string
+  /** Индекс первого занятого дня в `days` и длина полосы в днях. */
+  index: number
+  span: number
+  /** Ряд полосы: пересекающиеся события не наезжают друг на друга, а становятся ниже. */
+  lane: number
+  /** Событие началось раньше окна или кончается позже: полоса обрезана этим краем. */
+  clippedStart: boolean
+  clippedEnd: boolean
+}
+
+/**
+ * Раскладка полосы событий на весь день. Даты сравниваются как даты, без всякого перевода
+ * в момент: инвариант 3. `endDate` исключающая — однодневное событие приходит парой
+ * `2026-09-02` / `2026-09-03` и занимает ровно один день.
+ */
+export function placeAllDay<T extends AllDayEvent>(
+  events: readonly T[],
+  days: readonly string[],
+): PlacedAllDay<T>[] {
+  if (days.length === 0) return []
+
+  const first = utcOf(days[0])
+  const dayOf = (date: string) => Math.round((utcOf(date) - first) / 86_400_000)
+
+  const drafts = events.flatMap((event) => {
+    const from = dayOf(event.startDate)
+    const to = dayOf(event.endDate)
+    if (from >= days.length || to <= 0 || to <= from) return []
+
+    const index = Math.max(from, 0)
+    return [
+      {
+        event,
+        key: `${event.id}:${days[0]}`,
+        index,
+        span: Math.min(to, days.length) - index,
+        clippedStart: from < 0,
+        clippedEnd: to > days.length,
+      },
+    ]
+  })
+
+  // длинные полосы раньше коротких: иначе короткая заняла бы верхний ряд и разорвала его
+  drafts.sort((a, b) => a.index - b.index || b.span - a.span || (a.key < b.key ? -1 : 1))
+
+  // первый свободный с этого дня день в каждом ряду
+  const lanes: number[] = []
+
+  return drafts.map((draft) => {
+    const free = lanes.findIndex((end) => end <= draft.index)
+    const lane = free === -1 ? lanes.length : free
+    lanes[lane] = draft.index + draft.span
+
+    return { ...draft, lane }
+  })
+}

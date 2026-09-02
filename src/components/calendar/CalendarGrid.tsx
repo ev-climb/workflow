@@ -9,7 +9,12 @@ import {
   nowOffset,
   weekdayLabel,
 } from '@/lib/calendar-grid'
-import { placeDay, type PlacedEvent } from '@/lib/calendar-layout'
+import {
+  placeAllDay,
+  placeDay,
+  type PlacedAllDay,
+  type PlacedEvent,
+} from '@/lib/calendar-layout'
 import type { CalendarEventView } from '@/lib/calendar-view'
 import { moscowParts } from '@/lib/dates'
 
@@ -20,6 +25,10 @@ const TICK_MS = 30_000
 const SCROLL_ANCHOR = 0.35
 
 const RAIL = 'w-9 shrink-0'
+
+const ALL_DAY_PX = 16
+/** Выше полоса не растёт, а прокручивается: сетка со временем важнее списка дат. */
+const ALL_DAY_MAX_PX = ALL_DAY_PX * 4
 
 /** Ниже блок читается только как полоса цвета: время в нём уже не помещается. */
 const TIME_VISIBLE_PX = 28
@@ -40,6 +49,7 @@ export function CalendarGrid({ days, events }: Props) {
   const line = now ? nowOffset(days, now) : null
   // события на весь день во временную сетку не попадают: они полосой сверху, инвариант 3
   const timed = events.filter(isTimed)
+  const allDay = placeAllDay(events.filter(isAllDay), days)
 
   const scrolled = useRef(false)
   useEffect(() => {
@@ -72,6 +82,26 @@ export function CalendarGrid({ days, events }: Props) {
           ))}
         </div>
       </div>
+
+      {allDay.length > 0 ? (
+        <div
+          className="flex shrink-0 overflow-y-auto border-b border-neutral-800 pr-2"
+          style={{ maxHeight: ALL_DAY_MAX_PX }}
+        >
+          <div className={RAIL} />
+          <div
+            className="grid flex-1 gap-px py-px"
+            style={{
+              gridTemplateColumns: columns(days.length),
+              gridAutoRows: `${ALL_DAY_PX}px`,
+            }}
+          >
+            {allDay.map((placed) => (
+              <AllDayStripe key={placed.key} placed={placed} />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div ref={scroll} className="min-h-0 flex-1 overflow-y-auto pr-2">
         <div className="flex" style={{ height: DAY_PX }}>
@@ -113,6 +143,34 @@ type TimedView = CalendarEventView & { startsAt: string; endsAt: string }
 
 function isTimed(event: CalendarEventView): event is TimedView {
   return !event.allDay && event.startsAt !== null && event.endsAt !== null
+}
+
+type AllDayView = CalendarEventView & { startDate: string; endDate: string }
+
+function isAllDay(event: CalendarEventView): event is AllDayView {
+  return event.allDay && event.startDate !== null && event.endDate !== null
+}
+
+function AllDayStripe({ placed }: { placed: PlacedAllDay<AllDayView> }) {
+  const { event, index, span, lane, clippedStart, clippedEnd } = placed
+  const title = event.title ?? 'Без названия'
+
+  return (
+    <div
+      className={`overflow-hidden rounded-[3px] px-1 text-[10px] leading-[15px] font-medium text-neutral-100 ${
+        clippedStart ? 'rounded-l-none' : 'border-l-2'
+      } ${clippedEnd ? 'rounded-r-none' : ''}`}
+      style={{
+        gridColumn: `${index + 1} / span ${span}`,
+        gridRow: lane + 1,
+        borderColor: event.color,
+        backgroundColor: `${event.color}44`,
+      }}
+      title={title}
+    >
+      <div className="truncate">{title}</div>
+    </div>
+  )
 }
 
 function EventBlock({ placed }: { placed: PlacedEvent<TimedView> }) {

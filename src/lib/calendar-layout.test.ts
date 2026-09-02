@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { MIN_EVENT_MINUTES, placeDay, type TimedEvent } from './calendar-layout'
+import {
+  MIN_EVENT_MINUTES,
+  placeAllDay,
+  placeDay,
+  type AllDayEvent,
+  type TimedEvent,
+} from './calendar-layout'
+import { daysOf } from './calendar-grid'
 
 const DAY = '2026-09-02'
 
@@ -121,6 +128,85 @@ describe('placeDay', () => {
     expect(placeDay([late], DAY)).toEqual([])
     expect(shown(placeDay([late], '2026-09-03'))).toEqual([
       { id: 'a', start: 90, end: 150, column: 0, columns: 1 },
+    ])
+  })
+})
+
+const WEEK = daysOf('week', '2026-09-02')
+
+function whole(id: string, from: string, to: string): AllDayEvent {
+  return { id, startDate: from, endDate: to }
+}
+
+function band(placed: ReturnType<typeof placeAllDay<AllDayEvent>>) {
+  return placed.map((one) => ({
+    id: one.event.id,
+    index: one.index,
+    span: one.span,
+    lane: one.lane,
+  }))
+}
+
+describe('placeAllDay', () => {
+  it('однодневное событие занимает один день: endDate исключающая', () => {
+    expect(band(placeAllDay([whole('a', '2026-09-02', '2026-09-03')], WEEK))).toEqual([
+      { id: 'a', index: 2, span: 1, lane: 0 },
+    ])
+  })
+
+  it('многодневное растягивается по дням окна', () => {
+    expect(band(placeAllDay([whole('a', '2026-09-03', '2026-09-06')], WEEK))).toEqual([
+      { id: 'a', index: 3, span: 3, lane: 0 },
+    ])
+  })
+
+  it('вышедшее за окно обрезается краями и помечает их', () => {
+    const [placed] = placeAllDay([whole('a', '2026-08-28', '2026-09-09')], WEEK)
+
+    expect(placed).toMatchObject({ index: 0, span: 7, clippedStart: true, clippedEnd: true })
+  })
+
+  it('целиком мимо окна не показывается', () => {
+    const away = [whole('a', '2026-09-08', '2026-09-09'), whole('b', '2026-08-24', '2026-08-31')]
+
+    expect(placeAllDay(away, WEEK)).toEqual([])
+  })
+
+  it('пересекающиеся становятся рядами, разошедшиеся делят ряд', () => {
+    const events = [
+      whole('long', '2026-08-31', '2026-09-03'),
+      whole('inside', '2026-09-01', '2026-09-02'),
+      whole('after', '2026-09-04', '2026-09-05'),
+    ]
+
+    expect(band(placeAllDay(events, WEEK))).toEqual([
+      { id: 'long', index: 0, span: 3, lane: 0 },
+      { id: 'inside', index: 1, span: 1, lane: 1 },
+      { id: 'after', index: 4, span: 1, lane: 0 },
+    ])
+  })
+
+  it('первое число месяца не уезжает на сутки', () => {
+    const october = daysOf('week', '2026-10-01')
+
+    expect(band(placeAllDay([whole('a', '2026-10-01', '2026-10-02')], october))).toEqual([
+      { id: 'a', index: 3, span: 1, lane: 0 },
+    ])
+  })
+
+  it('перевод часов день полосы не сдвигает', () => {
+    const week = daysOf('week', '2026-10-25')
+
+    expect(band(placeAllDay([whole('a', '2026-10-25', '2026-10-27')], week))).toEqual([
+      { id: 'a', index: 6, span: 1, lane: 0 },
+    ])
+  })
+
+  it('в дневном виде показывает только задевающие этот день', () => {
+    const events = [whole('a', '2026-09-01', '2026-09-04'), whole('b', '2026-09-05', '2026-09-06')]
+
+    expect(band(placeAllDay(events, ['2026-09-02']))).toEqual([
+      { id: 'a', index: 0, span: 1, lane: 0 },
     ])
   })
 })
