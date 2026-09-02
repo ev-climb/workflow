@@ -49,6 +49,12 @@ export class SyncTokenExpiredError extends GoogleApiError {}
  */
 export class SyncTokenRejectedError extends GoogleApiError {}
 
+/**
+ * `412`: наш `etag` устарел, событие успели поправить в Google. Не ошибка записи — сигнал
+ * перечитать событие и решить конфликт, `02-technical.md`, раздел 4, правило 5.
+ */
+export class EventEtagMismatchError extends GoogleApiError {}
+
 type EventTime = { date?: string; dateTime?: string }
 
 type EventItem = {
@@ -138,6 +144,7 @@ function fail(status: number, body: string): GoogleApiError {
 
   const message = `Google отказал (события календаря): ${reason}`
   if (status === 410) return new SyncTokenExpiredError(message, status)
+  if (status === 412) return new EventEtagMismatchError(message, status)
   if (status === 400 && /sync token/i.test(reason)) return new SyncTokenRejectedError(message, status)
   return new GoogleApiError(message, status)
 }
@@ -196,4 +203,78 @@ export async function fetchEvents(
   } while (pageToken)
 
   return { events, nextSyncToken }
+}
+
+/** Правка события: поле отсутствует — не трогаем, `null` — стираем. */
+export type EventPatch = {
+  title?: string | null
+  descriptionHtml?: string | null
+  times?: EventTimes
+}
+
+function timeBody(times: EventTimes, edge: 'start' | 'end'): EventTime {
+  if (times.allDay) return { date: edge === 'start' ? times.startDate : times.endDate }
+  return { dateTime: (edge === 'start' ? times.startsAt : times.endsAt).toISOString() }
+}
+
+function patchBody(patch: EventPatch): Record<string, unknown> {
+  const body: Record<string, unknown> = {}
+  if ('title' in patch) body.summary = patch.title
+  if ('descriptionHtml' in patch) body.description = patch.descriptionHtml
+  if (patch.times) {
+    // вложенный объект Google в patch заменяет целиком, поэтому смена вида времени
+    // (весь день ↔ со временем) не требует отдельно гасить чужую пару полей
+    body.start = timeBody(patch.times, 'start')
+    body.end = timeBody(patch.times, 'end')
+  }
+  return body
+}
+
+function eventUrl(googleCalendarId: string, googleEventId: string): string {
+  return `${CALENDAR_API}/${encodeURIComponent(googleCalendarId)}/events/${encodeURIComponent(googleEventId)}`
+}
+
+/** Одно событие. `null` — Google о таком не знает: событие стёрли насовсем. */
+export async function fetchEvent(
+  accessToken: string,
+  googleCalendarId: string,
+  googleEventId: string,
+): Promise<GoogleEvent | null> {
+  const response = await fetch(eventUrl(googleCalendarId, googleEventId), {
+    headers: { authorization: `Bearer ${accessToken}` },
+  })
+  const body = await response.text()
+  if (response.status === 404) return null
+  if (!response.ok) throw fail(response.status, body)
+
+  return mapEvent(JSON.parse(body) as EventItem)
+}
+
+/**
+ * Запись обратно: `PATCH` с `If-Match`. Устаревший `etag` даёт `412` — разрешение конфликта
+ * не здесь, а в сервисе. Без `etag` заголовок не ставится: перезаписать вслепую всё же лучше,
+ * чем не уметь записать событие, у которого его нет.
+ */
+export async function patchEvent(
+  accessToken: string,
+  googleCalendarId: string,
+  googleEventId: string,
+  patch: EventPatch,
+  etag: string | null,
+): Promise<GoogleEvent> {
+  const response = await fetch(eventUrl(googleCalendarId, googleEventId), {
+    method: 'PATCH',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+      ...(etag ? { 'if-match': etag } : {}),
+    },
+    body: JSON.stringify(patchBody(patch)),
+  })
+  const body = await response.text()
+  if (!response.ok) throw fail(response.status, body)
+
+  const event = mapEvent(JSON.parse(body) as EventItem)
+  if (!event) throw new GoogleApiError('Google вернул событие без идентификатора', response.status)
+  return event
 }

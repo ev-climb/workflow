@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  EventEtagMismatchError,
   GoogleApiError,
   SyncTokenExpiredError,
   SyncTokenRejectedError,
+  fetchEvent,
   fetchEvents,
   mapEvent,
+  patchEvent,
 } from './events.ts'
 
 function answer(body: unknown, status = 200): Response {
@@ -181,5 +184,131 @@ describe('выборка событий', () => {
     const failure = await fetchEvents('ya29.secret', 'me@gmail.com', 'CAES-secret').catch((e) => e)
 
     expect(String((failure as Error).message)).not.toContain('secret')
+  })
+})
+
+describe('запись события обратно', () => {
+  it('PATCH идёт с If-Match и несёт только правленые поля', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(answer({ id: 'e1', etag: '"42"' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await patchEvent('ya29.access', 'me@gmail.com', 'e1', { title: 'Созвон' }, '"41"')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toBe(
+      'https://www.googleapis.com/calendar/v3/calendars/me%40gmail.com/events/e1',
+    )
+    expect(init.method).toBe('PATCH')
+    expect(init.headers['if-match']).toBe('"41"')
+    expect(JSON.parse(init.body)).toEqual({ summary: 'Созвон' })
+  })
+
+  it('без etag заголовка If-Match нет', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(answer({ id: 'e1' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await patchEvent('ya29.access', 'me@gmail.com', 'e1', { title: 'Созвон' }, null)
+
+    expect(fetchMock.mock.calls[0][1].headers['if-match']).toBeUndefined()
+  })
+
+  it('событие на весь день уходит датами, без часового пояса и без сдвига на сутки', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(answer({ id: 'e1' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await patchEvent(
+      'ya29.access',
+      'me@gmail.com',
+      'e1',
+      {
+        times: {
+          allDay: true,
+          startDate: '2026-03-01',
+          endDate: '2026-03-02',
+          startsAt: null,
+          endsAt: null,
+        },
+      },
+      '"41"',
+    )
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      start: { date: '2026-03-01' },
+      end: { date: '2026-03-02' },
+    })
+  })
+
+  it('событие на переходе на летнее время уходит моментами, длина не меняется', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(answer({ id: 'e1' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await patchEvent(
+      'ya29.access',
+      'me@gmail.com',
+      'e1',
+      {
+        times: {
+          allDay: false,
+          startsAt: new Date('2026-03-29T00:30:00Z'),
+          endsAt: new Date('2026-03-29T01:30:00Z'),
+          startDate: null,
+          endDate: null,
+        },
+      },
+      null,
+    )
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      start: { dateTime: '2026-03-29T00:30:00.000Z' },
+      end: { dateTime: '2026-03-29T01:30:00.000Z' },
+    })
+  })
+
+  it('412 — устаревший etag, отдельной ошибкой', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(answer({ error: { message: 'Precondition Failed' } }, 412)),
+    )
+
+    const failure = await patchEvent('ya29.access', 'me@gmail.com', 'e1', { title: 'Х' }, '"41"').catch(
+      (error) => error,
+    )
+
+    expect(failure).toBeInstanceOf(EventEtagMismatchError)
+  })
+
+  it('токен в сообщение об отказе записи не попадает', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(answer({ error: { message: 'Forbidden' } }, 403)))
+
+    const failure = await patchEvent('ya29.secret', 'me@gmail.com', 'e1', { title: 'Х' }, null).catch(
+      (error) => error,
+    )
+
+    expect(String((failure as Error).message)).not.toContain('secret')
+  })
+
+  it('перечитывание стёртого события — не ошибка, а его отсутствие', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(answer({ error: { message: 'Not Found' } }, 404)))
+
+    await expect(fetchEvent('ya29.access', 'me@gmail.com', 'e1')).resolves.toBeNull()
+  })
+
+  it('перечитанное событие приходит в нашей форме', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        answer({
+          id: 'e1',
+          summary: 'Созвон',
+          etag: '"42"',
+          start: { dateTime: '2026-09-02T09:00:00Z' },
+          end: { dateTime: '2026-09-02T10:00:00Z' },
+        }),
+      ),
+    )
+
+    const event = await fetchEvent('ya29.access', 'me@gmail.com', 'e1')
+
+    expect(event).toMatchObject({ googleEventId: 'e1', title: 'Созвон', etag: '"42"' })
   })
 })

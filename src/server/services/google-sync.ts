@@ -116,7 +116,8 @@ async function saveEvents(calendarId: string, events: TimedEvent[]): Promise<voi
   }
 }
 
-async function apply(
+/** Пачка событий Google в базу: живые заводятся и обновляются, отменённые помечаются. */
+export async function applyEvents(
   calendarId: string,
   events: GoogleEvent[],
 ): Promise<{ saved: number; cancelled: number; skipped: number }> {
@@ -174,7 +175,7 @@ export async function syncCalendar(id: string, now: Date = new Date()): Promise<
     page = await fetchEvents(accessToken, calendar.googleCalendarId, null, now)
   }
 
-  const counts = await apply(id, page.events)
+  const counts = await applyEvents(id, page.events)
 
   await db
     .update(googleCalendars)
