@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/client.ts'
 import {
   boards,
@@ -11,7 +11,7 @@ import {
 } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
-import { rankAfter, withRankRetry } from './rank.ts'
+import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
 
 const TITLE_MAX = 512
 
@@ -256,6 +256,85 @@ export async function createList(input: {
 
   publishBoardChanged(input.boardId)
   return created
+}
+
+/** Ранг соседа. Список с другой доски — ошибка входа: позиция была бы выдумана. */
+async function neighbourListRank(
+  listId: string | null | undefined,
+  boardId: string,
+  side: string,
+): Promise<string | null> {
+  if (!listId) return null
+
+  const [found] = await db
+    .select({ rank: lists.rank, boardId: lists.boardId })
+    .from(lists)
+    .where(and(eq(lists.id, listId), isNull(lists.archivedAt)))
+
+  if (!found) throw new NotFoundError(`соседа ${side} (${listId}) нет или он в архиве`)
+  if (found.boardId !== boardId) {
+    throw new InvalidInputError(`сосед ${side} (${listId}) стоит на другой доске`)
+  }
+  return found.rank
+}
+
+/**
+ * Ранг, который сейчас идёт следом за `after`. `null` слева — начало доски.
+ * Архив считается наравне с видимым: ранг архивного списка занят в уникальном индексе,
+ * и место между двумя видимыми соседями бывает занято именно им.
+ */
+async function nextListRank(boardId: string, after: string | null): Promise<string | null> {
+  const [next] = await db
+    .select({ rank: lists.rank })
+    .from(lists)
+    .where(
+      and(eq(lists.boardId, boardId), after === null ? undefined : gt(lists.rank, after)),
+    )
+    .orderBy(asc(lists.rank))
+    .limit(1)
+
+  return next?.rank ?? null
+}
+
+/**
+ * Перестановка списка внутри доски. Ранг считается здесь и никогда не приходит
+ * с клиента — инвариант 1. Запись — один UPDATE одной строки.
+ */
+export async function moveList(input: {
+  listId: string
+  prevListId?: string | null
+  nextListId?: string | null
+}): Promise<{ id: string; rank: string }> {
+  const [list] = await db
+    .select({ boardId: lists.boardId })
+    .from(lists)
+    .where(and(eq(lists.id, input.listId), isNull(lists.archivedAt)))
+
+  if (!list) throw new NotFoundError(`списка ${input.listId} нет или он в архиве`)
+
+  if (input.prevListId === input.listId || input.nextListId === input.listId) {
+    throw new InvalidInputError('список не может быть соседом самому себе')
+  }
+
+  const prev = await neighbourListRank(input.prevListId, list.boardId, 'слева')
+  let next = await neighbourListRank(input.nextListId, list.boardId, 'справа')
+  let attempt = 0
+
+  const moved = await withRankRetry(async () => {
+    // соседи те же, значит между ними успели встать: берём того, кто стоит там теперь
+    if (attempt++) next = await nextListRank(list.boardId, prev)
+
+    const [updated] = await db
+      .update(lists)
+      .set({ rank: rankBetween(prev, next), updatedAt: new Date() })
+      .where(and(eq(lists.id, input.listId), isNull(lists.archivedAt)))
+      .returning({ id: lists.id, rank: lists.rank })
+
+    return updated
+  })
+
+  publishBoardChanged(list.boardId)
+  return moved
 }
 
 export async function renameList(listId: string, newTitle: string): Promise<ListSummary> {

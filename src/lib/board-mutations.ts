@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { sendJson } from './api-client'
 import { archiveKey } from './archive-query'
-import { applyMove, type MovePlan } from './board-move'
+import { applyListMove, applyMove, type ListMovePlan, type MovePlan } from './board-move'
 import { boardKey } from './board-query'
 import type { BoardView } from './board-view'
 import { cardsKey } from './card-query'
@@ -81,6 +81,34 @@ export function useMoveCard() {
 
       const previous = client.getQueryData<BoardView>(boardKey(boardId))
       if (previous) client.setQueryData(boardKey(boardId), applyMove(previous, cardId, plan))
+      return { previous }
+    },
+
+    onError: (_error, { boardId }, context) => {
+      if (context?.previous) client.setQueryData(boardKey(boardId), context.previous)
+    },
+
+    onSettled: (_data, _error, { boardId }) => {
+      void client.invalidateQueries({ queryKey: boardKey(boardId) })
+    },
+  })
+}
+
+export type ListMoveInput = ListMovePlan & { boardId: string; listId: string }
+
+/** Перестановка списка. Оптимистично, как и карточка: ранг считает сервис. */
+export function useMoveList() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ listId, prevListId, nextListId }: ListMoveInput) =>
+      sendJson('PATCH', `/api/lists/${listId}`, { prevListId, nextListId }),
+
+    onMutate: async ({ boardId, listId, ...plan }) => {
+      await client.cancelQueries({ queryKey: boardKey(boardId) })
+
+      const previous = client.getQueryData<BoardView>(boardKey(boardId))
+      if (previous) client.setQueryData(boardKey(boardId), applyListMove(previous, listId, plan))
       return { previous }
     },
 

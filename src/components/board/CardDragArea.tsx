@@ -15,41 +15,49 @@ import {
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
-import { useMoveCard } from '@/lib/board-mutations'
-import { planMove, type DragData } from '@/lib/board-move'
+import { useMoveCard, useMoveList } from '@/lib/board-mutations'
+import { planListMove, planMove, type DragData } from '@/lib/board-move'
 import { boardKey } from '@/lib/board-query'
-import type { BoardView, CardView } from '@/lib/board-view'
+import type { BoardView } from '@/lib/board-view'
 import { CARD_FRAME, CardFace } from './BoardCard'
 
 const ACROSS_BOARDS =
   'Между досками карточка переносится через меню карточки: у досок разные метки, ' +
   'и перетаскивание сняло бы их молча.'
 
+const LIST_ACROSS_BOARDS = 'Список переставляется только внутри своей доски.'
+
+const across = (from: DragData) => (from.type === 'list' ? LIST_ACROSS_BOARDS : ACROSS_BOARDS)
+
 const NOTICE_MS = 6000
 
 const dragData = (data: unknown): DragData | undefined => data as DragData | undefined
 
 /**
- * Перетаскивание карточек на весь стол. Контекст один на обе доски, а не по одному на
- * доску: только так видно попытку перетащить карточку через границу — её отменяем
+ * Перетаскивание карточек и списков на весь стол. Контекст один на обе доски, а не по
+ * одному на доску: только так видно попытку перетащить через границу — её отменяем
  * с подсказкой, а не молча (ADR-005).
  */
 export function CardDragArea({ children }: { children: ReactNode }) {
   const client = useQueryClient()
   const move = useMoveCard()
-  const [dragged, setDragged] = useState<CardView | null>(null)
+  const moveList = useMoveList()
+  const [dragged, setDragged] = useState<DragData | null>(null)
   const [hint, setHint] = useState<string | null>(null)
 
-  const reset = move.reset
+  const failed = move.error ?? moveList.error
+  const resetCard = move.reset
+  const resetList = moveList.reset
   useEffect(() => {
-    if (!hint && !move.error) return
+    if (!hint && !failed) return
 
     const timer = setTimeout(() => {
       setHint(null)
-      reset()
+      resetCard()
+      resetList()
     }, NOTICE_MS)
     return () => clearTimeout(timer)
-  }, [hint, move.error, reset])
+  }, [hint, failed, resetCard, resetList])
 
   const sensors = useSensors(
     // порог обязателен: без него карточку не ткнуть мышью и не переименовать двойным кликом
@@ -58,18 +66,17 @@ export function CardDragArea({ children }: { children: ReactNode }) {
   )
 
   function start({ active }: DragStartEvent) {
-    const from = dragData(active.data.current)
     setHint(null)
-    setDragged(from?.type === 'card' ? from.card : null)
+    setDragged(dragData(active.data.current) ?? null)
   }
 
   /** Подсказка появляется, пока карточку ещё держат: отказ на отпускании — уже поздно. */
   function hover({ active, over }: DragOverEvent) {
     const from = dragData(active.data.current)
     const to = over ? dragData(over.data.current) : undefined
-    if (from?.type !== 'card' || !to) return
+    if (!from || !to) return
 
-    setHint(to.boardId === from.boardId ? null : ACROSS_BOARDS)
+    setHint(to.boardId === from.boardId ? null : across(from))
   }
 
   function end({ active, over }: DragEndEvent) {
@@ -77,21 +84,28 @@ export function CardDragArea({ children }: { children: ReactNode }) {
 
     const from = dragData(active.data.current)
     const to = over ? dragData(over.data.current) : undefined
-    if (from?.type !== 'card' || !to) return
+    if (!from || !to) return
 
     if (to.boardId !== from.boardId) {
-      setHint(ACROSS_BOARDS)
+      setHint(across(from))
       return
     }
 
     const board = client.getQueryData<BoardView>(boardKey(from.boardId))
     if (!board) return
 
+    if (from.type === 'list') {
+      // цель — любой узел чужого списка: и карточка, и сам список знают, где лежат
+      const plan = planListMove(board, from.listId, to.listId)
+      if (plan) moveList.mutate({ boardId: from.boardId, listId: from.listId, ...plan })
+      return
+    }
+
     const plan = planMove(board, from.card.id, to)
     if (plan) move.mutate({ boardId: from.boardId, cardId: from.card.id, ...plan })
   }
 
-  const notice = hint ?? (move.error ? `Не сохранилось: ${move.error.message}` : null)
+  const notice = hint ?? (failed ? `Не сохранилось: ${failed.message}` : null)
 
   return (
     <DndContext
@@ -114,14 +128,26 @@ export function CardDragArea({ children }: { children: ReactNode }) {
         позже. Получался возврат в прежнюю колонку прямо перед исчезновением.
       */}
       <DragOverlay dropAnimation={null}>
-        {dragged ? (
+        {dragged?.type === 'card' ? (
           <div
             className={`${CARD_FRAME} rotate-1 border-neutral-600 shadow-lg shadow-black/60`}
           >
             <CardFace
-              card={dragged}
-              title={<p className="text-sm leading-snug text-neutral-100">{dragged.title}</p>}
+              card={dragged.card}
+              title={<p className="text-sm leading-snug text-neutral-100">{dragged.card.title}</p>}
             />
+          </div>
+        ) : null}
+
+        {/* список едет шапкой: тащить под курсором всю колонку с карточками нечитаемо */}
+        {dragged?.type === 'list' ? (
+          <div className="flex w-72 rotate-1 items-center gap-2 rounded-lg border border-neutral-600 bg-neutral-900 px-3 py-2 shadow-lg shadow-black/60">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-200">
+              {dragged.list.title}
+            </span>
+            <span className="text-xs text-neutral-500 tabular-nums">
+              {dragged.list.cards.length}
+            </span>
           </div>
         ) : null}
       </DragOverlay>

@@ -1,12 +1,13 @@
-import type { BoardView, CardView } from './board-view'
+import type { BoardView, CardView, ListView } from './board-view'
 
 /**
- * Что таскают и на что кладут. Доска в данных названа явно: по ней узнаётся попытка
- * перетащить карточку через границу между досками — её отменяем с подсказкой (ADR-005).
+ * Что таскают и на что кладут. Список — и то и другое: его переставляют мышью, и на него
+ * же кладут карточку. Доска в данных названа явно: по ней узнаётся попытка перетащить
+ * через границу между досками — её отменяем с подсказкой (ADR-005).
  */
 export type DragData =
   | { type: 'card'; boardId: string; listId: string; card: CardView }
-  | { type: 'list'; boardId: string; listId: string }
+  | { type: 'list'; boardId: string; listId: string; list: ListView }
 
 /**
  * Одна и та же доска может стоять в обоих слотах, а идентификаторы перетаскивания должны
@@ -71,4 +72,47 @@ export function applyMove(board: BoardView, cardId: string, plan: MovePlan): Boa
       return { ...list, cards: [...rest.slice(0, at), moved, ...rest.slice(at)] }
     }),
   }
+}
+
+/** Позиция списка описывается соседями по доске: ранг считает сервис — инвариант 1. */
+export type ListMovePlan = { prevListId: string | null; nextListId: string | null }
+
+const listIndex = (lists: ListView[], listId: string) => lists.findIndex((l) => l.id === listId)
+
+/**
+ * Соседи списка после броска. Цель считается по полному набору списков: список проезжает
+ * мимо соседа слева направо и встаёт за ним, справа налево — перед ним, как в arrayMove.
+ * `null` — список остался там же, где был: запрос не нужен.
+ */
+export function planListMove(
+  board: BoardView,
+  listId: string,
+  targetListId: string,
+): ListMovePlan | null {
+  const was = listIndex(board.lists, listId)
+  const at = listIndex(board.lists, targetListId)
+  if (was < 0 || at < 0) return null
+
+  const rest = board.lists.filter((list) => list.id !== listId)
+  const plan = {
+    prevListId: rest[at - 1]?.id ?? null,
+    nextListId: rest[at]?.id ?? null,
+  }
+
+  const stayed =
+    plan.prevListId === (board.lists[was - 1]?.id ?? null) &&
+    plan.nextListId === (board.lists[was + 1]?.id ?? null)
+
+  return stayed ? null : plan
+}
+
+/** Та же раскладка, что получится на сервере, — для оптимистичного обновления. */
+export function applyListMove(board: BoardView, listId: string, plan: ListMovePlan): BoardView {
+  const moved = board.lists.find((list) => list.id === listId)
+  if (!moved) return board
+
+  const rest = board.lists.filter((list) => list.id !== listId)
+  const at = plan.prevListId === null ? 0 : listIndex(rest, plan.prevListId) + 1
+
+  return { ...board, lists: [...rest.slice(0, at), moved, ...rest.slice(at)] }
 }

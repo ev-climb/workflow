@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { applyMove, planMove, type DragData } from './board-move'
+import {
+  applyListMove,
+  applyMove,
+  planListMove,
+  planMove,
+  type DragData,
+} from './board-move'
 import type { BoardView, CardView, ListView } from './board-view'
 
 const card = (id: string): CardView => ({
@@ -37,7 +43,12 @@ const ontoCard = (listId: string, cardId: string): DragData => ({
   card: card(cardId),
 })
 
-const ontoList = (listId: string): DragData => ({ type: 'list', boardId: 'board', listId })
+const ontoList = (listId: string): DragData => ({
+  type: 'list',
+  boardId: 'board',
+  listId,
+  list: list(listId, []),
+})
 
 const layout = (view: BoardView) =>
   Object.fromEntries(view.lists.map((l) => [l.id, l.cards.map((c) => c.id)]))
@@ -121,5 +132,55 @@ describe('applyMove', () => {
     const plan = planMove(two, 'a', ontoCard('todo', 'c'))!
 
     expect(layout(applyMove(two, 'a', plan))).toEqual({ todo: ['b', 'c', 'a'], done: ['x', 'y'] })
+  })
+})
+
+describe('planListMove', () => {
+  const four = board(list('a', []), list('b', []), list('c', []), list('d', []))
+
+  it('слева направо — список встаёт за тем, на который бросили', () => {
+    expect(planListMove(four, 'a', 'c')).toEqual({ prevListId: 'c', nextListId: 'd' })
+  })
+
+  it('справа налево — перед тем, на который бросили', () => {
+    expect(planListMove(four, 'd', 'b')).toEqual({ prevListId: 'a', nextListId: 'b' })
+  })
+
+  it('в самое начало — без соседа слева', () => {
+    expect(planListMove(four, 'c', 'a')).toEqual({ prevListId: null, nextListId: 'a' })
+  })
+
+  it('бросок на прежнее место — запроса нет', () => {
+    expect(planListMove(four, 'b', 'b')).toBeNull()
+    expect(planListMove(four, 'a', 'a')).toBeNull()
+  })
+
+  it('списка нет — запроса нет', () => {
+    expect(planListMove(four, 'ghost', 'a')).toBeNull()
+    expect(planListMove(four, 'a', 'ghost')).toBeNull()
+  })
+})
+
+describe('applyListMove', () => {
+  const three = board(list('a', ['x']), list('b', []), list('c', []))
+
+  const order = (view: BoardView) => view.lists.map((l) => l.id)
+
+  it('переставляет список между теми соседями, что ушли на сервер', () => {
+    const plan = planListMove(three, 'a', 'c')!
+
+    expect(order(applyListMove(three, 'a', plan))).toEqual(['b', 'c', 'a'])
+  })
+
+  it('без соседа слева — в начало доски', () => {
+    const plan = planListMove(three, 'c', 'a')!
+
+    expect(order(applyListMove(three, 'c', plan))).toEqual(['c', 'a', 'b'])
+  })
+
+  it('карточки переезжают вместе со списком', () => {
+    const plan = planListMove(three, 'a', 'b')!
+
+    expect(applyListMove(three, 'a', plan).lists[1].cards.map((c) => c.id)).toEqual(['x'])
   })
 })

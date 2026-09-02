@@ -1,7 +1,7 @@
 'use client'
 
-import { useDroppable } from '@dnd-kit/core'
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useState } from 'react'
 import { useArchiveList, useCreateCard, useRenameList } from '@/lib/board-mutations'
 import { dragId, type DragData } from '@/lib/board-move'
@@ -21,15 +21,28 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
   const create = useCreateCard(boardId, list.id)
   const archive = useArchiveList(boardId, list.id)
 
-  const data: DragData = { type: 'list', boardId, listId: list.id }
-  const drop = useDroppable({ id: dragId(slot, 'list', list.id), data })
+  // список и таскают за шапку, и служит целью для карточки: узел один, роли две
+  const data: DragData = { type: 'list', boardId, listId: list.id, list }
+  const drag = useSortable({ id: dragId(slot, 'list', list.id), data, disabled: renaming })
 
   // лимит превышен — счётчик подсвечен, но ничего не запрещено: это сигнал, а не запрет
   const over = list.wipLimit !== null && list.cards.length > list.wipLimit
 
   return (
-    <section className="group/list flex max-h-full w-72 shrink-0 flex-col rounded-lg bg-neutral-900/60">
-      <header className="flex shrink-0 items-center gap-2 px-3 py-2">
+    <section
+      ref={drag.setNodeRef}
+      style={{ transform: CSS.Translate.toString(drag.transform), transition: drag.transition }}
+      className={`group/list flex max-h-full w-72 shrink-0 flex-col rounded-lg bg-neutral-900/60 ${
+        // место списка остаётся видимым: под курсором его рисует накладка
+        drag.isDragging ? 'opacity-30' : ''
+      }`}
+    >
+      <header
+        ref={drag.setActivatorNodeRef}
+        {...drag.attributes}
+        {...(renaming ? {} : drag.listeners)}
+        className="flex shrink-0 cursor-grab items-center gap-2 px-3 py-2 outline-none focus-visible:ring-1 focus-visible:ring-neutral-500"
+      >
         {renaming ? (
           <TitleField
             initial={list.title}
@@ -67,11 +80,10 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
       <Failure error={rename.error ?? create.error ?? archive.error} />
 
       <div
-        ref={drop.setNodeRef}
         className={`${
           // пустой список тоже должен быть целью: без высоты в него нечем попасть
           list.cards.length ? 'min-h-0' : 'min-h-12'
-        } flex-1 space-y-2 overflow-y-auto rounded px-2 pb-2 ${drop.isOver ? 'bg-neutral-800/40' : ''}`}
+        } flex-1 space-y-2 overflow-y-auto rounded px-2 pb-2 ${drag.isOver ? 'bg-neutral-800/40' : ''}`}
       >
         <SortableContext
           items={list.cards.map((card) => dragId(slot, 'card', card.id))}

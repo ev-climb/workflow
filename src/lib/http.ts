@@ -51,10 +51,25 @@ export function uuidParam(value: string, what: string): string {
 /** Заголовок сервис сам обрежет и проверит: схема следит только за формой запроса. */
 export const titleBody = z.object({ title: z.string() })
 
-/** Правка списка: переименование либо переезд в архив и обратно. */
-export const patchBody = z.union([titleBody, z.object({ archived: z.boolean() })], {
-  error: 'ожидается либо {title}, либо {archived}',
-})
+/**
+ * Позиция списка после броска: соседи по доске. Ранга здесь нет и не будет — его считает
+ * сервис. Хотя бы один сосед обязателен: без него схема совпала бы с любым объектом
+ * и перехватила бы чужие тела запроса.
+ */
+const listMoveBody = z
+  .object({
+    prevListId: z.uuid().nullable().optional(),
+    nextListId: z.uuid().nullable().optional(),
+  })
+  .refine((body) => 'prevListId' in body || 'nextListId' in body, {
+    error: 'ожидается хотя бы один сосед: {prevListId} или {nextListId}',
+  })
+
+/** Правка списка: переименование, переезд в архив и обратно, перестановка на доске. */
+export const patchBody = z.union(
+  [titleBody, z.object({ archived: z.boolean() }), listMoveBody],
+  { error: 'ожидается {title}, {archived} или {prevListId}/{nextListId}' },
+)
 
 /**
  * Позиция карточки после броска: список-приёмник и соседи. Ранга здесь нет и не будет —

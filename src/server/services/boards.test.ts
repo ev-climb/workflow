@@ -16,6 +16,7 @@ import {
   getArchive,
   getBoard,
   listBoards,
+  moveList,
   restoreList,
 } from './boards.ts'
 import { archiveCard, createCard } from './cards.ts'
@@ -126,6 +127,85 @@ describe('списки', () => {
     await restoreList(first.id)
 
     expect((await getBoard(board.id)).lists.map((l) => l.title)).toEqual(['Второй', 'Первый'])
+  })
+
+  it('перестановка списка внутри доски', async () => {
+    const board = await createBoard({ title: 'Доска' })
+    const first = await createList({ boardId: board.id, title: 'Первый' })
+    const second = await createList({ boardId: board.id, title: 'Второй' })
+    const third = await createList({ boardId: board.id, title: 'Третий' })
+
+    await moveList({ listId: third.id, prevListId: first.id, nextListId: second.id })
+    expect((await getBoard(board.id)).lists.map((l) => l.title)).toEqual([
+      'Первый',
+      'Третий',
+      'Второй',
+    ])
+
+    await moveList({ listId: first.id, prevListId: second.id, nextListId: null })
+    expect((await getBoard(board.id)).lists.map((l) => l.title)).toEqual([
+      'Третий',
+      'Второй',
+      'Первый',
+    ])
+  })
+
+  it('архивный список не мешает встать между видимыми', async () => {
+    const board = await createBoard({ title: 'Доска' })
+    const first = await createList({ boardId: board.id, title: 'Первый' })
+    const second = await createList({ boardId: board.id, title: 'Второй' })
+    const third = await createList({ boardId: board.id, title: 'Третий' })
+    const fourth = await createList({ boardId: board.id, title: 'Четвёртый' })
+
+    // ранг архивного остаётся занятым: место между первым и третьим — ровно его
+    await archiveList(second.id)
+    await moveList({ listId: fourth.id, prevListId: first.id, nextListId: third.id })
+
+    expect((await getBoard(board.id)).lists.map((l) => l.title)).toEqual([
+      'Первый',
+      'Четвёртый',
+      'Третий',
+    ])
+  })
+
+  it('архивный список в начале доски не мешает встать первым', async () => {
+    const board = await createBoard({ title: 'Доска' })
+    const first = await createList({ boardId: board.id, title: 'Первый' })
+    const second = await createList({ boardId: board.id, title: 'Второй' })
+    const third = await createList({ boardId: board.id, title: 'Третий' })
+
+    await archiveList(first.id)
+    await moveList({ listId: third.id, prevListId: null, nextListId: second.id })
+
+    expect((await getBoard(board.id)).lists.map((l) => l.title)).toEqual(['Третий', 'Второй'])
+  })
+
+  it('сосед с чужой доски не принимается', async () => {
+    const board = await createBoard({ title: 'Доска' })
+    const other = await createBoard({ title: 'Чужая' })
+    const list = await createList({ boardId: board.id, title: 'Список' })
+    const alien = await createList({ boardId: other.id, title: 'Чужой список' })
+
+    await expect(moveList({ listId: list.id, prevListId: alien.id })).rejects.toThrow(
+      InvalidInputError,
+    )
+  })
+
+  it('список не может быть соседом самому себе', async () => {
+    const board = await createBoard({ title: 'Доска' })
+    const list = await createList({ boardId: board.id, title: 'Список' })
+
+    await expect(moveList({ listId: list.id, nextListId: list.id })).rejects.toThrow(
+      InvalidInputError,
+    )
+  })
+
+  it('перестановка списка из архива — ошибка', async () => {
+    const board = await createBoard({ title: 'Доска' })
+    const list = await createList({ boardId: board.id, title: 'Список' })
+    await archiveList(list.id)
+
+    await expect(moveList({ listId: list.id })).rejects.toThrow(NotFoundError)
   })
 
   it('повторное восстановление — ошибка', async () => {

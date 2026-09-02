@@ -54,12 +54,19 @@ async function drag(page: Page, from: Locator, to: Locator) {
 }
 
 /**
+ * dnd-kit объявляет вслух, что подняло карточку и выбрало цель. До этого мерки целей
+ * не сняты, и стрелка, нажатая раньше, уходит вхолостую.
+ */
+const grabbed = (page: Page) =>
+  expect(page.locator('[id^="DndLiveRegion"]')).toContainText('moved over')
+
+/**
  * Карточка встаёт на место мгновенно, а запрос уходит следом: без ожидания ответа
  * перезагрузка обрывает его навигацией, и проверка «пережило F5» ничего не проверяет.
  */
-async function saved(page: Page, move: () => Promise<void>) {
+async function saved(page: Page, move: () => Promise<void>, path = '/api/cards/') {
   const response = page.waitForResponse(
-    (r) => r.request().method() === 'PATCH' && r.url().includes('/api/cards/'),
+    (r) => r.request().method() === 'PATCH' && r.url().includes(path),
   )
   await move()
   expect((await response).ok()).toBe(true)
@@ -101,7 +108,10 @@ test('переставить карточку с клавиатуры', async ({
     await page.keyboard.press('Space')
     // подъём доходит до dnd-kit не мгновенно, а до него стрелка уходит вхолостую
     await expect(card).toHaveAttribute('aria-pressed', 'true')
+    await grabbed(page)
     await page.keyboard.press('ArrowDown')
+    // сосед отъехал — значит новая цель дошла до dnd-kit, и отпускать уже не рано
+    await expect(todo.nth(1)).not.toHaveCSS('transform', 'none')
     await page.keyboard.press('Space')
   })
 
@@ -112,4 +122,28 @@ test('переставить карточку с клавиатуры', async ({
 
   await expect(todo.nth(0)).toContainText(second)
   await expect(todo.nth(1)).toContainText(first)
+})
+
+/** Названия списков верхнего слота слева направо. */
+const columnTitles = (page: Page) =>
+  page.locator('section[data-slot="top"] section h3').allInnerTexts()
+
+test('переставить список мышью и найти его на новом месте после перезагрузки', async ({
+  page,
+}) => {
+  await signIn(page)
+
+  expect(await columnTitles(page)).toEqual([TODO, DOING])
+
+  await saved(
+    page,
+    () => drag(page, column(page, TODO).locator('header'), column(page, DOING).locator('header')),
+    '/api/lists/',
+  )
+
+  expect(await columnTitles(page)).toEqual([DOING, TODO])
+
+  await opened(page, () => page.reload())
+
+  expect(await columnTitles(page)).toEqual([DOING, TODO])
 })
