@@ -8,7 +8,27 @@ const SCOPES = [
 ].join(' ')
 
 /** Отказ на стороне Google: сеть жива, ответ разобран, но подключиться не вышло. */
-export class GoogleAuthError extends Error {}
+export class GoogleAuthError extends Error {
+  /** Поле `error` из ответа: по нему отличается отзыв доступа от временного сбоя. */
+  readonly code: string | null
+
+  constructor(message: string, code: string | null = null) {
+    super(message)
+    this.code = code
+  }
+}
+
+/**
+ * Доступ отозван или refresh-токен умер: Google отвечает `invalid_grant`. Повторять
+ * запрос бессмысленно — нужно новое согласие пользователя.
+ */
+export class GoogleGrantRevokedError extends GoogleAuthError {}
+
+/** Обновлённый доступ: refresh-грант нового refresh-токена не возвращает. */
+export type GoogleAccessToken = {
+  accessToken: string
+  expiresAt: Date
+}
 
 export type GoogleTokens = {
   accessToken: string
@@ -43,13 +63,20 @@ export function authUrl(state: string): string {
  */
 export function refuse(where: string, status: number, body: string): GoogleAuthError {
   let reason = `код ${status}`
+  let code: string | null = null
   try {
     const parsed = JSON.parse(body) as { error?: string; error_description?: string }
-    if (parsed.error) reason = parsed.error_description ?? parsed.error
+    if (parsed.error) {
+      code = parsed.error
+      // описание бывает бесполезным («Bad Request» на invalid_grant), код — никогда
+      reason = parsed.error_description
+        ? `${parsed.error}: ${parsed.error_description}`
+        : parsed.error
+    }
   } catch {
     // не JSON — остаётся код ответа
   }
-  return new GoogleAuthError(`Google отказал (${where}): ${reason}`)
+  return new GoogleAuthError(`Google отказал (${where}): ${reason}`, code)
 }
 
 export async function exchangeCode(code: string): Promise<GoogleTokens> {
@@ -77,6 +104,40 @@ export async function exchangeCode(code: string): Promise<GoogleTokens> {
   return {
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token ?? null,
+    expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
+  }
+}
+
+/**
+ * Обмен refresh-токена на свежий access-токен. Отзыв доступа приходит сюда же ответом
+ * `invalid_grant` и отделён от временных отказов: на первом аккаунт помечают, на втором
+ * просто пробуют позже.
+ */
+export async function refreshAccessToken(refreshToken: string): Promise<GoogleAccessToken> {
+  const response = await fetch(TOKEN_ENDPOINT, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      refresh_token: refreshToken,
+      client_id: env('GOOGLE_CLIENT_ID'),
+      client_secret: env('GOOGLE_CLIENT_SECRET'),
+      grant_type: 'refresh_token',
+    }),
+  })
+
+  const body = await response.text()
+  if (!response.ok) {
+    const refusal = refuse('обновление access-токена', response.status, body)
+    if (refusal.code === 'invalid_grant') {
+      throw new GoogleGrantRevokedError(refusal.message, refusal.code)
+    }
+    throw refusal
+  }
+
+  const tokens = JSON.parse(body) as { access_token: string; expires_in: number }
+
+  return {
+    accessToken: tokens.access_token,
     expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
   }
 }

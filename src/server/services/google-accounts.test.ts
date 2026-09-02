@@ -1,11 +1,12 @@
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/client.ts'
 import { googleAccounts } from '../db/schema.ts'
 import type { GoogleCalendarEntry } from '../google/calendars.ts'
-import { GoogleAuthError, type GoogleTokens } from '../google/oauth.ts'
+import { GoogleAuthError, GoogleGrantRevokedError, type GoogleTokens } from '../google/oauth.ts'
 import { decryptToken } from '../google/token-crypto.ts'
-import { InvalidInputError } from './errors.ts'
-import { connectGoogleAccount, listGoogleAccounts } from './google-accounts.ts'
+import { InvalidInputError, ReauthRequiredError } from './errors.ts'
+import { accessTokenFor, connectGoogleAccount, listGoogleAccounts } from './google-accounts.ts'
 import {
   type GoogleCalendarSummary,
   listGoogleCalendars,
@@ -14,11 +15,11 @@ import {
 
 vi.mock('../google/oauth.ts', async (importActual) => {
   const actual = await importActual<typeof import('../google/oauth.ts')>()
-  return { ...actual, exchangeCode: vi.fn() }
+  return { ...actual, exchangeCode: vi.fn(), refreshAccessToken: vi.fn() }
 })
 vi.mock('../google/calendars.ts', () => ({ fetchCalendarList: vi.fn() }))
 
-const { exchangeCode } = vi.mocked(await import('../google/oauth.ts'))
+const { exchangeCode, refreshAccessToken } = vi.mocked(await import('../google/oauth.ts'))
 const { fetchCalendarList } = vi.mocked(await import('../google/calendars.ts'))
 
 function entry(patch: Partial<GoogleCalendarEntry> = {}): GoogleCalendarEntry {
@@ -171,5 +172,85 @@ describe('подключение аккаунта Google', () => {
 
     await expect(connectGoogleAccount('code')).rejects.toThrow(InvalidInputError)
     expect(await listGoogleAccounts()).toEqual([])
+  })
+})
+
+describe('access-токен аккаунта', () => {
+  async function connected(email = 'me@gmail.com', expiresAt = new Date(Date.now() + 3_600_000)) {
+    googleAnswers(email)
+    const account = await connectGoogleAccount('code')
+    await db
+      .update(googleAccounts)
+      .set({ accessTokenExpiresAt: expiresAt })
+      .where(eq(googleAccounts.id, account.id))
+    return account
+  }
+
+  it('живой токен отдаётся из базы, в Google не ходим', async () => {
+    const account = await connected()
+
+    expect(await accessTokenFor(account.id)).toBe('ya29.access')
+    expect(refreshAccessToken).not.toHaveBeenCalled()
+  })
+
+  it('истекающий токен обновляется и ложится в базу зашифрованным', async () => {
+    const account = await connected('me@gmail.com', new Date(Date.now() + 30_000))
+    const expiresAt = new Date(Date.now() + 3_600_000)
+    refreshAccessToken.mockResolvedValue({ accessToken: 'ya29.свежий', expiresAt })
+
+    expect(await accessTokenFor(account.id)).toBe('ya29.свежий')
+    expect(refreshAccessToken).toHaveBeenCalledWith('1//0crefresh')
+
+    const [row] = await db.select().from(googleAccounts).where(eq(googleAccounts.id, account.id))
+    expect(row.accessTokenEncrypted).not.toContain('ya29.свежий')
+    expect(decryptToken(row.accessTokenEncrypted ?? '')).toBe('ya29.свежий')
+    expect(row.accessTokenExpiresAt).toEqual(expiresAt)
+  })
+
+  it('отозванный доступ помечает аккаунт и стирает прежний токен', async () => {
+    const account = await connected('me@gmail.com', new Date(Date.now() - 1000))
+    refreshAccessToken.mockRejectedValue(
+      new GoogleGrantRevokedError('Google отказал: invalid_grant', 'invalid_grant'),
+    )
+
+    await expect(accessTokenFor(account.id)).rejects.toThrow(ReauthRequiredError)
+
+    const [row] = await db.select().from(googleAccounts).where(eq(googleAccounts.id, account.id))
+    expect(row.needsReauth).toBe(true)
+    expect(row.accessTokenEncrypted).toBeNull()
+    expect(row.accessTokenExpiresAt).toBeNull()
+  })
+
+  it('отзыв одного аккаунта не мешает остальным', async () => {
+    const revoked = await connected('first@gmail.com', new Date(Date.now() - 1000))
+    const alive = await connected('second@gmail.com')
+    refreshAccessToken.mockRejectedValue(
+      new GoogleGrantRevokedError('Google отказал: invalid_grant', 'invalid_grant'),
+    )
+
+    await expect(accessTokenFor(revoked.id)).rejects.toThrow(ReauthRequiredError)
+
+    expect(await accessTokenFor(alive.id)).toBe('ya29.access')
+  })
+
+  it('временный отказ Google аккаунт не помечает', async () => {
+    const account = await connected('me@gmail.com', new Date(Date.now() - 1000))
+    refreshAccessToken.mockRejectedValue(new GoogleAuthError('Google отказал: код 503'))
+
+    await expect(accessTokenFor(account.id)).rejects.toThrow(GoogleAuthError)
+
+    const [row] = await db.select().from(googleAccounts).where(eq(googleAccounts.id, account.id))
+    expect(row.needsReauth).toBe(false)
+  })
+
+  it('помеченный аккаунт токена не отдаёт и в Google не ходит', async () => {
+    const account = await connected()
+    await db
+      .update(googleAccounts)
+      .set({ needsReauth: true })
+      .where(eq(googleAccounts.id, account.id))
+
+    await expect(accessTokenFor(account.id)).rejects.toThrow(ReauthRequiredError)
+    expect(refreshAccessToken).not.toHaveBeenCalled()
   })
 })

@@ -1,11 +1,19 @@
 import { randomUUID } from 'node:crypto'
-import { asc } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { db } from '../db/client.ts'
 import { googleAccounts } from '../db/schema.ts'
 import { type GoogleCalendarEntry, fetchCalendarList } from '../google/calendars.ts'
-import { GoogleAuthError, authUrl, exchangeCode, type GoogleTokens } from '../google/oauth.ts'
-import { encryptToken } from '../google/token-crypto.ts'
-import { InvalidInputError } from './errors.ts'
+import {
+  type GoogleAccessToken,
+  GoogleAuthError,
+  GoogleGrantRevokedError,
+  authUrl,
+  exchangeCode,
+  type GoogleTokens,
+  refreshAccessToken,
+} from '../google/oauth.ts'
+import { decryptToken, encryptToken } from '../google/token-crypto.ts'
+import { InvalidInputError, NotFoundError, ReauthRequiredError } from './errors.ts'
 import { saveCalendarList } from './google-calendars.ts'
 
 export type GoogleAccountSummary = {
@@ -14,6 +22,9 @@ export type GoogleAccountSummary = {
   needsReauth: boolean
   connectedAt: Date
 }
+
+/** Запас перед истечением: токен, которому осталось меньше минуты, обновляем заранее. */
+const EXPIRY_MARGIN_MS = 60_000
 
 const SELECT = {
   id: googleAccounts.id,
@@ -85,4 +96,75 @@ async function identify(
     if (error instanceof GoogleAuthError) throw new InvalidInputError(error.message)
     throw error
   }
+}
+
+/**
+ * Годный прямо сейчас access-токен аккаунта: живой отдаётся из базы, истекающий
+ * обменивается на свежий по refresh-токену. Помеченный аккаунт токена не отдаёт и в
+ * Google не ходит — доступа у нас нет до нового согласия пользователя.
+ */
+export async function accessTokenFor(accountId: string): Promise<string> {
+  const [account] = await db
+    .select({
+      email: googleAccounts.email,
+      needsReauth: googleAccounts.needsReauth,
+      refreshTokenEncrypted: googleAccounts.refreshTokenEncrypted,
+      accessTokenEncrypted: googleAccounts.accessTokenEncrypted,
+      accessTokenExpiresAt: googleAccounts.accessTokenExpiresAt,
+    })
+    .from(googleAccounts)
+    .where(eq(googleAccounts.id, accountId))
+
+  if (!account) throw new NotFoundError('аккаунта Google нет')
+  if (account.needsReauth) throw reauthRequired(account.email)
+
+  const { accessTokenEncrypted, accessTokenExpiresAt } = account
+  if (
+    accessTokenEncrypted &&
+    accessTokenExpiresAt &&
+    accessTokenExpiresAt.getTime() - Date.now() > EXPIRY_MARGIN_MS
+  ) {
+    return decryptToken(accessTokenEncrypted)
+  }
+
+  let fresh: GoogleAccessToken
+  try {
+    fresh = await refreshAccessToken(decryptToken(account.refreshTokenEncrypted))
+  } catch (error) {
+    // помечает только отзыв доступа: на временном отказе Google аккаунт остаётся рабочим,
+    // иначе получасовой сбой потребовал бы ручного переподключения
+    if (error instanceof GoogleGrantRevokedError) {
+      await markNeedsReauth(accountId)
+      throw reauthRequired(account.email, error)
+    }
+    throw error
+  }
+
+  await db
+    .update(googleAccounts)
+    .set({
+      accessTokenEncrypted: encryptToken(fresh.accessToken),
+      accessTokenExpiresAt: fresh.expiresAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(googleAccounts.id, accountId))
+
+  return fresh.accessToken
+}
+
+/** Прежний access-токен вместе с пометкой стирается: пользоваться им больше нельзя. */
+function markNeedsReauth(accountId: string): Promise<unknown> {
+  return db
+    .update(googleAccounts)
+    .set({
+      needsReauth: true,
+      accessTokenEncrypted: null,
+      accessTokenExpiresAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(googleAccounts.id, accountId))
+}
+
+function reauthRequired(email: string, cause?: unknown): ReauthRequiredError {
+  return new ReauthRequiredError(`аккаунт ${email} требует повторной авторизации`, { cause })
 }

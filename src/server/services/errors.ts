@@ -17,3 +17,6 @@ export class ConflictError extends ServiceError {}
 
 /** Пароль не подошёл или сессия негодная. */
 export class UnauthorizedError extends ServiceError {}
+
+/** Аккаунт Google требует повторной авторизации: доступ отозван или refresh-токен умер. */
+export class ReauthRequiredError extends ServiceError {}
