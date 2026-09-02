@@ -106,6 +106,7 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
         <Composer
           action="Карточка"
           label="Заголовок новой карточки"
+          hint="!пятница 18:00 — срок, #метка — метка доски"
           onAdd={(title) => create.mutate(title)}
         />
       </footer>

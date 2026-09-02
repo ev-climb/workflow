@@ -6,11 +6,12 @@ import { TitleField } from './TitleField'
 type Props = {
   action: string
   label: string
+  hint?: string
   onAdd: (title: string) => void
 }
 
 /** Кнопка, разворачивающаяся в поле заголовка. */
-export function Composer({ action, label, onAdd }: Props) {
+export function Composer({ action, label, hint, onAdd }: Props) {
   const [open, setOpen] = useState(false)
 
   if (!open) {
@@ -26,13 +27,16 @@ export function Composer({ action, label, onAdd }: Props) {
   }
 
   return (
-    <TitleField
-      initial=""
-      label={label}
-      clearOnSubmit
-      onSubmit={onAdd}
-      onClose={() => setOpen(false)}
-      className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-2 text-sm leading-snug text-neutral-100"
-    />
+    <div className="space-y-1">
+      <TitleField
+        initial=""
+        label={label}
+        clearOnSubmit
+        onSubmit={onAdd}
+        onClose={() => setOpen(false)}
+        className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-2 text-sm leading-snug text-neutral-100"
+      />
+      {hint ? <p className="px-1 text-[11px] leading-tight text-neutral-500">{hint}</p> : null}
+    </div>
   )
 }

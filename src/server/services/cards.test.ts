@@ -1,11 +1,14 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { moscowParts } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
 import { cardLabels, cards, labels } from '../db/schema.ts'
 import { createBoard, createList, getBoard } from './boards.ts'
+import { createLabel } from './labels.ts'
 import {
   archiveCard,
   createCard,
+  createCardFromText,
   describeCard,
   findCardBoard,
   getCard,
@@ -88,6 +91,61 @@ describe('создание карточки', () => {
     await expect(createCard({ listId: b.lists['Бэклог'], title: '   ' })).rejects.toThrow(
       InvalidInputError,
     )
+  })
+})
+
+describe('карточка из строки', () => {
+  it('снимает срок и метки со строки, а остальное кладёт в заголовок', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const label = await createLabel({ boardId: b.id, name: 'Баг', color: 'red' })
+
+    const created = await createCardFromText({
+      listId: b.lists['Бэклог'],
+      text: 'Починить пуши !2026-12-31 18:00 #баг',
+    })
+
+    const card = await getCard(created.id)
+    expect(card.title).toBe('Починить пуши')
+    expect(card.dueHasTime).toBe(true)
+    expect(moscowParts(card.dueAt!.toISOString())).toEqual({ date: '2026-12-31', time: '18:00' })
+    expect(card.labels.map((one) => one.id)).toEqual([label.id])
+  })
+
+  it('срок одной датой остаётся без времени', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const created = await createCardFromText({
+      listId: b.lists['Бэклог'],
+      text: 'Отчёт !2026-12-31',
+    })
+
+    const card = await getCard(created.id)
+    expect(card.dueHasTime).toBe(false)
+    expect(moscowParts(card.dueAt!.toISOString()).date).toBe('2026-12-31')
+  })
+
+  it('несуществующая дата — ошибка входа', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    await expect(
+      createCardFromText({ listId: b.lists['Бэклог'], text: 'Отчёт !31.02.2026' }),
+    ).rejects.toThrow(InvalidInputError)
+  })
+
+  it('метки нет на доске — карточка не заводится', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    await expect(
+      createCardFromText({ listId: b.lists['Бэклог'], text: 'Починить #баг' }),
+    ).rejects.toThrow(InvalidInputError)
+    expect(await order(b, 'Бэклог')).toEqual([])
+  })
+
+  it('метка чужой доски не подходит', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const other = await board('Другая', ['Бэклог'])
+    await createLabel({ boardId: other.id, name: 'баг', color: 'red' })
+
+    await expect(
+      createCardFromText({ listId: b.lists['Бэклог'], text: 'Починить #баг' }),
+    ).rejects.toThrow(InvalidInputError)
   })
 })
 

@@ -1,8 +1,9 @@
-import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
 import { momentInMoscow, moscowParts } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
 import { boards, cardLabels, cards, labels, lists } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
+import { parseCardInput } from './card-input.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
 
@@ -167,18 +168,78 @@ export async function getCard(cardId: string): Promise<CardDetail> {
   return { ...found, labels: own }
 }
 
-export async function createCard(input: { listId: string; title: string }): Promise<CardPosition> {
-  const name = title(input.title)
-  const target = await locateList(input.listId)
-
-  const created = await withRankRetry(async () => {
+/** Вставка в конец списка. Ранг считается внутри повтора: на гонке он берётся заново. */
+function insertCard(
+  listId: string,
+  name: string,
+  due: { at: Date; hasTime: boolean } | null,
+): Promise<CardPosition> {
+  return withRankRetry(async () => {
     const [inserted] = await db
       .insert(cards)
-      .values({ listId: input.listId, title: name, rank: rankAfter(await lastRank(input.listId)) })
+      .values({
+        listId,
+        title: name,
+        rank: rankAfter(await lastRank(listId)),
+        ...(due ? { dueAt: due.at, dueHasTime: due.hasTime } : {}),
+      })
       .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
 
     return inserted
   })
+}
+
+export async function createCard(input: { listId: string; title: string }): Promise<CardPosition> {
+  const name = title(input.title)
+  const target = await locateList(input.listId)
+
+  const created = await insertCard(input.listId, name, null)
+
+  publishBoardChanged(target.boardId)
+  return created
+}
+
+/**
+ * Метки доски по именам из строки быстрого создания. Незнакомое имя — ошибка входа:
+ * набор меток задаётся на доске, и выдумывать цвет новой метке здесь неоткуда.
+ * Одно имя с двумя цветами разрешается первой меткой в порядке набора.
+ */
+async function labelsByName(boardId: string, names: string[]): Promise<string[]> {
+  const wanted = [...new Set(names.map((name) => name.toLowerCase()))]
+
+  const found = await db
+    .select({ id: labels.id, name: labels.name })
+    .from(labels)
+    .where(and(eq(labels.boardId, boardId), inArray(sql`lower(${labels.name})`, wanted)))
+    .orderBy(asc(labels.name), asc(labels.color))
+
+  return wanted.map((name) => {
+    const match = found.find((label) => label.name.toLowerCase() === name)
+    if (!match) throw new InvalidInputError(`карточка: на доске нет метки «${name}»`)
+    return match.id
+  })
+}
+
+/**
+ * Карточка из одной строки: заголовок, срок и метки разбираются вместе, кладутся одной
+ * вставкой и одним событием доски. Разбор — в `card-input.ts`, чтобы у MCP из фазы 06
+ * был тот же путь, а не своё понимание строки.
+ */
+export async function createCardFromText(input: {
+  listId: string
+  text: string
+}): Promise<CardPosition> {
+  const parsed = parseCardInput(input.text)
+  const name = title(parsed.title)
+  const due = parsed.due === null ? null : dueMoment(parsed.due)
+  const target = await locateList(input.listId)
+  const chosen = parsed.labels.length ? await labelsByName(target.boardId, parsed.labels) : []
+
+  const created = await insertCard(input.listId, name, due)
+
+  if (chosen.length) {
+    await db.insert(cardLabels).values(chosen.map((labelId) => ({ cardId: created.id, labelId })))
+  }
 
   publishBoardChanged(target.boardId)
   return created
