@@ -14,15 +14,17 @@ type Props = { blockId: string; cardTitle: string; calendarId: string | null }
 
 /**
  * Меню тайм-блока: где показывать его в Google и как снять с сетки. Календари те же, что
- * при создании события, — только показанные: зеркало в спрятанном календаре пропало бы
- * с глаз сразу после включения.
+ * при создании события: показанные и открытые на запись. Зеркало в спрятанном календаре
+ * пропало бы с глаз сразу после включения, а в чужой подписной Google его и не заведёт.
  */
 export function TimeBlockMenu({ blockId, cardTitle, calendarId }: Props) {
   const calendars = useQuery(calendarsQuery)
   const mirror = useMirrorTimeBlock(blockId)
   const remove = useRemoveTimeBlock()
 
-  const options = (calendars.data ?? []).filter((calendar) => calendar.visible)
+  const options = (calendars.data ?? []).filter(
+    (calendar) => calendar.visible && calendar.writable,
+  )
 
   return (
     <DropdownMenu.Root>

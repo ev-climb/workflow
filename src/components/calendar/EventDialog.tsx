@@ -24,7 +24,11 @@ export function EventDialog({ range, onClose }: Props) {
   const [title, setTitle] = useState('')
   const [chosen, setChosen] = useState<string | null>(null)
 
-  const options = (calendars.data ?? []).filter((calendar) => calendar.visible)
+  // только показанные и только те, куда пускают писать: в подписной вроде «Праздников
+  // России» Google не даст завести событие
+  const options = (calendars.data ?? []).filter(
+    (calendar) => calendar.visible && calendar.writable,
+  )
   const calendarId = chosen ?? options[0]?.id ?? null
 
   function submit(event: React.FormEvent) {
@@ -102,7 +106,7 @@ export function EventDialog({ range, onClose }: Props) {
 
             {calendars.data && !options.length ? (
               <p className="mt-3 text-xs text-fog-dim">
-                Ни один календарь не показан — включи его в настройках.
+                Писать некуда: свои календари спрятаны или открыты только на чтение.
               </p>
             ) : null}
 

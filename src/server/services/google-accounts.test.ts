@@ -33,6 +33,7 @@ function entry(patch: Partial<GoogleCalendarEntry> = {}): GoogleCalendarEntry {
     title: 'Праздники России',
     color: '#16a765',
     selected: true,
+    accessRole: 'reader',
     primary: false,
     ...patch,
   }

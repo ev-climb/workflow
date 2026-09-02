@@ -5,8 +5,9 @@ import { db } from '../db/client.ts'
 import { boards, cards, googleCalendars, lists, timeBlocks } from '../db/schema.ts'
 import { deleteEvent, insertEvent, patchEvent } from '../google/events.ts'
 import { publishCalendarChanged } from './board-events.ts'
-import { InvalidInputError, NotFoundError } from './errors.ts'
+import { ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
+import { isWritable } from './google-calendars.ts'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -107,6 +108,7 @@ async function calendarOf(calendarId: string) {
     .select({
       googleCalendarId: googleCalendars.googleCalendarId,
       accountId: googleCalendars.accountId,
+      accessRole: googleCalendars.accessRole,
     })
     .from(googleCalendars)
     .where(eq(googleCalendars.id, calendarId))
@@ -144,6 +146,9 @@ async function dropMirror(block: Block): Promise<void> {
 export async function mirrorTimeBlock(id: string, calendarId: string): Promise<{ id: string }> {
   const block = await locate(id)
   const calendar = await calendarOf(calendarId)
+  if (!isWritable(calendar.accessRole)) {
+    throw new ForbiddenError('в этот календарь Google писать нельзя: он открыт только на чтение')
+  }
 
   await dropMirror(block)
   const accessToken = await accessTokenFor(calendar.accountId)

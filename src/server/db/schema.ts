@@ -195,6 +195,9 @@ export const googleCalendars = pgTable(
     googleCalendarId: text().notNull(),
     title: text().notNull(),
     color: text(),
+    // права из calendarList: owner, writer, reader, freeBusyReader. Пусто у строк,
+    // заведённых до того, как мы стали их спрашивать
+    accessRole: text(),
     visible: boolean().notNull().default(true),
     syncToken: text(),
     syncedAt: tstz(),

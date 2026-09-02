@@ -12,6 +12,8 @@ export type GoogleCalendarSummary = {
   title: string
   color: string | null
   visible: boolean
+  /** Можно ли писать в календарь: подписной вроде «Праздников России» — только читать. */
+  writable: boolean
 }
 
 const SELECT = {
@@ -21,6 +23,25 @@ const SELECT = {
   title: googleCalendars.title,
   color: googleCalendars.color,
   visible: googleCalendars.visible,
+  accessRole: googleCalendars.accessRole,
+}
+
+const WRITER_ROLES = new Set(['owner', 'writer'])
+
+/**
+ * Права неизвестны у календарей, заведённых до того, как мы стали их спрашивать: до
+ * следующего подключения аккаунта считаем такой календарь доступным на запись. Иначе
+ * выбор календаря опустел бы на ровном месте, а отказ Google мы и так переводим внятно.
+ */
+export function isWritable(accessRole: string | null): boolean {
+  return accessRole === null || WRITER_ROLES.has(accessRole)
+}
+
+function summarize<T extends { accessRole: string | null }>(
+  row: T,
+): Omit<T, 'accessRole'> & { writable: boolean } {
+  const { accessRole, ...rest } = row
+  return { ...rest, writable: isWritable(accessRole) }
 }
 
 /**
@@ -45,18 +66,26 @@ export async function saveCalendarList(
         googleCalendarId: entry.googleCalendarId,
         title: entry.title,
         color: entry.color,
+        accessRole: entry.accessRole,
         visible: entry.selected,
       })),
     )
     .onConflictDoUpdate({
       target: [googleCalendars.accountId, googleCalendars.googleCalendarId],
-      set: { title: sql`excluded.title`, updatedAt: new Date() },
+      // права меняются на стороне Google, поэтому обновляются, в отличие от цвета
+      // и видимости: те выбраны пользователем
+      set: {
+        title: sql`excluded.title`,
+        accessRole: sql`excluded.access_role`,
+        updatedAt: new Date(),
+      },
     })
 }
 
 /** Все календари всех аккаунтов: экран настроек сам раскладывает их по аккаунтам. */
-export function listGoogleCalendars(): Promise<GoogleCalendarSummary[]> {
-  return db.select(SELECT).from(googleCalendars).orderBy(asc(googleCalendars.title))
+export async function listGoogleCalendars(): Promise<GoogleCalendarSummary[]> {
+  const rows = await db.select(SELECT).from(googleCalendars).orderBy(asc(googleCalendars.title))
+  return rows.map(summarize)
 }
 
 /**
@@ -85,5 +114,5 @@ export async function updateGoogleCalendar(
     .returning(SELECT)
 
   if (!calendar) throw new NotFoundError(`календаря ${id} нет`)
-  return calendar
+  return summarize(calendar)
 }

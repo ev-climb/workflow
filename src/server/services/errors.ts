@@ -18,5 +18,8 @@ export class ConflictError extends ServiceError {}
 /** Пароль не подошёл или сессия негодная. */
 export class UnauthorizedError extends ServiceError {}
 
+/** Прав на действие нет и не появится от повтора: календарь Google открыт только на чтение. */
+export class ForbiddenError extends ServiceError {}
+
 /** Аккаунт Google требует повторной авторизации: доступ отозван или refresh-токен умер. */
 export class ReauthRequiredError extends ServiceError {}

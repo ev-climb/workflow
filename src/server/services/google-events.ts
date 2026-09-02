@@ -16,8 +16,9 @@ import {
   insertEvent,
   patchEvent,
 } from '../google/events.ts'
-import { ConflictError, InvalidInputError, NotFoundError } from './errors.ts'
+import { ConflictError, ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
+import { isWritable } from './google-calendars.ts'
 import { applyEvents } from './google-sync.ts'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -221,10 +222,14 @@ export async function createEvent(
     .select({
       googleCalendarId: googleCalendars.googleCalendarId,
       accountId: googleCalendars.accountId,
+      accessRole: googleCalendars.accessRole,
     })
     .from(googleCalendars)
     .where(eq(googleCalendars.id, calendarId))
   if (!calendar) throw new NotFoundError(`календаря ${calendarId} нет`)
+  if (!isWritable(calendar.accessRole)) {
+    throw new ForbiddenError('в этот календарь Google писать нельзя: он открыт только на чтение')
+  }
 
   const accessToken = await accessTokenFor(calendar.accountId)
   const event = await insertEvent(accessToken, calendar.googleCalendarId, {

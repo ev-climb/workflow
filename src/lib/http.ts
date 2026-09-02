@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { GoogleApiError } from '@/server/google/events'
 import {
   ConflictError,
+  ForbiddenError,
   InvalidInputError,
   NotFoundError,
   UnauthorizedError,
@@ -10,6 +12,7 @@ import {
 const CODES: [abstract new (...args: never[]) => Error, number][] = [
   [InvalidInputError, 400],
   [UnauthorizedError, 401],
+  [ForbiddenError, 403],
   [NotFoundError, 404],
   [ConflictError, 409],
 ]
@@ -23,6 +26,13 @@ export function errorResponse(error: unknown): NextResponse {
   for (const [type, status] of CODES) {
     if (error instanceof type) return NextResponse.json({ error: error.message }, { status })
   }
+
+  // права в Google могли отозвать между сверками списка календарей: своей поломки тут нет,
+  // и пятисотка с английским текстом от Google объясняет хуже, чем одна русская строка
+  if (error instanceof GoogleApiError && error.status === 403) {
+    return NextResponse.json({ error: 'в этот календарь Google писать нельзя' }, { status: 403 })
+  }
+
   throw error
 }
 

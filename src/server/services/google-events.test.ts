@@ -4,7 +4,7 @@ import { db } from '../db/client.ts'
 import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts'
 import { EventEtagMismatchError, type GoogleEvent } from '../google/events.ts'
 import { DEFAULT_CALENDAR_COLOR } from '../../lib/calendar-colors.ts'
-import { ConflictError, InvalidInputError, NotFoundError } from './errors.ts'
+import { ConflictError, ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { createEvent, getEvent, listEvents, removeEvent, updateEvent } from './google-events.ts'
 
 vi.mock('../google/events.ts', async (importActual) => {
@@ -300,7 +300,7 @@ describe('правка события в Google', () => {
   })
 })
 
-async function calendar(patch: { color?: string; visible?: boolean } = {}) {
+async function calendar(patch: { color?: string; visible?: boolean; accessRole?: string } = {}) {
   const [account] = await db
     .insert(googleAccounts)
     .values({ email: `me${counter++}@gmail.com`, refreshTokenEncrypted: 'шифротекст' })
@@ -313,6 +313,7 @@ async function calendar(patch: { color?: string; visible?: boolean } = {}) {
       googleCalendarId: 'me@gmail.com',
       title: 'Личный',
       color: patch.color ?? null,
+      accessRole: patch.accessRole ?? 'owner',
       visible: patch.visible ?? true,
     })
     .returning({ id: googleCalendars.id })
@@ -446,6 +447,15 @@ describe('создание события в Google', () => {
     })
     const row = await stored(eventId)
     expect(row).toMatchObject({ calendarId, googleEventId: 'new1', title: 'Созвон' })
+  })
+
+  it('в календарь только для чтения не пишет и до Google не доходит', async () => {
+    const calendarId = await calendar({ accessRole: 'reader' })
+
+    await expect(createEvent(calendarId, { title: 'Созвон', times })).rejects.toBeInstanceOf(
+      ForbiddenError,
+    )
+    expect(insertEvent).not.toHaveBeenCalled()
   })
 
   it('пустое название уходит как отсутствующее, а не как пробелы', async () => {

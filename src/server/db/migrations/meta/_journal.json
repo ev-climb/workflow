@@ -29,6 +29,13 @@
       "when": 1788357083832,
       "tag": "0003_noisy_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788382027068,
+      "tag": "0004_omniscient_yellow_claw",
+      "breakpoints": true
     }
   ]
 }

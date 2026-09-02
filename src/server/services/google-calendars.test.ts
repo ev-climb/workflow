@@ -19,6 +19,7 @@ function entry(patch: Partial<GoogleCalendarEntry> = {}): GoogleCalendarEntry {
     title: 'me@gmail.com',
     color: '#9fe1e7',
     selected: true,
+    accessRole: 'owner',
     primary: true,
     ...patch,
   }
@@ -33,6 +34,35 @@ describe('календари аккаунта', () => {
     const calendars = await listGoogleCalendars()
     expect(calendars).toHaveLength(2)
     expect(new Set(calendars.map((calendar) => calendar.accountId)).size).toBe(2)
+  })
+
+  it('права из Google доходят до выбора календаря', async () => {
+    const id = await account()
+    await saveCalendarList(id, [
+      entry(),
+      entry({
+        googleCalendarId: 'ru.russian#holiday',
+        title: 'Праздники России',
+        accessRole: 'reader',
+      }),
+    ])
+
+    const calendars = await listGoogleCalendars()
+    expect(
+      Object.fromEntries(calendars.map((calendar) => [calendar.title, calendar.writable])),
+    ).toEqual({ 'me@gmail.com': true, 'Праздники России': false })
+  })
+
+  it('отобранные права обновляются, а цвет и видимость остаются выбранными', async () => {
+    const id = await account()
+    await saveCalendarList(id, [entry()])
+    const [before] = await listGoogleCalendars()
+    await updateGoogleCalendar(before.id, { color: '#9fe1e7', visible: false })
+
+    await saveCalendarList(id, [entry({ accessRole: 'reader' })])
+
+    const [after] = await listGoogleCalendars()
+    expect(after).toMatchObject({ writable: false, color: '#9fe1e7', visible: false })
   })
 
   it('пустой список ничего не меняет', async () => {

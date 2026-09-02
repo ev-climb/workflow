@@ -4,7 +4,7 @@ import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts
 import type { GoogleEvent } from '../google/events.ts'
 import { archiveList, createBoard, createList } from './boards.ts'
 import { archiveCard, createCard } from './cards.ts'
-import { InvalidInputError, NotFoundError } from './errors.ts'
+import { ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { listEvents } from './google-events.ts'
 import {
   createTimeBlock,
@@ -56,7 +56,7 @@ function googleEvent(patch: Partial<GoogleEvent> = {}): GoogleEvent {
 }
 
 /** Календарь Google под зеркало: своего аккаунта у тайм-блока нет, он берётся у календаря. */
-async function calendar(title = 'Личный', googleCalendarId = 'me@gmail.com') {
+async function calendar(title = 'Личный', googleCalendarId = 'me@gmail.com', accessRole = 'owner') {
   const [account] = await db
     .insert(googleAccounts)
     .values({ email: googleCalendarId, refreshTokenEncrypted: 'шифротекст' })
@@ -64,7 +64,7 @@ async function calendar(title = 'Личный', googleCalendarId = 'me@gmail.com
 
   const [row] = await db
     .insert(googleCalendars)
-    .values({ accountId: account.id, googleCalendarId, title })
+    .values({ accountId: account.id, googleCalendarId, title, accessRole })
     .returning({ id: googleCalendars.id })
 
   return row.id
@@ -233,6 +233,16 @@ describe('зеркало тайм-блока в Google', () => {
     })
     const [mirrored] = await listTimeBlocks('2026-09-02', '2026-09-02')
     expect(mirrored.calendarId).toBe(calendarId)
+  })
+
+  it('в календарь только для чтения зеркало не заводит и до Google не доходит', async () => {
+    const calendarId = await calendar('Праздники России', 'ru.russian#holiday', 'reader')
+    const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+
+    await expect(mirrorTimeBlock(created.id, calendarId)).rejects.toBeInstanceOf(ForbiddenError)
+    expect(insertEvent).not.toHaveBeenCalled()
+    const [kept] = await listTimeBlocks('2026-09-02', '2026-09-02')
+    expect(kept.calendarId).toBeNull()
   })
 
   it('смена календаря переносит зеркало, а не заводит второе', async () => {

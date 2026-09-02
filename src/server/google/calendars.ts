@@ -10,6 +10,8 @@ export type GoogleCalendarEntry = {
   color: string
   /** Отмечен ли календарь в самом Google — с него начинается наша видимость. */
   selected: boolean
+  /** `owner`, `writer`, `reader` или `freeBusyReader`: в чужой подписной не записать. */
+  accessRole: string
   primary: boolean
 }
 
@@ -20,6 +22,7 @@ type ListItem = {
   backgroundColor?: string
   selected?: boolean
   hidden?: boolean
+  accessRole?: string
   deleted?: boolean
   primary?: boolean
 }
@@ -49,6 +52,7 @@ export async function fetchCalendarList(accessToken: string): Promise<GoogleCale
         title: item.summaryOverride ?? item.summary ?? item.id,
         color: item.backgroundColor ?? DEFAULT_CALENDAR_COLOR,
         selected: item.selected === true && item.hidden !== true,
+        accessRole: item.accessRole ?? 'reader',
         primary: item.primary === true,
       })
     }
