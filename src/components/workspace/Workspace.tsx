@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { CardDragArea } from '@/components/board/CardDragArea'
 import { sendJson } from '@/lib/api-client'
 import type { BoardView } from '@/lib/board-view'
+import type { CalendarMode } from '@/lib/calendar-grid'
 import { clampRatio } from '@/lib/split-ratio'
 import type { BoardSummary } from '@/server/services/boards'
 import type { Slot } from '@/server/services/workspace'
@@ -21,6 +22,8 @@ type Props = {
   topBoardId: string | null
   bottomBoardId: string | null
   topBoardRatio: number
+  calendarMode: CalendarMode
+  today: string
 }
 
 export function Workspace({
@@ -29,12 +32,15 @@ export function Workspace({
   topBoardId,
   bottomBoardId,
   topBoardRatio,
+  calendarMode,
+  today,
 }: Props) {
   const [slots, setSlots] = useState<Record<Slot, string | null>>({
     top: topBoardId,
     bottom: bottomBoardId,
   })
   const [ratio, setRatio] = useState(topBoardRatio)
+  const [mode, setMode] = useState(calendarMode)
   const [failure, setFailure] = useState<string | null>(null)
   const area = useRef<HTMLDivElement>(null)
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -88,9 +94,20 @@ export function Workspace({
     [save, slots],
   )
 
+  const chooseMode = useCallback(
+    async (next: CalendarMode) => {
+      const previous = mode
+      if (previous === next) return
+
+      setMode(next)
+      if (!(await save({ calendarMode: next }))) setMode(previous)
+    },
+    [mode, save],
+  )
+
   return (
     <div className="flex h-screen overflow-hidden">
-      <CalendarColumn />
+      <CalendarColumn mode={mode} today={today} onModeChange={(next) => void chooseMode(next)} />
       <div className="relative flex min-w-0 flex-1 flex-col">
         {failure ? (
           <p

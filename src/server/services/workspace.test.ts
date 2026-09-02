@@ -5,6 +5,7 @@ import {
   forgetBoardInSlots,
   getWorkspaceState,
   setBoardSlot,
+  setCalendarMode,
   setSplitRatio,
 } from './workspace.ts'
 
@@ -85,6 +86,21 @@ describe('доля высоты под верхнюю доску', () => {
 
   it('не число — ошибка входа', async () => {
     await expect(setSplitRatio(Number.NaN)).rejects.toThrow(InvalidInputError)
+  })
+})
+
+describe('вид календаря', () => {
+  it('по умолчанию недельный', async () => {
+    expect((await getWorkspaceState()).calendarMode).toBe('week')
+  })
+
+  it('переключается и сохраняется', async () => {
+    expect((await setCalendarMode('day')).calendarMode).toBe('day')
+    expect((await getWorkspaceState()).calendarMode).toBe('day')
+  })
+
+  it('чужой вид не принимается', async () => {
+    await expect(setCalendarMode('month')).rejects.toThrow(InvalidInputError)
   })
 })
 

@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core'
+import type { CalendarMode } from '../../lib/calendar-grid.ts'
 
 // ранги сравниваются побайтно: локаль базы (en_US.utf8 и любая другая на glibc) ставит
 // 'a0' раньше 'A1', а fractional-indexing строит ключи в расчёте на порядок байтов.
@@ -293,7 +294,7 @@ export const workspaceState = pgTable(
     topBoardId: uuid().references(() => boards.id, { onDelete: 'set null' }),
     bottomBoardId: uuid().references(() => boards.id, { onDelete: 'set null' }),
     topBoardRatio: real().notNull().default(0.5),
-    calendarMode: text().notNull().default('week'),
+    calendarMode: text().$type<CalendarMode>().notNull().default('week'),
     hiddenCalendarIds: uuid()
       .array()
       .notNull()

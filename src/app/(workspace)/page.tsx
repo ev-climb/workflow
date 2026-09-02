@@ -1,5 +1,6 @@
 import { Workspace } from '@/components/workspace/Workspace'
 import { toBoardView, type BoardView } from '@/lib/board-view'
+import { moscowToday } from '@/lib/calendar-grid'
 import { isUuid } from '@/lib/http'
 import { getBoard, listBoards } from '@/server/services/boards'
 import { findCardBoard } from '@/server/services/cards'
@@ -50,6 +51,8 @@ export default async function WorkspacePage({ searchParams }: Props) {
       topBoardId={topBoardId}
       bottomBoardId={state.bottomBoardId}
       topBoardRatio={state.topBoardRatio}
+      calendarMode={state.calendarMode}
+      today={moscowToday()}
     />
   )
 }

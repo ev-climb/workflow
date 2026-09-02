@@ -1,4 +1,5 @@
 import { asc, eq, isNull, sql } from 'drizzle-orm'
+import { isCalendarMode, type CalendarMode } from '../../lib/calendar-grid.ts'
 import { clampRatio } from '../../lib/split-ratio.ts'
 import { db } from '../db/client.ts'
 import { boards, workspaceState } from '../db/schema.ts'
@@ -12,7 +13,7 @@ export type WorkspaceState = {
   topBoardId: string | null
   bottomBoardId: string | null
   topBoardRatio: number
-  calendarMode: string
+  calendarMode: CalendarMode
   hiddenCalendarIds: string[]
 }
 
@@ -100,6 +101,23 @@ export async function setSplitRatio(ratio: number): Promise<WorkspaceState> {
   const [state] = await db
     .update(workspaceState)
     .set({ topBoardRatio: clamped, updatedAt: new Date() })
+    .where(eq(workspaceState.id, SINGLE_ROW))
+    .returning(SELECT)
+
+  return state
+}
+
+/** Вид календарной колонки: день или неделя. */
+export async function setCalendarMode(mode: string): Promise<WorkspaceState> {
+  if (!isCalendarMode(mode)) {
+    throw new InvalidInputError(`вид календаря: ожидается day или week, а не ${mode}`)
+  }
+
+  await getWorkspaceState()
+
+  const [state] = await db
+    .update(workspaceState)
+    .set({ calendarMode: mode, updatedAt: new Date() })
     .where(eq(workspaceState.id, SINGLE_ROW))
     .returning(SELECT)
 
