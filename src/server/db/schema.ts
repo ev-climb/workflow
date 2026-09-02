@@ -231,6 +231,8 @@ export const calendarEvents = pgTable(
     status: text().notNull().default('confirmed'),
     // идентификатор серии на стороне Google, а не ссылка на нашу строку
     recurringEventId: text(),
+    // ADR-004: серия правится только в Google, и ссылку туда даёт он сам
+    htmlLink: text(),
     deletedAt: tstz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

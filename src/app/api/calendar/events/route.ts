@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { toEventView } from '@/lib/calendar-view'
-import { errorResponse } from '@/lib/http'
-import { listEvents } from '@/server/services/google-events'
+import { toEventTimes, toEventView } from '@/lib/calendar-view'
+import { errorResponse, eventBody, jsonBody } from '@/lib/http'
+import { createEvent, listEvents } from '@/server/services/google-events'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +12,19 @@ export async function GET(request: Request) {
   try {
     const events = await listEvents(params.get('from') ?? '', params.get('to') ?? '')
     return NextResponse.json(events.map(toEventView))
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await jsonBody(request, eventBody)
+    const created = await createEvent(body.calendarId, {
+      title: body.title,
+      times: toEventTimes(body.times),
+    })
+    return NextResponse.json(created, { status: 201 })
   } catch (error) {
     return errorResponse(error)
   }

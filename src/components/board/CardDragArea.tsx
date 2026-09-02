@@ -16,6 +16,7 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMoveCard, useMoveList } from '@/lib/board-mutations'
+import { isCalendarDrop } from '@/lib/calendar-drag'
 import { planListMove, planMove, type DragData } from '@/lib/board-move'
 import { boardKey } from '@/lib/board-query'
 import type { BoardView } from '@/lib/board-view'
@@ -72,6 +73,12 @@ export function CardDragArea({ children }: { children: ReactNode }) {
 
   /** Подсказка появляется, пока карточку ещё держат: отказ на отпускании — уже поздно. */
   function hover({ active, over }: DragOverEvent) {
+    // сетка календаря — цель тайм-блока, а не доски: заготовку под курсором рисует она сама
+    if (isCalendarDrop(over?.data.current)) {
+      setHint(null)
+      return
+    }
+
     const from = dragData(active.data.current)
     const to = over ? dragData(over.data.current) : undefined
     if (!from || !to) return
@@ -81,6 +88,7 @@ export function CardDragArea({ children }: { children: ReactNode }) {
 
   function end({ active, over }: DragEndEvent) {
     setDragged(null)
+    if (isCalendarDrop(over?.data.current)) return
 
     const from = dragData(active.data.current)
     const to = over ? dragData(over.data.current) : undefined
@@ -130,22 +138,22 @@ export function CardDragArea({ children }: { children: ReactNode }) {
       <DragOverlay dropAnimation={null}>
         {dragged?.type === 'card' ? (
           <div
-            className={`${CARD_FRAME} rotate-1 border-neutral-600 shadow-lg shadow-black/60`}
+            className={`${CARD_FRAME} rotate-1 border-hair-lit shadow-2xl shadow-black/60`}
           >
             <CardFace
               card={dragged.card}
-              title={<p className="text-sm leading-snug text-neutral-100">{dragged.card.title}</p>}
+              title={<p className="text-[13.5px] leading-[1.42] font-medium text-fog">{dragged.card.title}</p>}
             />
           </div>
         ) : null}
 
         {/* список едет шапкой: тащить под курсором всю колонку с карточками нечитаемо */}
         {dragged?.type === 'list' ? (
-          <div className="flex w-72 rotate-1 items-center gap-2 rounded-lg border border-neutral-600 bg-neutral-900 px-3 py-2 shadow-lg shadow-black/60">
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-200">
+          <div className="surface-column flex w-72 rotate-1 items-center gap-2 border-hair-lit px-3.5 py-2.5 shadow-2xl shadow-black/60">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-fog">
               {dragged.list.title}
             </span>
-            <span className="text-xs text-neutral-500 tabular-nums">
+            <span className="font-mono text-[11px] text-fog-dim tabular-nums">
               {dragged.list.cards.length}
             </span>
           </div>
@@ -155,10 +163,10 @@ export function CardDragArea({ children }: { children: ReactNode }) {
       {notice ? (
         <p
           role="status"
-          className={`absolute bottom-4 left-1/2 z-50 max-w-md -translate-x-1/2 rounded border px-3 py-1.5 text-xs ${
+          className={`absolute bottom-4 left-1/2 z-50 max-w-md -translate-x-1/2 rounded-xl border px-3.5 py-2 text-xs backdrop-blur-md ${
             hint
-              ? 'border-neutral-700 bg-neutral-900 text-neutral-300'
-              : 'border-red-900 bg-red-950 text-red-200'
+              ? 'border-hair-lit bg-ink-deep/90 text-fog-muted'
+              : 'border-alarm-line bg-alarm-wash text-alarm'
           }`}
         >
           {notice}

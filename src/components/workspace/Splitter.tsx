@@ -34,7 +34,7 @@ export function Splitter({ ratio, onDragTo, onStep }: Props) {
       }}
       className="group flex cursor-row-resize touch-none items-center outline-none select-none"
     >
-      <div className="h-px w-full bg-neutral-800 transition-colors group-hover:bg-neutral-600 group-focus:h-0.5 group-focus:bg-neutral-500 group-active:bg-neutral-500" />
+      <div className="mx-6 h-px flex-1 bg-white/8 transition-colors group-hover:bg-accent-line group-focus:h-0.5 group-focus:bg-accent group-active:bg-accent" />
     </div>
   )
 }

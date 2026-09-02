@@ -3,7 +3,7 @@
 import { DropdownMenu } from 'radix-ui'
 
 const ITEM =
-  'cursor-pointer rounded px-2 py-1 text-sm text-neutral-200 outline-none select-none data-[disabled]:text-neutral-600 data-[highlighted]:bg-neutral-800'
+  'menu-item px-2 py-1 text-sm'
 
 type Props = {
   archiving: boolean
@@ -32,7 +32,7 @@ export function CardMenu({
       <DropdownMenu.Trigger
         aria-label="Меню карточки"
         title="Меню карточки"
-        className={`rounded px-1 text-xs leading-none text-neutral-500 opacity-0 outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-neutral-600 data-[state=open]:opacity-100 ${className}`}
+        className={`btn-quiet px-1.5 text-xs leading-none opacity-0 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent-line data-[state=open]:opacity-100 ${className}`}
       >
         ⋯
       </DropdownMenu.Trigger>
@@ -40,7 +40,7 @@ export function CardMenu({
         <DropdownMenu.Content
           align="end"
           sideOffset={4}
-          className="z-50 min-w-52 rounded border border-neutral-800 bg-neutral-900 p-1 shadow-lg"
+          className="surface-menu z-50 min-w-52 p-1"
         >
           <DropdownMenu.Item className={ITEM} onSelect={onOpen}>
             Открыть

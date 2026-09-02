@@ -10,7 +10,7 @@ import { Failure } from './Failure'
 
 type Props = { boardId: string; cardId: string; labels: LabelRef[] }
 
-const chip = 'flex items-center gap-1.5 rounded px-1.5 py-0.5 text-xs'
+const chip = 'flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-xs'
 
 /**
  * Метки карточки: показаны как есть, правятся переключателями из набора доски. Заводится
@@ -22,10 +22,10 @@ export function CardLabels({ boardId, cardId, labels }: Props) {
 
   return (
     <section>
-      <h3 className="mb-1.5 text-xs text-neutral-500">Метки</h3>
+      <h3 className="mb-1.5 text-[11px] tracking-[0.14em] text-fog-faint uppercase">Метки</h3>
       <ul className="flex flex-wrap items-center gap-1.5">
         {labels.map((label) => (
-          <li key={label.id} className={`${chip} bg-neutral-900 text-neutral-300`}>
+          <li key={label.id} className={`${chip} bg-white/6 text-fog-muted`}>
             <Swatch color={label.color} />
             {label.name || 'без названия'}
           </li>
@@ -34,7 +34,7 @@ export function CardLabels({ boardId, cardId, labels }: Props) {
           <Popover.Root>
             <Popover.Trigger
               aria-label="Выбрать метки карточки"
-              className="rounded bg-neutral-900 px-2 py-0.5 text-xs text-neutral-500 outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:ring-1 focus-visible:ring-neutral-600"
+              className="ghost-add px-2 py-0.5 text-xs"
             >
               {labels.length ? '+' : 'Выбрать'}
             </Popover.Trigger>
@@ -42,7 +42,7 @@ export function CardLabels({ boardId, cardId, labels }: Props) {
               <Popover.Content
                 align="start"
                 sideOffset={6}
-                className="z-50 max-h-72 w-64 overflow-y-auto rounded border border-neutral-800 bg-neutral-900 p-1 shadow-lg outline-none"
+                className="z-50 max-h-72 w-64 overflow-y-auto surface-menu p-1 outline-none"
               >
                 <Choices boardId={boardId} on={on} onToggle={toggle.mutate} />
               </Popover.Content>
@@ -65,10 +65,10 @@ type ChoicesProps = {
 function Choices({ boardId, on, onToggle }: ChoicesProps) {
   const { data, error, isPending } = useQuery(boardQuery(boardId))
 
-  if (error) return <p className="p-2 text-sm text-neutral-500">Доска не прочиталась.</p>
-  if (isPending) return <p className="p-2 text-sm text-neutral-500">Читаем метки…</p>
+  if (error) return <p className="p-2 text-sm text-fog-dim">Доска не прочиталась.</p>
+  if (isPending) return <p className="p-2 text-sm text-fog-dim">Читаем метки…</p>
   if (!data.labels.length) {
-    return <p className="p-2 text-sm text-neutral-500">Меток на доске нет — заведи их в шапке.</p>
+    return <p className="p-2 text-sm text-fog-dim">Меток на доске нет — заведи их в шапке.</p>
   }
 
   return (
@@ -82,11 +82,11 @@ function Choices({ boardId, on, onToggle }: ChoicesProps) {
               type="button"
               aria-pressed={checked}
               onClick={() => onToggle({ labelId: label.id, on: !checked })}
-              className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm text-neutral-200 outline-none hover:bg-neutral-800 focus-visible:ring-1 focus-visible:ring-neutral-600"
+              className="menu-item flex w-full items-center gap-2 px-2 py-1 text-left text-sm"
             >
               <Swatch color={label.color} />
               <span className="min-w-0 flex-1 truncate">{label.name || 'без названия'}</span>
-              <span className={checked ? 'text-neutral-200' : 'text-transparent'}>✓</span>
+              <span className={checked ? 'text-fog' : 'text-transparent'}>✓</span>
             </button>
           </li>
         )
@@ -98,7 +98,7 @@ function Choices({ boardId, on, onToggle }: ChoicesProps) {
 function Swatch({ color }: { color: string }) {
   return (
     <span
-      className="h-1.5 w-4 shrink-0 rounded-full"
+      className="h-1 w-8 shrink-0 rounded-full"
       style={{ backgroundColor: labelColor(color) }}
     />
   )

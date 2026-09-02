@@ -20,26 +20,26 @@ export default async function SettingsPage({ searchParams }: Props) {
   return (
     <main className="mx-auto max-w-2xl p-6">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-lg font-medium">Настройки</h1>
-        <Link href="/" className="text-sm text-neutral-400 hover:text-neutral-100">
+        <h1 className="text-lg font-semibold tracking-[-0.01em]">Настройки</h1>
+        <Link href="/" className="text-sm text-fog-dim transition-colors hover:text-fog">
           К доскам
         </Link>
       </div>
 
-      <section className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900 p-4">
-        <h2 className="text-sm font-medium text-neutral-300">Google-аккаунты</h2>
+      <section className="surface-column mt-6 p-5">
+        <h2 className="text-[13.5px] font-semibold text-fog">Google-аккаунты</h2>
 
         {connected ? (
-          <p className="mt-2 text-sm text-emerald-400">Аккаунт {connected} подключён</p>
+          <p className="mt-2 text-sm text-done">Аккаунт {connected} подключён</p>
         ) : null}
-        {error ? <p className="mt-2 text-sm text-red-400">{error}</p> : null}
+        {error ? <p className="mt-2 text-sm text-alarm">{error}</p> : null}
 
         {accounts.length === 0 ? (
-          <p className="mt-2 text-sm text-neutral-500">
+          <p className="mt-2 text-sm text-fog-dim">
             Пока ни одного. Календарь наполнится, когда появится первый.
           </p>
         ) : (
-          <ul className="mt-3 divide-y divide-neutral-800">
+          <ul className="mt-3 divide-y divide-hair">
             {accounts.map((account) => (
               <li key={account.id} className="py-3">
                 <div className="flex items-baseline justify-between">
@@ -47,12 +47,12 @@ export default async function SettingsPage({ searchParams }: Props) {
                   {account.needsReauth ? (
                     <a
                       href={connectUrl(account.email)}
-                      className="rounded border border-amber-800 px-2 py-1 text-xs text-amber-300 outline-none hover:bg-amber-950 focus-visible:ring-1 focus-visible:ring-amber-600"
+                      className="rounded-lg border border-caution-line px-2.5 py-1 text-xs text-caution outline-none transition-colors hover:bg-caution-wash focus-visible:ring-1 focus-visible:ring-caution-line"
                     >
                       Доступ отозван — подключить заново
                     </a>
                   ) : (
-                    <span className="text-xs text-neutral-500">
+                    <span className="font-mono text-[11px] text-fog-faint">
                       подключён {formatMoment(account.connectedAt.toISOString())}
                     </span>
                   )}
@@ -67,7 +67,7 @@ export default async function SettingsPage({ searchParams }: Props) {
 
         <a
           href={connectUrl()}
-          className="mt-4 inline-block rounded bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900 hover:bg-white"
+          className="btn-primary mt-4 inline-block px-3 py-2 text-sm"
         >
           {accounts.length === 0 ? 'Подключить аккаунт' : 'Подключить ещё'}
         </a>

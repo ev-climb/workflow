@@ -106,18 +106,18 @@ export function Workspace({
   )
 
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
-      <CalendarColumn mode={mode} today={today} onModeChange={(next) => void chooseMode(next)} />
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        {failure ? (
-          <p
-            role="status"
-            className="absolute top-2 right-3 z-50 rounded border border-red-900 bg-red-950 px-2 py-1 text-xs text-red-200"
-          >
-            Не сохранилось: {failure}
-          </p>
-        ) : null}
-        <CardDragArea>
+    <CardDragArea>
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <CalendarColumn mode={mode} today={today} onModeChange={(next) => void chooseMode(next)} />
+        <div className="relative flex min-w-0 flex-1 flex-col">
+          {failure ? (
+            <p
+              role="status"
+              className="absolute top-2 right-3 z-50 rounded-xl border border-alarm-line bg-alarm-wash px-3 py-1.5 text-xs text-alarm backdrop-blur-md"
+            >
+              Не сохранилось: {failure}
+            </p>
+          ) : null}
           <div
             ref={area}
             className="grid min-h-0 min-w-0 flex-1"
@@ -143,8 +143,8 @@ export function Workspace({
               onChoose={(boardId) => void chooseBoard('bottom', boardId)}
             />
           </div>
-        </CardDragArea>
+        </div>
       </div>
-    </div>
+    </CardDragArea>
   )
 }

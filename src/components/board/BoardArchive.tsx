@@ -7,7 +7,7 @@ import { useRestoreCard, useRestoreList } from '@/lib/board-mutations'
 import { formatMoment } from '@/lib/dates'
 import { Failure } from './Failure'
 
-const note = 'text-sm text-neutral-500'
+const note = 'text-sm text-fog-dim'
 
 export function BoardArchive({ boardId, initial }: { boardId: string; initial: ArchiveView }) {
   const { data, error } = useQuery({ ...archiveQuery(boardId), initialData: initial })
@@ -38,7 +38,7 @@ export function BoardArchive({ boardId, initial }: { boardId: string; initial: A
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="mb-2 text-xs tracking-wide text-neutral-500 uppercase">{title}</h2>
+      <h2 className="mb-2.5 text-[11px] tracking-[0.14em] text-fog-faint uppercase">{title}</h2>
       <ul className="space-y-1">{children}</ul>
     </section>
   )
@@ -75,11 +75,11 @@ type RowProps = {
 /** Восстановление возвращает элемент в конец: прежнее место могли занять. */
 function Row({ title, from, archivedAt, what, restore }: RowProps) {
   return (
-    <li className="rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2">
+    <li className="surface-card px-3 py-2.5">
       <div className="flex items-baseline gap-3">
-        <span className="min-w-0 flex-1 text-sm text-neutral-100">{title}</span>
-        {from ? <span className="shrink-0 text-xs text-neutral-500">из «{from}»</span> : null}
-        <span className="shrink-0 text-xs text-neutral-600 tabular-nums">
+        <span className="min-w-0 flex-1 text-sm text-fog">{title}</span>
+        {from ? <span className="shrink-0 text-xs text-fog-dim">из «{from}»</span> : null}
+        <span className="shrink-0 font-mono text-[11px] text-fog-faint tabular-nums">
           {formatMoment(archivedAt)}
         </span>
         <button
@@ -87,7 +87,7 @@ function Row({ title, from, archivedAt, what, restore }: RowProps) {
           disabled={restore.isPending}
           onClick={() => restore.mutate()}
           aria-label={`Вернуть ${what} «${title}»`}
-          className="shrink-0 rounded px-2 py-0.5 text-xs text-neutral-300 outline-none hover:bg-neutral-800 hover:text-neutral-100 focus-visible:ring-1 focus-visible:ring-neutral-600"
+          className="btn-quiet shrink-0 px-2 py-0.5 text-xs"
         >
           Вернуть
         </button>

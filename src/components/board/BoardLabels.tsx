@@ -10,25 +10,25 @@ import type { LabelSummary } from '@/server/services/boards'
 import { Failure } from './Failure'
 
 const field =
-  'min-w-0 flex-1 rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 outline-none placeholder:text-neutral-600 focus-visible:ring-1 focus-visible:ring-neutral-500'
+  'field min-w-0 flex-1 px-2 py-1 text-sm'
 
 const quiet =
-  'shrink-0 rounded px-2 py-1 text-xs text-neutral-400 outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:ring-1 focus-visible:ring-neutral-600'
+  'btn-quiet shrink-0 px-2 py-1 text-xs'
 
 /** Набор меток доски: заводятся, переименовываются, меняют цвет и удаляются здесь. */
 export function BoardLabels({ boardId }: { boardId: string }) {
   return (
     <Dialog.Root>
-      <Dialog.Trigger className="rounded px-2 py-1 text-xs text-neutral-500 outline-none hover:bg-neutral-900 hover:text-neutral-300 focus-visible:ring-1 focus-visible:ring-neutral-600">
+      <Dialog.Trigger className="btn-quiet px-2.5 py-1 text-xs">
         Метки
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-4rem)] w-[26rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-neutral-800 bg-neutral-950 p-4 shadow-xl outline-none">
-          <Dialog.Title className="shrink-0 text-sm font-medium text-neutral-100">
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100vh-4rem)] w-[26rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col surface-sheet rounded-2xl p-4 outline-none">
+          <Dialog.Title className="shrink-0 text-sm font-medium text-fog">
             Метки доски
           </Dialog.Title>
-          <Dialog.Description className="mt-0.5 shrink-0 text-xs text-neutral-500">
+          <Dialog.Description className="mt-0.5 shrink-0 text-xs text-fog-dim">
             Набор общий для всей доски: на карточках метки только переключаются.
           </Dialog.Description>
           <LabelSet boardId={boardId} />
@@ -41,8 +41,8 @@ export function BoardLabels({ boardId }: { boardId: string }) {
 function LabelSet({ boardId }: { boardId: string }) {
   const { data, error, isPending } = useQuery(boardQuery(boardId))
 
-  if (error) return <p className="mt-4 text-sm text-neutral-500">Доска не прочиталась.</p>
-  if (isPending) return <p className="mt-4 text-sm text-neutral-500">Читаем метки…</p>
+  if (error) return <p className="mt-4 text-sm text-fog-dim">Доска не прочиталась.</p>
+  if (isPending) return <p className="mt-4 text-sm text-fog-dim">Читаем метки…</p>
 
   const used = new Set(data.labels.map((label) => label.color))
 
@@ -56,7 +56,7 @@ function LabelSet({ boardId }: { boardId: string }) {
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-neutral-500">Меток на доске пока нет.</p>
+          <p className="text-sm text-fog-dim">Меток на доске пока нет.</p>
         )}
       </div>
       <NewLabel
@@ -116,20 +116,20 @@ function LabelRow({ boardId, label }: { boardId: string; label: LabelSummary }) 
         </button>
       </div>
       {confirming ? (
-        <p className="mt-1 flex items-center gap-2 pl-1 text-xs text-amber-300">
+        <p className="mt-1 flex items-center gap-2 pl-1 text-xs text-caution">
           Снимется со всех карточек доски.
           <button
             type="button"
             disabled={remove.isPending}
             onClick={() => remove.mutate()}
-            className="rounded px-1.5 py-0.5 text-neutral-100 outline-none hover:bg-neutral-800 focus-visible:ring-1 focus-visible:ring-neutral-600"
+            className="btn-quiet px-1.5 py-0.5 text-fog!"
           >
             Удалить
           </button>
           <button
             type="button"
             onClick={() => setConfirming(false)}
-            className="rounded px-1.5 py-0.5 text-neutral-400 outline-none hover:bg-neutral-800 focus-visible:ring-1 focus-visible:ring-neutral-600"
+            className="btn-quiet px-1.5 py-0.5"
           >
             Отмена
           </button>
@@ -151,7 +151,7 @@ function NewLabel({ boardId, suggested }: { boardId: string; suggested: string }
         event.preventDefault()
         create.mutate({ name: name.trim(), color }, { onSuccess: () => setName('') })
       }}
-      className="mt-3 shrink-0 border-t border-neutral-800 pt-3"
+      className="mt-3 shrink-0 border-t border-hair pt-3"
     >
       <div className="flex items-center gap-2">
         <input
@@ -166,7 +166,7 @@ function NewLabel({ boardId, suggested }: { boardId: string; suggested: string }
         <button
           type="submit"
           disabled={create.isPending}
-          className="shrink-0 rounded bg-neutral-200 px-3 py-1 text-sm font-medium text-neutral-900 outline-none hover:bg-white focus-visible:ring-1 focus-visible:ring-neutral-400 disabled:bg-neutral-800 disabled:text-neutral-500"
+          className="btn-primary shrink-0 px-3 py-1 text-sm"
         >
           Добавить
         </button>
@@ -187,24 +187,24 @@ function ColorChoice({ value, label, onChange }: ColorProps) {
     <Select.Root value={value} onValueChange={onChange}>
       <Select.Trigger
         aria-label={label}
-        className="flex shrink-0 items-center gap-1.5 rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 outline-none focus-visible:ring-1 focus-visible:ring-neutral-500"
+        className="field flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs"
       >
         <Swatch color={value} />
         <span className="w-20 truncate text-left">{labelColorName(value)}</span>
-        <Select.Icon className="text-neutral-500">▾</Select.Icon>
+        <Select.Icon className="text-fog-dim">▾</Select.Icon>
       </Select.Trigger>
       <Select.Portal>
         <Select.Content
           position="popper"
           sideOffset={4}
-          className="z-50 max-h-64 overflow-hidden rounded border border-neutral-800 bg-neutral-900 shadow-lg"
+          className="z-50 max-h-64 overflow-hidden surface-menu"
         >
           <Select.Viewport className="p-1">
             {LABEL_COLORS.map((color) => (
               <Select.Item
                 key={color.id}
                 value={color.id}
-                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-neutral-200 outline-none select-none data-[highlighted]:bg-neutral-800 data-[state=checked]:text-white"
+                className="menu-item flex items-center gap-2 px-2 py-1 text-sm"
               >
                 <Swatch color={color.id} />
                 <Select.ItemText>{color.name}</Select.ItemText>
@@ -220,7 +220,7 @@ function ColorChoice({ value, label, onChange }: ColorProps) {
 function Swatch({ color }: { color: string }) {
   return (
     <span
-      className="h-2 w-5 shrink-0 rounded-full"
+      className="h-1 w-8 shrink-0 rounded-full"
       style={{ backgroundColor: labelColor(color) }}
     />
   )

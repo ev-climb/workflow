@@ -1,15 +1,19 @@
-import { and, eq, gt, isNull, lt, ne, or, sql } from 'drizzle-orm'
+import { and, eq, gt, isNull, lt, ne, notExists, or, sql } from 'drizzle-orm'
 import { DEFAULT_CALENDAR_COLOR } from '../../lib/calendar-colors.ts'
 import { addDays } from '../../lib/calendar-grid.ts'
 import { momentInMoscow } from '../../lib/dates.ts'
+import { descriptionHtml, descriptionText } from '../../lib/event-description.ts'
 import { db } from '../db/client.ts'
-import { calendarEvents, googleCalendars } from '../db/schema.ts'
+import { calendarEvents, googleCalendars, timeBlocks } from '../db/schema.ts'
 import {
   EventEtagMismatchError,
+  type EventDraft,
   type EventPatch,
   type EventTimes,
   type GoogleEvent,
+  deleteEvent,
   fetchEvent,
+  insertEvent,
   patchEvent,
 } from '../google/events.ts'
 import { ConflictError, InvalidInputError, NotFoundError } from './errors.ts'
@@ -30,6 +34,22 @@ export type CalendarEvent = {
   startDate: string | null
   endDate: string | null
   recurringEventId: string | null
+}
+
+/** Событие изнутри, для панели правки: то же, что в сетке, плюс описание и календарь. */
+export type CalendarEventDetails = CalendarEvent & {
+  /** Описание обычным текстом: разметку Google в поле правки показывать нечего. */
+  description: string | null
+  calendarTitle: string
+  /** Ссылка в Google: единственный способ добраться до серии, ADR-004. */
+  htmlLink: string | null
+}
+
+/** Правка события снаружи: описание приходит текстом, разметку из него делает сервис. */
+export type EventChanges = {
+  title?: string | null
+  description?: string | null
+  times?: EventTimes
 }
 
 export type EventWriteResult = {
@@ -63,6 +83,13 @@ const LISTED = {
   recurringEventId: calendarEvents.recurringEventId,
 }
 
+const DETAILED = {
+  ...LISTED,
+  descriptionHtml: calendarEvents.descriptionHtml,
+  calendarTitle: googleCalendars.title,
+  htmlLink: calendarEvents.htmlLink,
+}
+
 /**
  * События видимых календарей, задевающие окно из московских дат (обе границы включительно).
  *
@@ -91,6 +118,19 @@ export async function listEvents(from: string, to: string): Promise<CalendarEven
         eq(googleCalendars.visible, true),
         isNull(calendarEvents.deletedAt),
         ne(calendarEvents.status, 'cancelled'),
+        // зеркало тайм-блока на сетке уже нарисовано самим блоком: показать его ещё и
+        // событием значило бы удвоить одно намерение
+        notExists(
+          db
+            .select({ mirror: sql`1` })
+            .from(timeBlocks)
+            .where(
+              and(
+                eq(timeBlocks.calendarId, calendarEvents.calendarId),
+                eq(timeBlocks.googleEventId, calendarEvents.googleEventId),
+              ),
+            ),
+        ),
         or(
           and(lt(calendarEvents.startsAt, windowEnd), gt(calendarEvents.endsAt, windowStart)),
           and(lt(calendarEvents.startDate, after), gt(calendarEvents.endDate, from)),
@@ -104,6 +144,32 @@ export async function listEvents(from: string, to: string): Promise<CalendarEven
     )
 
   return rows.map((row) => ({ ...row, color: row.color ?? DEFAULT_CALENDAR_COLOR }))
+}
+
+/**
+ * Одно событие целиком. Отменённое и мягко удалённое не отдаётся: править его нечем, а
+ * панель, открытая на нём, писала бы в пустоту.
+ */
+export async function getEvent(id: string): Promise<CalendarEventDetails> {
+  const [row] = await db
+    .select(DETAILED)
+    .from(calendarEvents)
+    .innerJoin(googleCalendars, eq(googleCalendars.id, calendarEvents.calendarId))
+    .where(
+      and(
+        eq(calendarEvents.id, id),
+        isNull(calendarEvents.deletedAt),
+        ne(calendarEvents.status, 'cancelled'),
+      ),
+    )
+  if (!row) throw new NotFoundError(`события ${id} нет`)
+
+  const { descriptionHtml: html, ...event } = row
+  return {
+    ...event,
+    color: event.color ?? DEFAULT_CALENDAR_COLOR,
+    description: html === null ? null : descriptionText(html),
+  }
 }
 
 function checkTimes(times: EventTimes): void {
@@ -126,10 +192,11 @@ function checkTimes(times: EventTimes): void {
   }
 }
 
-function normalize(changes: EventPatch): EventPatch {
+function normalize(changes: EventChanges): EventPatch {
   const patch: EventPatch = {}
   if ('title' in changes) patch.title = changes.title?.trim() || null
-  if ('descriptionHtml' in changes) patch.descriptionHtml = changes.descriptionHtml?.trim() || null
+  // пустое описание и снятое — одно и то же: разметки из пустой строки не выходит
+  if ('description' in changes) patch.descriptionHtml = descriptionHtml(changes.description ?? '')
   if (changes.times) {
     checkTimes(changes.times)
     patch.times = changes.times
@@ -137,6 +204,47 @@ function normalize(changes: EventPatch): EventPatch {
 
   if (Object.keys(patch).length === 0) throw new InvalidInputError('править нечего')
   return patch
+}
+
+/**
+ * Новое событие в выбранном календаре: сначала в Google, потом к нам. Своего
+ * идентификатора мы не придумываем — событие приезжает обратно тем же путём, что и из
+ * синхронизации, и ложится в базу одним и тем же кодом.
+ */
+export async function createEvent(
+  calendarId: string,
+  draft: EventDraft,
+): Promise<{ eventId: string }> {
+  checkTimes(draft.times)
+
+  const [calendar] = await db
+    .select({
+      googleCalendarId: googleCalendars.googleCalendarId,
+      accountId: googleCalendars.accountId,
+    })
+    .from(googleCalendars)
+    .where(eq(googleCalendars.id, calendarId))
+  if (!calendar) throw new NotFoundError(`календаря ${calendarId} нет`)
+
+  const accessToken = await accessTokenFor(calendar.accountId)
+  const event = await insertEvent(accessToken, calendar.googleCalendarId, {
+    title: draft.title?.trim() || null,
+    times: draft.times,
+  })
+  await applyEvents(calendarId, [event])
+
+  const [row] = await db
+    .select({ id: calendarEvents.id })
+    .from(calendarEvents)
+    .where(
+      and(
+        eq(calendarEvents.calendarId, calendarId),
+        eq(calendarEvents.googleEventId, event.googleEventId),
+      ),
+    )
+  if (!row) throw new ConflictError('Google завёл событие, но записать его к себе не вышло')
+
+  return { eventId: row.id }
 }
 
 /** Событие, стёртое в Google насовсем: помечается тем же путём, что и присланная отмена. */
@@ -149,6 +257,7 @@ function goneEvent(googleEventId: string): GoogleEvent {
     etag: null,
     googleUpdatedAt: null,
     recurringEventId: null,
+    htmlLink: null,
     times: null,
   }
 }
@@ -162,6 +271,18 @@ function reportConflict(googleEventId: string, ours: EventPatch, theirs: GoogleE
   )
 }
 
+/** Событие вместе с тем, что нужно для похода в Google: календарь, аккаунт, `etag`. */
+async function locateEvent(id: string) {
+  const [event] = await db
+    .select(EVENT)
+    .from(calendarEvents)
+    .innerJoin(googleCalendars, eq(googleCalendars.id, calendarEvents.calendarId))
+    .where(eq(calendarEvents.id, id))
+  if (!event || event.deletedAt) throw new NotFoundError(`события ${id} нет`)
+
+  return event
+}
+
 /**
  * Правка события в Google: `PATCH` с `If-Match`. На `412` событие перечитывается, чужая
  * версия ложится в базу, и правка накладывается поверх неё вторым `PATCH` — правило
@@ -172,16 +293,9 @@ function reportConflict(googleEventId: string, ours: EventPatch, theirs: GoogleE
  * Повторяющееся событие правится вхождением, а не серией: у нас лежит развёрнутый
  * экземпляр со своим идентификатором, ADR-004.
  */
-export async function updateEvent(id: string, changes: EventPatch): Promise<EventWriteResult> {
+export async function updateEvent(id: string, changes: EventChanges): Promise<EventWriteResult> {
   const patch = normalize(changes)
-
-  const [event] = await db
-    .select(EVENT)
-    .from(calendarEvents)
-    .innerJoin(googleCalendars, eq(googleCalendars.id, calendarEvents.calendarId))
-    .where(eq(calendarEvents.id, id))
-  if (!event || event.deletedAt) throw new NotFoundError(`события ${id} нет`)
-
+  const event = await locateEvent(id)
   const accessToken = await accessTokenFor(event.accountId)
 
   try {
@@ -227,4 +341,21 @@ export async function updateEvent(id: string, changes: EventPatch): Promise<Even
     }
     throw error
   }
+}
+
+/**
+ * Удаление события: сначала в Google, потом у себя. Событие гасится тем же путём, что и
+ * присланная отмена, — иначе следующая синхронизация вернула бы его на сетку.
+ *
+ * Из Google событие не вернуть, поэтому подтверждение спрашивает интерфейс. Повторяющееся
+ * удаляется вхождением, а не серией, — ADR-004: у нас лежит развёрнутый экземпляр.
+ */
+export async function removeEvent(id: string): Promise<{ eventId: string }> {
+  const event = await locateEvent(id)
+  const accessToken = await accessTokenFor(event.accountId)
+
+  await deleteEvent(accessToken, event.googleCalendarId, event.googleEventId)
+  await applyEvents(event.calendarId, [goneEvent(event.googleEventId)])
+
+  return { eventId: id }
 }

@@ -135,3 +135,54 @@ export const calendarPatchBody = z
   .refine((body) => body.color !== undefined || body.visible !== undefined, {
     error: 'ожидается {color}, {visible} или оба',
   })
+
+/**
+ * Время события с клиента. Пара дат у события на весь день и пара моментов у обычного
+ * разведены схемой: смешанная пара до сервиса не доходит. Границы сверяет сервис.
+ */
+const eventTimes = z.union(
+  [
+    z.object({ allDay: z.literal(true), startDate: z.string(), endDate: z.string() }),
+    z.object({ allDay: z.literal(false), startsAt: z.string(), endsAt: z.string() }),
+  ],
+  { error: 'ожидается {allDay, startDate, endDate} или {allDay, startsAt, endsAt}' },
+)
+
+/** Новое событие: календарь, название и время. Название сервис сам обрежет. */
+export const eventBody = z.object({
+  calendarId: z.uuid(),
+  title: z.string(),
+  times: eventTimes,
+})
+
+/** Правка события: название, описание, время — по отдельности или вместе. */
+export const eventPatchBody = z
+  .object({
+    title: z.string().nullable().optional(),
+    description: z.string().nullable().optional(),
+    times: eventTimes.optional(),
+  })
+  .refine(
+    (body) =>
+      body.title !== undefined || body.description !== undefined || body.times !== undefined,
+    { error: 'ожидается {title}, {description}, {times} или всё сразу' },
+  )
+
+/** Тайм-блок под карточку: карточка и пара моментов. Границы сверяет сервис. */
+export const timeBlockBody = z.object({
+  cardId: z.uuid(),
+  startsAt: z.string(),
+  endsAt: z.string(),
+})
+
+/** Зеркало тайм-блока: календарь, в котором его показывать, либо `null` — не показывать. */
+const mirrorBody = z.object({ calendarId: z.uuid().nullable() })
+
+/**
+ * Правка тайм-блока: перенос с растягиванием либо зеркало в Google. Пара границ всегда
+ * приходит целиком — промежуточного состояния у блока нет.
+ */
+export const timeBlockPatchBody = z.union(
+  [z.object({ startsAt: z.string(), endsAt: z.string() }), mirrorBody],
+  { error: 'ожидается {startsAt, endsAt} или {calendarId}' },
+)

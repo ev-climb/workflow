@@ -19,7 +19,7 @@ export function Composer({ action, label, hint, onAdd }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full rounded-md px-2.5 py-1.5 text-left text-sm text-neutral-500 outline-none hover:bg-neutral-800/60 hover:text-neutral-300 focus-visible:ring-1 focus-visible:ring-neutral-600"
+        className="ghost-add w-full px-2.5 py-2 text-left text-[12.5px] focus-visible:ring-1 focus-visible:ring-accent-line"
       >
         + {action}
       </button>
@@ -34,9 +34,9 @@ export function Composer({ action, label, hint, onAdd }: Props) {
         clearOnSubmit
         onSubmit={onAdd}
         onClose={() => setOpen(false)}
-        className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-2 text-sm leading-snug text-neutral-100"
+        className="field w-full px-2.5 py-2 text-sm leading-snug"
       />
-      {hint ? <p className="px-1 text-[11px] leading-tight text-neutral-500">{hint}</p> : null}
+      {hint ? <p className="px-1 text-[11px] leading-tight text-fog-faint">{hint}</p> : null}
     </div>
   )
 }

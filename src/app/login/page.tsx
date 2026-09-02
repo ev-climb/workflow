@@ -10,9 +10,9 @@ export default async function LoginPage({
       <form
         method="post"
         action="/api/auth/login"
-        className="w-full max-w-xs space-y-4 rounded-lg border border-neutral-800 bg-neutral-900 p-6"
+        className="surface-sheet w-full max-w-xs space-y-4 rounded-2xl p-6"
       >
-        <h1 className="text-lg font-medium">WorkFlow</h1>
+        <h1 className="text-lg font-semibold tracking-[-0.01em]">WorkFlow</h1>
         <input type="hidden" name="next" value={next ?? '/'} />
         <input
           type="password"
@@ -20,13 +20,10 @@ export default async function LoginPage({
           autoFocus
           autoComplete="current-password"
           placeholder="Пароль"
-          className="w-full rounded border border-neutral-700 bg-neutral-950 px-3 py-2 outline-none focus:border-neutral-500"
+          className="field w-full px-3 py-2"
         />
-        {error ? <p className="text-sm text-red-400">Пароль не подошёл</p> : null}
-        <button
-          type="submit"
-          className="w-full rounded bg-neutral-100 px-3 py-2 font-medium text-neutral-900 hover:bg-white"
-        >
+        {error ? <p className="text-sm text-alarm">Пароль не подошёл</p> : null}
+        <button type="submit" className="btn-primary w-full px-3 py-2">
           Войти
         </button>
       </form>

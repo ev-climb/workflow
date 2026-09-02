@@ -41,12 +41,12 @@ export function CardDue({ boardId, cardId, dueAt, dueHasTime, dueDone }: Props) 
   return (
     <section>
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <h3 className="text-xs text-neutral-500">Срок</h3>
+        <h3 className="text-[11px] tracking-[0.14em] text-fog-faint uppercase">Срок</h3>
         {draft ? null : (
           <button
             type="button"
             onClick={() => setDraft(draftOf(dueAt, dueHasTime))}
-            className="rounded px-1.5 py-0.5 text-xs text-neutral-500 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-visible:ring-1 focus-visible:ring-neutral-600"
+            className="btn-quiet px-1.5 py-0.5 text-xs"
           >
             {dueAt ? 'Править' : 'Добавить'}
           </button>
@@ -62,16 +62,16 @@ export function CardDue({ boardId, cardId, dueAt, dueHasTime, dueDone }: Props) 
               aria-label="Дата срока"
               value={draft.date}
               onChange={(event) => setDraft({ ...draft, date: event.target.value })}
-              className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 outline-none focus-visible:border-neutral-500"
+              className="field px-2 py-1 text-sm"
             />
             <input
               type="time"
               aria-label="Время срока"
               value={draft.time}
               onChange={(event) => setDraft({ ...draft, time: event.target.value })}
-              className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 outline-none focus-visible:border-neutral-500"
+              className="field px-2 py-1 text-sm"
             />
-            <span className="text-xs text-neutral-600">время необязательно</span>
+            <span className="text-xs text-fog-faint">время необязательно</span>
           </div>
 
           <div className="mt-2 flex items-center gap-2">
@@ -79,14 +79,14 @@ export function CardDue({ boardId, cardId, dueAt, dueHasTime, dueDone }: Props) 
               type="button"
               onClick={save}
               disabled={setDue.isPending || !draft.date}
-              className="rounded bg-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-900 outline-none hover:bg-white focus-visible:ring-1 focus-visible:ring-neutral-400 disabled:bg-neutral-800 disabled:text-neutral-500"
+              className="btn-primary px-3 py-1.5 text-sm"
             >
               Сохранить
             </button>
             <button
               type="button"
               onClick={() => setDraft(null)}
-              className="rounded px-3 py-1.5 text-sm text-neutral-400 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-visible:ring-1 focus-visible:ring-neutral-600"
+              className="btn-quiet px-3 py-1.5 text-sm"
             >
               Отмена
             </button>
@@ -94,7 +94,7 @@ export function CardDue({ boardId, cardId, dueAt, dueHasTime, dueDone }: Props) 
               <button
                 type="button"
                 onClick={() => setDue.mutate(null, { onSuccess: () => setDraft(null) })}
-                className="rounded px-3 py-1.5 text-sm text-neutral-400 outline-none hover:bg-neutral-900 hover:text-red-300 focus-visible:ring-1 focus-visible:ring-neutral-600"
+                className="btn-quiet px-3 py-1.5 text-sm hover:text-alarm!"
               >
                 Убрать
               </button>
@@ -108,22 +108,22 @@ export function CardDue({ boardId, cardId, dueAt, dueHasTime, dueDone }: Props) 
             checked={dueDone}
             disabled={setDone.isPending}
             onChange={(event) => setDone.mutate(event.target.checked)}
-            className="size-3.5 accent-emerald-500"
+            className="size-3.5 accent-[oklch(0.72_0.14_168)]"
           />
           <span
             className={`rounded px-1.5 py-0.5 text-sm tabular-nums ${
               overdue
-                ? 'bg-red-950 text-red-300'
+                ? 'bg-alarm-wash text-alarm'
                 : dueDone
-                  ? 'text-emerald-400 line-through'
-                  : 'text-neutral-200'
+                  ? 'text-done line-through'
+                  : 'text-fog'
             }`}
           >
             {formatDue(dueAt, dueHasTime)}
           </span>
         </label>
       ) : (
-        <p className="text-sm text-neutral-600">нет</p>
+        <p className="text-sm text-fog-faint">нет</p>
       )}
 
       <Failure error={setDue.error ?? setDone.error} className="pt-1" />

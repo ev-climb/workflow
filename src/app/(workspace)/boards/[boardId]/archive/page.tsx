@@ -17,8 +17,8 @@ export default async function ArchivePage({ params }: { params: Promise<{ boardI
   return (
     <main className="mx-auto flex h-screen w-full max-w-3xl flex-col gap-4 p-6">
       <header className="flex shrink-0 items-baseline gap-3">
-        <h1 className="text-base font-medium text-neutral-100">Архив доски «{board.title}»</h1>
-        <Link href="/" className="text-sm text-neutral-500 hover:text-neutral-300">
+        <h1 className="text-base font-semibold tracking-[-0.01em] text-fog">Архив доски «{board.title}»</h1>
+        <Link href="/" className="text-sm text-fog-dim transition-colors hover:text-fog">
           ← На стол
         </Link>
       </header>

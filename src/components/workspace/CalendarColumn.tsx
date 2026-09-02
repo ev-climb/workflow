@@ -4,7 +4,10 @@ import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useState } from 'react'
 import { CalendarGrid } from '@/components/calendar/CalendarGrid'
-import { calendarQuery, duesQuery } from '@/lib/calendar-query'
+import { EventDialog } from '@/components/calendar/EventDialog'
+import { EventPanel } from '@/components/calendar/EventPanel'
+import type { Range } from '@/lib/calendar-drag'
+import { calendarQuery, duesQuery, timeBlocksQuery } from '@/lib/calendar-query'
 import {
   daysOf,
   moscowToday,
@@ -24,20 +27,28 @@ type Props = {
 
 export function CalendarColumn({ mode, today, onModeChange }: Props) {
   const [anchor, setAnchor] = useState(today)
+  const [range, setRange] = useState<Range | null>(null)
+  const [opened, setOpened] = useState<{ id: string; title: string } | null>(null)
   const days = daysOf(mode, anchor)
   const events = useQuery(calendarQuery(days[0], days[days.length - 1]))
   const dues = useQuery(duesQuery(days[0], days[days.length - 1]))
+  const blocks = useQuery(timeBlocksQuery(days[0], days[days.length - 1]))
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-r border-neutral-800">
-      <div className="flex items-baseline justify-between px-3 pt-3">
-        <h2 className="text-sm font-medium text-neutral-300">{rangeLabel(mode, days)}</h2>
-        <Link href="/settings" className="text-xs text-neutral-500 hover:text-neutral-300">
+    <aside className="surface-panel flex w-76 shrink-0 flex-col border-r border-hair">
+      <div className="flex items-baseline justify-between gap-3 px-5 pt-5">
+        <h2 className="text-base font-semibold tracking-[-0.01em] text-fog">
+          {rangeLabel(mode, days)}
+        </h2>
+        <Link
+          href="/settings"
+          className="shrink-0 text-[12.5px] text-fog-dim transition-colors hover:text-fog"
+        >
           Настройки
         </Link>
       </div>
 
-      <div className="flex items-center gap-1 px-3 py-2">
+      <div className="flex items-center gap-1 px-5 py-4">
         <Step label="Назад" onClick={() => setAnchor(shiftAnchor(mode, anchor, -1))}>
           ‹
         </Step>
@@ -47,18 +58,14 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
         <Step label="Вперёд" onClick={() => setAnchor(shiftAnchor(mode, anchor, 1))}>
           ›
         </Step>
-        <div className="ml-auto flex rounded border border-neutral-800">
+        <div className="segment ml-auto">
           {(Object.keys(MODE_LABEL) as CalendarMode[]).map((value) => (
             <button
               key={value}
               type="button"
               aria-pressed={mode === value}
               onClick={() => onModeChange(value)}
-              className={`px-2 py-1 text-xs outline-none first:rounded-l last:rounded-r focus-visible:ring-1 focus-visible:ring-neutral-600 ${
-                mode === value
-                  ? 'bg-neutral-800 text-neutral-100'
-                  : 'text-neutral-500 hover:text-neutral-300'
-              }`}
+              className="segment-item px-3 py-1 text-xs font-medium"
             >
               {MODE_LABEL[value]}
             </button>
@@ -66,9 +73,32 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
         </div>
       </div>
 
-      <CalendarGrid days={days} events={events.data ?? []} dues={dues.data ?? []} />
+      <CalendarGrid
+        days={days}
+        events={events.data ?? []}
+        blocks={blocks.data ?? []}
+        dues={dues.data ?? []}
+        onSelect={setRange}
+        onOpen={(event) => setOpened({ id: event.id, title: event.title ?? 'Без названия' })}
+      />
+
+      {range ? <EventDialog range={range} onClose={() => setRange(null)} /> : null}
+      {opened ? (
+        <EventPanel eventId={opened.id} title={opened.title} onClose={() => setOpened(null)} />
+      ) : null}
+
+      <footer className="shrink-0 border-t border-hair px-5 py-3 text-xs text-fog-dim">
+        {countLabel(events.data?.length ?? 0)}
+      </footer>
     </aside>
   )
+}
+
+/** Подпись под сеткой: сколько событий попало в показанный отрезок. */
+function countLabel(count: number): string {
+  const tail = count % 100 >= 11 && count % 100 <= 14 ? 5 : count % 10
+  const word = tail === 1 ? 'событие' : tail >= 2 && tail <= 4 ? 'события' : 'событий'
+  return `${count} ${word} на виду`
 }
 
 function Step({
@@ -85,7 +115,7 @@ function Step({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="rounded px-2 py-1 text-xs text-neutral-400 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-visible:ring-1 focus-visible:ring-neutral-600"
+      className="btn-quiet px-2.5 py-1 text-[12.5px] focus-visible:ring-1 focus-visible:ring-accent-line"
     >
       {children}
     </button>

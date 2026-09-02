@@ -22,8 +22,7 @@ const DOUBLE_CLICK_MS = 250
 /** Столько висит ответ на «скопировать ссылку». */
 const COPY_NOTE_MS = 2000
 
-export const CARD_FRAME =
-  'rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-2 text-left'
+export const CARD_FRAME = 'surface-card px-3 py-3 text-left'
 
 /** Вид карточки: тот же и в списке, и под курсором во время перетаскивания. */
 export function CardFace({ card, title }: { card: CardView; title: ReactNode }) {
@@ -33,12 +32,12 @@ export function CardFace({ card, title }: { card: CardView; title: ReactNode }) 
   return (
     <>
       {card.labels.length ? (
-        <div className="mb-1.5 flex flex-wrap gap-1">
+        <div className="mb-2 flex flex-wrap gap-1.5">
           {card.labels.map((label) => (
             <span
               key={label.id}
               title={label.name}
-              className="h-1.5 w-9 rounded-full"
+              className="h-1 w-8 rounded-full"
               style={{ backgroundColor: labelColor(label.color) }}
             />
           ))}
@@ -48,12 +47,12 @@ export function CardFace({ card, title }: { card: CardView; title: ReactNode }) 
       {title}
 
       {card.hasDescription || card.checklistTotal > 0 || card.dueAt ? (
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-fog-faint">
           {card.hasDescription ? <span title="Есть описание">≡</span> : null}
           {card.checklistTotal > 0 ? (
             <span
               title="Чек-лист"
-              className={`tabular-nums ${checklistDone ? 'text-emerald-400' : ''}`}
+              className={`font-mono tabular-nums ${checklistDone ? 'text-done' : ''}`}
             >
               ☑ {card.checklistDone}/{card.checklistTotal}
             </span>
@@ -61,11 +60,11 @@ export function CardFace({ card, title }: { card: CardView; title: ReactNode }) 
           {card.dueAt ? (
             <span
               title={card.dueDone ? 'Срок, отмечен выполненным' : 'Срок'}
-              className={`rounded px-1 py-0.5 tabular-nums ${
+              className={`rounded-md px-1.5 py-0.5 font-mono tabular-nums ${
                 overdue
-                  ? 'bg-red-950 text-red-300'
+                  ? 'bg-alarm-wash text-alarm'
                   : card.dueDone
-                    ? 'text-emerald-400 line-through'
+                    ? 'text-done line-through'
                     : ''
               }`}
             >
@@ -148,9 +147,9 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
       {...drag.attributes}
       {...(renaming ? {} : drag.listeners)}
       onClick={open}
-      className={`group/card relative ${CARD_FRAME} outline-none focus-visible:border-neutral-500 ${
+      className={`group/card relative ${CARD_FRAME} outline-none focus-visible:border-accent-line ${
         // место карточки остаётся видимым: под курсором её рисует накладка
-        drag.isDragging ? 'opacity-30' : 'hover:border-neutral-700'
+        drag.isDragging ? 'opacity-30' : 'surface-card-lift'
       }`}
     >
       <CardMenu
@@ -159,7 +158,7 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
         onTransfer={() => setTransferring(true)}
         onCopyLink={() => void copyLink()}
         onArchive={() => archive.mutate()}
-        className="absolute top-1 right-1 bg-neutral-900 group-hover/card:opacity-100"
+        className="absolute top-1.5 right-1.5 backdrop-blur-sm group-hover/card:opacity-100"
       />
 
       <CardFace
@@ -171,13 +170,13 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
               label="Заголовок карточки"
               onSubmit={(title) => rename.mutate(title)}
               onClose={() => setRenaming(false)}
-              className="w-full rounded bg-neutral-800 px-1 text-sm leading-snug text-neutral-100"
+              className="w-full rounded-lg bg-white/10 px-1.5 text-[13.5px] leading-[1.42] text-fog"
             />
           ) : (
             <p
               onDoubleClick={() => setRenaming(true)}
               title="Двойной клик — переименовать"
-              className="text-sm leading-snug text-neutral-100"
+              className="text-[13.5px] leading-[1.42] font-medium text-fog"
             >
               {card.title}
             </p>
@@ -188,7 +187,7 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
       <Failure error={rename.error ?? archive.error} className="pt-1" />
 
       {copied === null ? null : (
-        <p role="status" className={`pt-1 text-xs ${copied ? 'text-neutral-400' : 'text-red-300'}`}>
+        <p role="status" className={`pt-1 text-xs ${copied ? 'text-fog-muted' : 'text-alarm'}`}>
           {copied ? 'Ссылка скопирована' : 'Буфер обмена недоступен'}
         </p>
       )}

@@ -21,6 +21,8 @@ export type GoogleEvent = {
   googleUpdatedAt: Date | null
   /** Идентификатор серии на стороне Google у экземпляра повторяющегося события. */
   recurringEventId: string | null
+  /** Ссылка на событие в веб-интерфейсе Google. Своей мы её не собираем: формат не описан. */
+  htmlLink: string | null
   /** У отменённого события Google присылает только идентификатор и статус — времени нет. */
   times: EventTimes | null
 }
@@ -67,6 +69,7 @@ type EventItem = {
   start?: EventTime
   end?: EventTime
   recurringEventId?: string
+  htmlLink?: string
 }
 
 type ListResponse = {
@@ -129,6 +132,7 @@ export function mapEvent(item: EventItem): GoogleEvent | null {
     etag: item.etag ?? null,
     googleUpdatedAt: updated && !Number.isNaN(updated.getTime()) ? updated : null,
     recurringEventId: item.recurringEventId ?? null,
+    htmlLink: item.htmlLink ?? null,
     times: timesOf(item.start, item.end),
   }
 }
@@ -250,6 +254,15 @@ export async function fetchEvent(
   return mapEvent(JSON.parse(body) as EventItem)
 }
 
+async function written(response: Response): Promise<GoogleEvent> {
+  const body = await response.text()
+  if (!response.ok) throw fail(response.status, body)
+
+  const event = mapEvent(JSON.parse(body) as EventItem)
+  if (!event) throw new GoogleApiError('Google вернул событие без идентификатора', response.status)
+  return event
+}
+
 /**
  * Запись обратно: `PATCH` с `If-Match`. Устаревший `etag` даёт `412` — разрешение конфликта
  * не здесь, а в сервисе. Без `etag` заголовок не ставится: перезаписать вслепую всё же лучше,
@@ -271,10 +284,41 @@ export async function patchEvent(
     },
     body: JSON.stringify(patchBody(patch)),
   })
-  const body = await response.text()
-  if (!response.ok) throw fail(response.status, body)
+  return written(response)
+}
 
-  const event = mapEvent(JSON.parse(body) as EventItem)
-  if (!event) throw new GoogleApiError('Google вернул событие без идентификатора', response.status)
-  return event
+/**
+ * Удаление события в Google. `If-Match` здесь нет намеренно: удаляют не версию, а событие,
+ * и чужая правка, приехавшая секундой раньше, решения не меняет.
+ *
+ * `404` и `410` — событие уже стёрто. Это не отказ, а тот же итог, к которому мы шли.
+ */
+export async function deleteEvent(
+  accessToken: string,
+  googleCalendarId: string,
+  googleEventId: string,
+): Promise<void> {
+  const response = await fetch(eventUrl(googleCalendarId, googleEventId), {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${accessToken}` },
+  })
+  if (response.ok || response.status === 404 || response.status === 410) return
+
+  throw fail(response.status, await response.text())
+}
+
+/** Новое событие: время обязательно, идентификатор его выдаёт Google. */
+export type EventDraft = { title: string | null; times: EventTimes }
+
+export async function insertEvent(
+  accessToken: string,
+  googleCalendarId: string,
+  draft: EventDraft,
+): Promise<GoogleEvent> {
+  const response = await fetch(`${CALENDAR_API}/${encodeURIComponent(googleCalendarId)}/events`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${accessToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify(patchBody(draft)),
+  })
+  return written(response)
 }

@@ -1,6 +1,347 @@
 @import 'tailwindcss';
 
 /**
+ * Палитра стола. Поверхности набирают глубину полупрозрачными слоями поверх общего
+ * фона, а не отдельными непрозрачными оттенками: так подсветка снизу просвечивает
+ * сквозь колонки и карточки.
+ */
+@theme {
+  --font-sans: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-numeric), ui-monospace, SFMono-Regular, monospace;
+
+  --color-ink: #16151c;
+  --color-ink-deep: #121017;
+
+  --color-fog: rgb(238 235 250 / 0.92);
+  --color-fog-muted: rgb(238 235 250 / 0.62);
+  --color-fog-dim: rgb(238 235 250 / 0.44);
+  --color-fog-faint: rgb(238 235 250 / 0.3);
+
+  --color-hair: rgb(255 255 255 / 0.07);
+  --color-hair-lit: rgb(255 255 255 / 0.16);
+
+  --color-accent: oklch(0.75 0.13 300);
+  --color-accent-line: oklch(0.7 0.12 300 / 0.4);
+  --color-accent-wash: oklch(0.55 0.12 300 / 0.16);
+
+  --color-alarm: oklch(0.74 0.17 25);
+  --color-alarm-line: oklch(0.6 0.16 25 / 0.45);
+  --color-alarm-wash: oklch(0.45 0.13 25 / 0.28);
+
+  --color-caution: oklch(0.83 0.14 80);
+  --color-caution-line: oklch(0.68 0.13 80 / 0.4);
+  --color-caution-wash: oklch(0.5 0.11 80 / 0.22);
+
+  --color-done: oklch(0.82 0.14 168);
+
+  --radius-column: 20px;
+  --radius-card: 15px;
+
+  --ease-glide: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@layer base {
+  html {
+    background: var(--color-ink);
+    color-scheme: dark;
+  }
+
+  body {
+    isolation: isolate;
+  }
+
+  /* подсветка под столом: три пятна, медленно плывущие за всем содержимым */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: -20% -10%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(46% 42% at 10% 6%, oklch(0.42 0.11 305 / 0.5), transparent 62%),
+      radial-gradient(40% 40% at 92% 96%, oklch(0.44 0.09 215 / 0.42), transparent 62%),
+      radial-gradient(34% 30% at 62% 4%, oklch(0.4 0.08 25 / 0.18), transparent 66%);
+    animation: drift 26s ease-in-out infinite;
+  }
+
+  ::selection {
+    background: oklch(0.55 0.12 300 / 0.4);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* прозрачная рамка вместо отступа: полоса тоньше дорожки и не липнет к краю */
+  ::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 99px;
+    background: rgb(220 215 245 / 0.13) content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(220 215 245 / 0.26) content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body::before,
+    .beacon {
+      animation: none;
+    }
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2%, -3%, 0) scale(1.08);
+  }
+}
+
+@keyframes beacon {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+}
+
+/**
+ * Поверхности и органы управления. Здесь лежит то, что повторяется в разных местах и
+ * не выражается утилитами в одну строку: многослойные градиенты, размытие и подсветка.
+ */
+@layer components {
+  /* боковая колонка календаря */
+  .surface-panel {
+    background: linear-gradient(
+      180deg,
+      rgb(255 255 255 / 0.055),
+      rgb(255 255 255 / 0.015) 40%,
+      rgb(255 255 255 / 0.03)
+    );
+    backdrop-filter: blur(18px);
+  }
+
+  .surface-column {
+    border: 1px solid var(--color-hair);
+    border-radius: var(--radius-column);
+    background: linear-gradient(170deg, rgb(255 255 255 / 0.055), rgb(255 255 255 / 0.02));
+    transition:
+      border-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+
+  .surface-column:hover {
+    border-color: rgb(255 255 255 / 0.12);
+  }
+
+  /* список под карточкой, которую тащат */
+  .surface-column-target,
+  .surface-column-target:hover {
+    border-color: var(--color-accent-line);
+    box-shadow:
+      inset 0 0 0 1px var(--color-accent-line),
+      0 14px 40px oklch(0.35 0.1 300 / 0.35);
+  }
+
+  .surface-card {
+    border: 1px solid var(--color-hair);
+    border-radius: var(--radius-card);
+    background: linear-gradient(155deg, rgb(255 255 255 / 0.085), rgb(255 255 255 / 0.028));
+    box-shadow: 0 2px 10px rgb(0 0 0 / 0.18);
+    transition:
+      transform 0.32s var(--ease-glide),
+      box-shadow 0.32s ease,
+      border-color 0.32s ease;
+  }
+
+  .surface-card-lift:hover {
+    transform: translateY(-3px);
+    border-color: var(--color-hair-lit);
+    box-shadow: 0 14px 30px rgb(0 0 0 / 0.4);
+  }
+
+  /* панель карточки и модальные окна */
+  .surface-sheet {
+    border: 1px solid var(--color-hair);
+    background:
+      linear-gradient(165deg, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0.02)),
+      var(--color-ink-deep);
+    backdrop-filter: blur(22px);
+    box-shadow: 0 24px 60px rgb(0 0 0 / 0.55);
+  }
+
+  .surface-menu {
+    border: 1px solid var(--color-hair);
+    border-radius: 14px;
+    background:
+      linear-gradient(165deg, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.02)),
+      var(--color-ink-deep);
+    backdrop-filter: blur(22px);
+    box-shadow: 0 18px 44px rgb(0 0 0 / 0.5);
+  }
+
+  .menu-item {
+    cursor: pointer;
+    border-radius: 9px;
+    color: var(--color-fog-muted);
+    outline: none;
+    user-select: none;
+    transition:
+      background 0.2s ease,
+      color 0.2s ease;
+  }
+
+  .menu-item:hover,
+  .menu-item[data-highlighted] {
+    background: rgb(255 255 255 / 0.08);
+    color: var(--color-fog);
+  }
+
+  .menu-item[data-state='checked'] {
+    color: var(--color-fog);
+  }
+
+  .menu-item[data-disabled] {
+    color: var(--color-fog-faint);
+  }
+
+  /**
+   * Время под карточку на сетке. Штриховка, а не заливка: цвет события приходит из
+   * Google и может оказаться тем же, что у акцента, — тогда одинаковыми остались бы
+   * оба прямоугольника. Материал различается всегда, цвет — как повезёт.
+   */
+  .timeblock {
+    border: 1px solid var(--color-accent-line);
+    border-left-width: 3px;
+    border-radius: 11px;
+    background:
+      repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.06) 0 2px, transparent 2px 7px),
+      var(--color-accent-wash);
+    transition: background-color 0.2s ease;
+  }
+
+  /* пунктирная кнопка «добавить»: список, карточка, чек-лист, пункт */
+  .ghost-add {
+    border: 1px dashed rgb(255 255 255 / 0.1);
+    border-radius: 12px;
+    color: var(--color-fog-dim);
+    outline: none;
+    transition:
+      border-color 0.25s ease,
+      background 0.25s ease,
+      color 0.25s ease;
+  }
+
+  .ghost-add:hover {
+    border-color: var(--color-accent-line);
+    background: var(--color-accent-wash);
+    color: var(--color-fog);
+  }
+
+  .field {
+    border: 1px solid var(--color-hair);
+    border-radius: 10px;
+    background: rgb(0 0 0 / 0.28);
+    color: var(--color-fog);
+    outline: none;
+    transition:
+      border-color 0.25s ease,
+      background 0.25s ease;
+  }
+
+  .field:focus,
+  .field:focus-visible {
+    border-color: var(--color-accent-line);
+    background: rgb(0 0 0 / 0.4);
+  }
+
+  .field::placeholder {
+    color: var(--color-fog-faint);
+  }
+
+  .btn-primary {
+    border-radius: 10px;
+    background: linear-gradient(140deg, oklch(0.6 0.14 305), oklch(0.54 0.12 265));
+    color: #fff;
+    font-weight: 500;
+    outline: none;
+    box-shadow: 0 4px 14px oklch(0.45 0.12 300 / 0.5);
+    transition:
+      filter 0.25s ease,
+      box-shadow 0.25s ease;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.12);
+    box-shadow: 0 6px 20px oklch(0.45 0.12 300 / 0.7);
+  }
+
+  .btn-primary:disabled {
+    background: rgb(255 255 255 / 0.06);
+    color: var(--color-fog-faint);
+    box-shadow: none;
+  }
+
+  .btn-quiet {
+    border-radius: 9px;
+    color: var(--color-fog-muted);
+    outline: none;
+    transition:
+      background 0.25s ease,
+      color 0.25s ease;
+  }
+
+  .btn-quiet:hover:not(:disabled) {
+    background: rgb(255 255 255 / 0.08);
+    color: var(--color-fog);
+  }
+
+  .segment {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--color-hair);
+    border-radius: 12px;
+    background: rgb(0 0 0 / 0.28);
+  }
+
+  .segment-item {
+    border-radius: 9px;
+    color: var(--color-fog-dim);
+    outline: none;
+    transition: all 0.3s var(--ease-glide);
+  }
+
+  .segment-item:hover {
+    color: var(--color-fog);
+  }
+
+  .segment-item[aria-pressed='true'] {
+    background: linear-gradient(140deg, oklch(0.56 0.13 305), oklch(0.5 0.11 250));
+    color: #fff;
+    box-shadow: 0 4px 14px oklch(0.45 0.12 300 / 0.5);
+  }
+
+  /* точка текущего времени */
+  .beacon {
+    animation: beacon 2.6s ease-in-out infinite;
+  }
+}
+
+/**
  * Отрисованное описание карточки. Плагина типографики в проекте нет: размеров тут
  * на два десятка строк, и ради них тянуть зависимость незачем.
  */
@@ -28,7 +369,7 @@
   .markdown h4 {
     margin-block: 1em 0.4em;
     font-weight: 600;
-    color: var(--color-neutral-100);
+    color: var(--color-fog);
   }
 
   .markdown h1 {
@@ -62,25 +403,25 @@
   }
 
   .markdown li::marker {
-    color: var(--color-neutral-600);
+    color: var(--color-fog-faint);
   }
 
   .markdown a {
-    color: var(--color-sky-400);
+    color: var(--color-accent);
     text-decoration: underline;
   }
 
   .markdown code {
     border-radius: 0.25rem;
-    background: var(--color-neutral-800);
+    background: rgb(255 255 255 / 0.08);
     padding: 0.1em 0.3em;
     font-size: 0.9em;
   }
 
   .markdown pre {
     overflow-x: auto;
-    border-radius: 0.375rem;
-    background: var(--color-neutral-900);
+    border-radius: 0.5rem;
+    background: rgb(0 0 0 / 0.35);
     padding: 0.6em 0.8em;
   }
 
@@ -90,19 +431,19 @@
   }
 
   .markdown blockquote {
-    border-left: 2px solid var(--color-neutral-700);
+    border-left: 2px solid var(--color-hair-lit);
     padding-left: 0.8em;
-    color: var(--color-neutral-400);
+    color: var(--color-fog-muted);
   }
 
   .markdown hr {
     margin-block: 1em;
-    border-color: var(--color-neutral-800);
+    border-color: var(--color-hair);
   }
 
   .markdown img {
     max-width: 100%;
-    border-radius: 0.375rem;
+    border-radius: 0.5rem;
   }
 
   .markdown table {
@@ -113,7 +454,7 @@
 
   .markdown th,
   .markdown td {
-    border: 1px solid var(--color-neutral-800);
+    border: 1px solid var(--color-hair);
     padding: 0.3em 0.6em;
     text-align: left;
   }

@@ -1,5 +1,11 @@
+import type { GoogleCalendarSummary } from '@/server/services/google-calendars'
 import { getJson } from './api-client'
-import type { CalendarEventView, CardDueView } from './calendar-view'
+import type {
+  CalendarEventDetailsView,
+  CalendarEventView,
+  CardDueView,
+  TimeBlockView,
+} from './calendar-view'
 
 /** Корень ключа: по нему разом инвалидируются все прочитанные окна сетки. */
 export const calendarKey = ['calendar'] as const
@@ -9,6 +15,32 @@ export function calendarQuery(from: string, to: string) {
     queryKey: [...calendarKey, from, to] as const,
     queryFn: (): Promise<CalendarEventView[]> =>
       getJson<CalendarEventView[]>(`/api/calendar/events?from=${from}&to=${to}`),
+  }
+}
+
+/**
+ * Событие целиком, для панели правки: описание в сетку не ездит — у каждого приглашения
+ * оно на несколько килобайт, а на блоке его всё равно не видно.
+ *
+ * Ключ растёт из того же корня, что и окна сетки: запись гасит разом и сетку, и панель.
+ */
+export function eventQuery(id: string) {
+  return {
+    queryKey: [...calendarKey, 'event', id] as const,
+    queryFn: (): Promise<CalendarEventDetailsView> =>
+      getJson<CalendarEventDetailsView>(`/api/calendar/events/${id}`),
+  }
+}
+
+/**
+ * Тайм-блоки растут из корня сетки, а не из своего: их запись публикует то же
+ * `calendar-changed`, что и правка события, и общий корень гасит оба чтения разом.
+ */
+export function timeBlocksQuery(from: string, to: string) {
+  return {
+    queryKey: [...calendarKey, 'blocks', from, to] as const,
+    queryFn: (): Promise<TimeBlockView[]> =>
+      getJson<TimeBlockView[]>(`/api/calendar/time-blocks?from=${from}&to=${to}`),
   }
 }
 
@@ -24,4 +56,13 @@ export function duesQuery(from: string, to: string) {
     queryFn: (): Promise<CardDueView[]> =>
       getJson<CardDueView[]>(`/api/calendar/dues?from=${from}&to=${to}`),
   }
+}
+
+/** Календари для выбора при создании события. Читаются, когда диалог открывают. */
+export const calendarsKey = ['google-calendars'] as const
+
+export const calendarsQuery = {
+  queryKey: calendarsKey,
+  queryFn: (): Promise<GoogleCalendarSummary[]> =>
+    getJson<GoogleCalendarSummary[]>('/api/google/calendars'),
 }

@@ -19,7 +19,7 @@ export function ArchiveButton({ label, disabled = false, onClick, className = ''
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded px-1 text-xs leading-none text-neutral-500 opacity-0 outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-neutral-600 ${className}`}
+      className={`btn-quiet px-1.5 text-xs leading-none opacity-0 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent-line ${className}`}
     >
       ↓
     </button>

@@ -32,16 +32,16 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
     <section
       ref={drag.setNodeRef}
       style={{ transform: CSS.Translate.toString(drag.transform), transition: drag.transition }}
-      className={`group/list flex max-h-full w-72 shrink-0 flex-col rounded-lg bg-neutral-900/60 ${
+      className={`surface-column group/list flex max-h-full w-72 shrink-0 flex-col p-3.5 ${
         // место списка остаётся видимым: под курсором его рисует накладка
         drag.isDragging ? 'opacity-30' : ''
-      }`}
+      } ${drag.isOver ? 'surface-column-target' : ''}`}
     >
       <header
         ref={drag.setActivatorNodeRef}
         {...drag.attributes}
         {...(renaming ? {} : drag.listeners)}
-        className="flex shrink-0 cursor-grab items-center gap-2 px-3 py-2 outline-none focus-visible:ring-1 focus-visible:ring-neutral-500"
+        className="flex shrink-0 cursor-grab items-center gap-2 rounded-lg px-1 pb-2.5 outline-none focus-visible:ring-1 focus-visible:ring-accent-line"
       >
         {renaming ? (
           <TitleField
@@ -49,21 +49,21 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
             label="Название списка"
             onSubmit={(title) => rename.mutate(title)}
             onClose={() => setRenaming(false)}
-            className="min-w-0 flex-1 rounded bg-neutral-800 px-1 text-sm leading-snug font-medium text-neutral-100"
+            className="min-w-0 flex-1 rounded-lg bg-white/10 px-1.5 text-sm leading-snug font-medium text-fog"
           />
         ) : (
           <h3
             onDoubleClick={() => setRenaming(true)}
             title="Двойной клик — переименовать"
-            className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-200"
+            className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-fog"
           >
             {list.title}
           </h3>
         )}
         <span
           title={list.wipLimit === null ? 'Карточек в списке' : `Лимит списка — ${list.wipLimit}`}
-          className={`rounded px-1.5 py-0.5 text-xs tabular-nums ${
-            over ? 'bg-amber-500/20 text-amber-300' : 'text-neutral-500'
+          className={`rounded-md px-1.5 py-0.5 font-mono text-[11px] tabular-nums ${
+            over ? 'bg-caution-wash text-caution' : 'text-fog-dim'
           }`}
         >
           {list.wipLimit === null ? list.cards.length : `${list.cards.length}/${list.wipLimit}`}
@@ -83,7 +83,7 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
         className={`${
           // пустой список тоже должен быть целью: без высоты в него нечем попасть
           list.cards.length ? 'min-h-0' : 'min-h-12'
-        } flex-1 space-y-2 overflow-y-auto rounded px-2 pb-2 ${drag.isOver ? 'bg-neutral-800/40' : ''}`}
+        } flex-1 space-y-2.5 overflow-y-auto rounded-xl pr-0.5`}
       >
         <SortableContext
           items={list.cards.map((card) => dragId(slot, 'card', card.id))}
@@ -102,7 +102,7 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
         </SortableContext>
       </div>
 
-      <footer className="shrink-0 px-2 pb-2">
+      <footer className="shrink-0 pt-2.5">
         <Composer
           action="Карточка"
           label="Заголовок новой карточки"

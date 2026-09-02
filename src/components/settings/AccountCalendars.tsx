@@ -16,7 +16,7 @@ type Patch = { color?: string; visible?: boolean }
  */
 export function AccountCalendars({ calendars }: { calendars: GoogleCalendarSummary[] }) {
   if (calendars.length === 0) {
-    return <p className="mt-2 text-xs text-neutral-500">Календарей у аккаунта не нашлось.</p>
+    return <p className="mt-2 text-xs text-fog-dim">Календарей у аккаунта не нашлось.</p>
   }
 
   return (
@@ -50,12 +50,12 @@ function CalendarRow({ calendar }: { calendar: GoogleCalendarSummary }) {
         disabled={pending}
         onChange={(event) => save({ visible: event.target.checked })}
         id={`calendar-${calendar.id}`}
-        className="size-3.5 shrink-0 accent-neutral-300"
+        className="size-3.5 shrink-0 accent-accent"
       />
       <label
         htmlFor={`calendar-${calendar.id}`}
         className={`min-w-0 flex-1 truncate text-sm ${
-          calendar.visible ? 'text-neutral-200' : 'text-neutral-500'
+          calendar.visible ? 'text-fog' : 'text-fog-dim'
         }`}
       >
         {calendar.title}
@@ -65,7 +65,7 @@ function CalendarRow({ calendar }: { calendar: GoogleCalendarSummary }) {
         label={`Цвет календаря «${calendar.title}»`}
         onChange={(next) => save({ color: next })}
       />
-      {error ? <span className="text-xs text-red-300">{error}</span> : null}
+      {error ? <span className="text-xs text-alarm">{error}</span> : null}
     </li>
   )
 }
@@ -83,24 +83,24 @@ function ColorChoice({ value, label, onChange }: ColorProps) {
     <Select.Root value={value} onValueChange={onChange}>
       <Select.Trigger
         aria-label={label}
-        className="flex shrink-0 items-center gap-1.5 rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-xs text-neutral-300 outline-none focus-visible:ring-1 focus-visible:ring-neutral-500"
+        className="field flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs"
       >
         <Swatch color={value} />
         <span className="w-24 truncate text-left">{calendarColorName(value)}</span>
-        <Select.Icon className="text-neutral-500">▾</Select.Icon>
+        <Select.Icon className="text-fog-dim">▾</Select.Icon>
       </Select.Trigger>
       <Select.Portal>
         <Select.Content
           position="popper"
           sideOffset={4}
-          className="z-50 max-h-64 overflow-hidden rounded border border-neutral-800 bg-neutral-900 shadow-lg"
+          className="z-50 max-h-64 overflow-hidden surface-menu"
         >
           <Select.Viewport className="p-1">
             {options.map((color) => (
               <Select.Item
                 key={color.hex}
                 value={color.hex}
-                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-neutral-200 outline-none select-none data-[highlighted]:bg-neutral-800 data-[state=checked]:text-white"
+                className="menu-item flex items-center gap-2 px-2 py-1 text-sm"
               >
                 <Swatch color={color.hex} />
                 <Select.ItemText>{color.name}</Select.ItemText>

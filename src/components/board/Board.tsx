@@ -11,7 +11,7 @@ import { BoardColumn } from './BoardColumn'
 import { Composer } from './Composer'
 import { Failure } from './Failure'
 
-const note = 'px-1 text-sm text-neutral-500'
+const note = 'px-1 text-sm text-fog-dim'
 
 type Props = { boards: BoardSummary[]; boardId: string; slot: string; initial?: BoardView }
 
@@ -23,7 +23,7 @@ export function Board({ boards, boardId, slot, initial }: Props) {
   if (isPending) return <p className={note}>Читаем доску…</p>
 
   return (
-    <div className="flex h-full items-start gap-3">
+    <div className="flex h-full items-start gap-3.5">
       <SortableContext
         items={data.lists.map((list) => dragId(slot, 'list', list.id))}
         strategy={horizontalListSortingStrategy}
@@ -32,7 +32,7 @@ export function Board({ boards, boardId, slot, initial }: Props) {
           <BoardColumn key={list.id} boards={boards} boardId={boardId} slot={slot} list={list} />
         ))}
       </SortableContext>
-      <div className="w-72 shrink-0 rounded-lg bg-neutral-900/30 p-2">
+      <div className="w-44 shrink-0">
         <Composer
           action="Список"
           label="Название нового списка"

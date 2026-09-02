@@ -5,18 +5,26 @@ import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts
 import { EventEtagMismatchError, type GoogleEvent } from '../google/events.ts'
 import { DEFAULT_CALENDAR_COLOR } from '../../lib/calendar-colors.ts'
 import { ConflictError, InvalidInputError, NotFoundError } from './errors.ts'
-import { listEvents, updateEvent } from './google-events.ts'
+import { createEvent, getEvent, listEvents, removeEvent, updateEvent } from './google-events.ts'
 
 vi.mock('../google/events.ts', async (importActual) => {
   const actual = await importActual<typeof import('../google/events.ts')>()
-  return { ...actual, patchEvent: vi.fn(), fetchEvent: vi.fn() }
+  return {
+    ...actual,
+    patchEvent: vi.fn(),
+    fetchEvent: vi.fn(),
+    insertEvent: vi.fn(),
+    deleteEvent: vi.fn(),
+  }
 })
 vi.mock('./google-accounts.ts', async (importActual) => {
   const actual = await importActual<typeof import('./google-accounts.ts')>()
   return { ...actual, accessTokenFor: vi.fn() }
 })
 
-const { patchEvent, fetchEvent } = vi.mocked(await import('../google/events.ts'))
+const { patchEvent, fetchEvent, insertEvent, deleteEvent } = vi.mocked(
+  await import('../google/events.ts'),
+)
 const { accessTokenFor } = vi.mocked(await import('./google-accounts.ts'))
 
 beforeEach(() => {
@@ -34,6 +42,7 @@ function googleEvent(patch: Partial<GoogleEvent> = {}): GoogleEvent {
     etag: '"42"',
     googleUpdatedAt: new Date('2026-09-02T10:00:00Z'),
     recurringEventId: null,
+    htmlLink: null,
     times: {
       allDay: false,
       startsAt: new Date('2026-09-02T09:00:00Z'),
@@ -45,7 +54,16 @@ function googleEvent(patch: Partial<GoogleEvent> = {}): GoogleEvent {
   }
 }
 
-async function event(patch: { etag?: string | null; deletedAt?: Date } = {}) {
+async function event(
+  patch: {
+    etag?: string | null
+    deletedAt?: Date
+    descriptionHtml?: string
+    googleEventId?: string
+    recurringEventId?: string
+    htmlLink?: string
+  } = {},
+) {
   const [account] = await db
     .insert(googleAccounts)
     .values({ email: 'me@gmail.com', refreshTokenEncrypted: 'шифротекст' })
@@ -60,9 +78,12 @@ async function event(patch: { etag?: string | null; deletedAt?: Date } = {}) {
     .insert(calendarEvents)
     .values({
       calendarId: calendar.id,
-      googleEventId: 'e1',
+      googleEventId: patch.googleEventId ?? 'e1',
       title: 'Созвон',
       etag: patch.etag === undefined ? '"41"' : patch.etag,
+      descriptionHtml: patch.descriptionHtml ?? null,
+      recurringEventId: patch.recurringEventId ?? null,
+      htmlLink: patch.htmlLink ?? null,
       startsAt: new Date('2026-09-02T09:00:00Z'),
       endsAt: new Date('2026-09-02T10:00:00Z'),
       deletedAt: patch.deletedAt ?? null,
@@ -97,6 +118,26 @@ describe('правка события в Google', () => {
     )
     const row = await stored(eventId)
     expect(row).toMatchObject({ title: 'Созвон с Петей', etag: '"43"' })
+  })
+
+  it('правка повторяющегося идёт по экземпляру, а не по серии: ADR-004', async () => {
+    const { eventId } = await event({
+      googleEventId: 'series_20260902T090000Z',
+      recurringEventId: 'series',
+    })
+    patchEvent.mockResolvedValue(
+      googleEvent({ googleEventId: 'series_20260902T090000Z', recurringEventId: 'series' }),
+    )
+
+    await updateEvent(eventId, { title: 'Только сегодня' })
+
+    expect(patchEvent).toHaveBeenCalledWith(
+      'ya29.access',
+      'me@gmail.com',
+      'series_20260902T090000Z',
+      { title: 'Только сегодня' },
+      '"41"',
+    )
   })
 
   it('412: чужая правка ложится в базу, наша накладывается поверх новым etag', async () => {
@@ -288,6 +329,174 @@ function put(calendarId: string, values: Partial<typeof calendarEvents.$inferIns
     .returning({ id: calendarEvents.id })
     .then(([row]) => row.id)
 }
+
+describe('описание события', () => {
+  it('уходит в Google разметкой: перевод строки не теряется', async () => {
+    const { eventId } = await event()
+    patchEvent.mockResolvedValue(googleEvent({ descriptionHtml: 'Повестка:<br>сроки' }))
+
+    await updateEvent(eventId, { description: 'Повестка:\nсроки' })
+
+    expect(patchEvent.mock.calls[0][3]).toEqual({ descriptionHtml: 'Повестка:<br>сроки' })
+  })
+
+  it('пустое описание стирает, а не пишет пустую строку', async () => {
+    const { eventId } = await event({ descriptionHtml: '<p>было</p>' })
+    patchEvent.mockResolvedValue(googleEvent({ descriptionHtml: null }))
+
+    await updateEvent(eventId, { description: '   ' })
+
+    expect(patchEvent.mock.calls[0][3]).toEqual({ descriptionHtml: null })
+  })
+})
+
+describe('событие для панели правки', () => {
+  it('отдаёт описание текстом и календарь, в котором событие лежит', async () => {
+    const { eventId, calendarId } = await event({
+      descriptionHtml: '<p>Повестка</p><a href="https://meet.google.com/x">Meet</a>',
+    })
+
+    const found = await getEvent(eventId)
+
+    expect(found).toMatchObject({
+      id: eventId,
+      calendarId,
+      title: 'Созвон',
+      description: 'Повестка\nMeet',
+      calendarTitle: 'Личный',
+      color: DEFAULT_CALENDAR_COLOR,
+    })
+  })
+
+  it('описания нет — и в поле правки пусто, а не пустая строка', async () => {
+    const { eventId } = await event()
+    await expect(getEvent(eventId)).resolves.toMatchObject({ description: null })
+  })
+
+  it('у экземпляра повторяющегося события есть серия и ссылка на неё в Google', async () => {
+    const { eventId } = await event({
+      googleEventId: 'series_20260902T090000Z',
+      recurringEventId: 'series',
+      htmlLink: 'https://www.google.com/calendar/event?eid=c2VyaWVz',
+    })
+
+    await expect(getEvent(eventId)).resolves.toMatchObject({
+      recurringEventId: 'series',
+      htmlLink: 'https://www.google.com/calendar/event?eid=c2VyaWVz',
+    })
+  })
+
+  it('мягко удалённое и несуществующее не отдаёт', async () => {
+    const { eventId } = await event({ deletedAt: new Date() })
+    await expect(getEvent(eventId)).rejects.toThrow(NotFoundError)
+    await expect(getEvent('00000000-0000-4000-8000-000000000000')).rejects.toThrow(NotFoundError)
+  })
+})
+
+describe('удаление события', () => {
+  it('стирает в Google и гасит у себя, чтобы синхронизация не вернула его назад', async () => {
+    const { eventId } = await event()
+
+    const result = await removeEvent(eventId)
+
+    expect(result).toEqual({ eventId })
+    expect(deleteEvent).toHaveBeenCalledWith('ya29.access', 'me@gmail.com', 'e1')
+    const row = await stored(eventId)
+    expect(row.status).toBe('cancelled')
+    expect(row.deletedAt).not.toBeNull()
+  })
+
+  it('уже удалённое и несуществующее в Google не ходит', async () => {
+    const { eventId } = await event({ deletedAt: new Date() })
+
+    await expect(removeEvent(eventId)).rejects.toThrow(NotFoundError)
+    await expect(removeEvent('00000000-0000-4000-8000-000000000000')).rejects.toThrow(NotFoundError)
+    expect(deleteEvent).not.toHaveBeenCalled()
+  })
+
+  it('отказ Google оставляет событие на месте: гасим только то, что стёрли', async () => {
+    const { eventId } = await event()
+    deleteEvent.mockRejectedValue(new Error('Google отказал'))
+
+    await expect(removeEvent(eventId)).rejects.toThrow('Google отказал')
+    const row = await stored(eventId)
+    expect(row.status).toBe('confirmed')
+    expect(row.deletedAt).toBeNull()
+  })
+})
+
+describe('создание события в Google', () => {
+  const times = {
+    allDay: false as const,
+    startsAt: new Date('2026-09-02T09:00:00Z'),
+    endsAt: new Date('2026-09-02T10:00:00Z'),
+    startDate: null,
+    endDate: null,
+  }
+
+  it('заводит событие в Google и кладёт ответ в базу', async () => {
+    const calendarId = await calendar()
+    insertEvent.mockResolvedValue(googleEvent({ googleEventId: 'new1', title: 'Созвон' }))
+
+    const { eventId } = await createEvent(calendarId, { title: 'Созвон', times })
+
+    expect(insertEvent).toHaveBeenCalledWith('ya29.access', 'me@gmail.com', {
+      title: 'Созвон',
+      times,
+    })
+    const row = await stored(eventId)
+    expect(row).toMatchObject({ calendarId, googleEventId: 'new1', title: 'Созвон' })
+  })
+
+  it('пустое название уходит как отсутствующее, а не как пробелы', async () => {
+    const calendarId = await calendar()
+    insertEvent.mockResolvedValue(googleEvent({ googleEventId: 'new2', title: null }))
+
+    await createEvent(calendarId, { title: '   ', times })
+
+    expect(insertEvent.mock.calls[0][2].title).toBeNull()
+  })
+
+  it('событие на весь день уходит датами как есть', async () => {
+    const calendarId = await calendar()
+    const allDay = {
+      allDay: true as const,
+      startDate: '2026-03-01',
+      endDate: '2026-03-02',
+      startsAt: null,
+      endsAt: null,
+    }
+    insertEvent.mockResolvedValue(googleEvent({ googleEventId: 'new3', times: allDay }))
+
+    const { eventId } = await createEvent(calendarId, { title: 'Отгул', times: allDay })
+
+    expect(insertEvent.mock.calls[0][2].times).toMatchObject({
+      startDate: '2026-03-01',
+      endDate: '2026-03-02',
+    })
+    expect(await stored(eventId)).toMatchObject({
+      allDay: true,
+      startDate: '2026-03-01',
+      endDate: '2026-03-02',
+    })
+  })
+
+  it('негодное время в Google не уходит', async () => {
+    const calendarId = await calendar()
+
+    await expect(
+      createEvent(calendarId, { title: 'Созвон', times: { ...times, endsAt: times.startsAt } }),
+    ).rejects.toBeInstanceOf(InvalidInputError)
+    expect(insertEvent).not.toHaveBeenCalled()
+  })
+
+  it('в несуществующий календарь не пишет', async () => {
+    await expect(
+      createEvent('00000000-0000-4000-8000-000000000000', { title: 'Созвон', times }),
+    ).rejects.toBeInstanceOf(NotFoundError)
+    expect(insertEvent).not.toHaveBeenCalled()
+  })
+})
 
 describe('события в окне сетки', () => {
   it('отдаёт событие со временем вместе с цветом календаря', async () => {

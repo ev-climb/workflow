@@ -4,6 +4,7 @@ import {
   GoogleApiError,
   SyncTokenExpiredError,
   SyncTokenRejectedError,
+  deleteEvent,
   fetchEvent,
   fetchEvents,
   mapEvent,
@@ -104,6 +105,19 @@ describe('разбор события', () => {
     })
 
     expect(event?.recurringEventId).toBe('series')
+  })
+
+  it('ссылку в Google берём у него: своей мы её не собираем', () => {
+    const event = mapEvent({
+      id: 'series_20260727T090000Z',
+      recurringEventId: 'series',
+      htmlLink: 'https://www.google.com/calendar/event?eid=c2VyaWVz',
+      start: { dateTime: '2026-07-27T09:00:00Z' },
+      end: { dateTime: '2026-07-27T10:00:00Z' },
+    })
+
+    expect(event?.htmlLink).toBe('https://www.google.com/calendar/event?eid=c2VyaWVz')
+    expect(mapEvent({ id: 'e1' })?.htmlLink).toBeNull()
   })
 
   it('запись без идентификатора отбрасывается', () => {
@@ -310,5 +324,37 @@ describe('запись события обратно', () => {
     const event = await fetchEvent('ya29.access', 'me@gmail.com', 'e1')
 
     expect(event).toMatchObject({ googleEventId: 'e1', title: 'Созвон', etag: '"42"' })
+  })
+})
+
+describe('удаление события', () => {
+  it('идёт DELETE по адресу события и без If-Match: удаляют событие, а не его версию', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await deleteEvent('ya29.access', 'me@gmail.com', 'e1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toBe(
+      'https://www.googleapis.com/calendar/v3/calendars/me%40gmail.com/events/e1',
+    )
+    expect(init.method).toBe('DELETE')
+    expect(init.headers).not.toHaveProperty('if-match')
+  })
+
+  it('404 и 410 — событие уже стёрто, а не отказ', async () => {
+    for (const status of [404, 410]) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(answer({ error: { message: 'Gone' } }, status)))
+      await expect(deleteEvent('ya29.access', 'me@gmail.com', 'e1')).resolves.toBeUndefined()
+    }
+  })
+
+  it('прочий отказ пробрасывается, токен в сообщение не попадает', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(answer({ error: { message: 'Forbidden' } }, 403)))
+
+    const failure = await deleteEvent('ya29.secret', 'me@gmail.com', 'e1').catch((error) => error)
+
+    expect(failure).toBeInstanceOf(GoogleApiError)
+    expect(String((failure as Error).message)).not.toContain('secret')
   })
 })

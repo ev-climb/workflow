@@ -36,7 +36,7 @@ import { Failure } from './Failure'
 import { TitleField } from './TitleField'
 
 const quiet =
-  'shrink-0 rounded px-1.5 py-0.5 text-xs text-neutral-500 outline-none hover:bg-neutral-800 hover:text-neutral-200 focus-visible:ring-1 focus-visible:ring-neutral-600'
+  'btn-quiet shrink-0 px-1.5 py-0.5 text-xs'
 
 type Props = {
   boardId: string
@@ -75,10 +75,10 @@ export function CardChecklists({ boardId, cardId, onDragging }: Props) {
     // панель живёт в портале, но события всплывают по дереву React до самой карточки:
     // без остановки вместе с пунктом поехала бы и она
     <section onPointerDown={(event) => event.stopPropagation()}>
-      <h3 className="mb-1.5 text-xs text-neutral-500">Чек-листы</h3>
+      <h3 className="mb-1.5 text-[11px] tracking-[0.14em] text-fog-faint uppercase">Чек-листы</h3>
 
       {error ? (
-        <p className="text-sm text-neutral-500">Чек-листы не прочитались: {error.message}</p>
+        <p className="text-sm text-fog-dim">Чек-листы не прочитались: {error.message}</p>
       ) : isPending ? null : (
         <DndContext
           // контекст вложен в стольный, и идентификатор задан явно: сам dnd-kit нумерует
@@ -140,19 +140,19 @@ function Checklist({ boardId, cardId, checklist }: ChecklistProps) {
             label="Название чек-листа"
             onSubmit={(title) => rename.mutate(title)}
             onClose={() => setRenaming(false)}
-            className="min-w-0 flex-1 rounded bg-neutral-800 px-1 text-sm leading-snug font-medium text-neutral-100"
+            className="min-w-0 flex-1 rounded-lg bg-white/10 px-1.5 text-sm leading-snug font-medium text-fog"
           />
         ) : (
           <h4
             onDoubleClick={() => setRenaming(true)}
             title="Двойной клик — переименовать"
-            className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-200"
+            className="min-w-0 flex-1 truncate text-sm font-medium text-fog"
           >
             {checklist.title}
           </h4>
         )}
         <span
-          className={`shrink-0 text-xs tabular-nums ${whole ? 'text-emerald-400' : 'text-neutral-500'}`}
+          className={`shrink-0 text-xs tabular-nums ${whole ? 'text-done' : 'text-fog-dim'}`}
         >
           {done}/{checklist.items.length}
         </span>
@@ -168,20 +168,20 @@ function Checklist({ boardId, cardId, checklist }: ChecklistProps) {
       </div>
 
       {confirming ? (
-        <p className="mt-1 flex items-center gap-2 text-xs text-amber-300">
+        <p className="mt-1 flex items-center gap-2 text-xs text-caution">
           {checklist.items.length ? `Пунктов внутри: ${checklist.items.length}.` : 'Пунктов нет.'}
           <button
             type="button"
             disabled={remove.isPending}
             onClick={() => remove.mutate()}
-            className="rounded px-1.5 py-0.5 text-neutral-100 outline-none hover:bg-neutral-800 focus-visible:ring-1 focus-visible:ring-neutral-600"
+            className="rounded px-1.5 py-0.5 text-fog outline-none hover:bg-white/10 focus-visible:ring-1 focus-visible:ring-accent-line"
           >
             Удалить
           </button>
           <button
             type="button"
             onClick={() => setConfirming(false)}
-            className="rounded px-1.5 py-0.5 text-neutral-400 outline-none hover:bg-neutral-800 focus-visible:ring-1 focus-visible:ring-neutral-600"
+            className="rounded px-1.5 py-0.5 text-fog-muted outline-none hover:bg-white/10 focus-visible:ring-1 focus-visible:ring-accent-line"
           >
             Отмена
           </button>
@@ -190,8 +190,8 @@ function Checklist({ boardId, cardId, checklist }: ChecklistProps) {
 
       <ul
         ref={drop.setNodeRef}
-        className={`mt-1 space-y-0.5 rounded ${checklist.items.length ? '' : 'min-h-8'} ${
-          drop.isOver ? 'bg-neutral-800/40' : ''
+        className={`mt-1 space-y-0.5 rounded-xl ${checklist.items.length ? '' : 'min-h-8'} ${
+          drop.isOver ? 'bg-white/6' : ''
         }`}
       >
         <SortableContext
@@ -245,7 +245,7 @@ function Item({ boardId, cardId, checklistId, item }: ItemProps) {
         drag.isDragging ? 'opacity-30' : ''
       }
     >
-      <div className="group/item flex items-start gap-2 rounded px-1 py-0.5 hover:bg-neutral-900">
+      <div className="group/item flex items-start gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-white/6">
         <input
           type="checkbox"
           checked={done}
@@ -254,7 +254,7 @@ function Item({ boardId, cardId, checklistId, item }: ItemProps) {
             setWish(event.target.checked)
             update.mutate({ done: event.target.checked }, { onError: () => setWish(null) })
           }}
-          className="mt-0.5 size-3.5 shrink-0 accent-neutral-300"
+          className="mt-0.5 size-3.5 shrink-0 accent-accent"
         />
 
         {renaming ? (
@@ -263,7 +263,7 @@ function Item({ boardId, cardId, checklistId, item }: ItemProps) {
             label="Текст пункта"
             onSubmit={(title) => update.mutate({ title })}
             onClose={() => setRenaming(false)}
-            className="min-w-0 flex-1 rounded bg-neutral-800 px-1 text-sm leading-snug text-neutral-100"
+            className="min-w-0 flex-1 rounded-lg bg-white/10 px-1.5 text-sm leading-snug text-fog"
           />
         ) : (
           <span
@@ -272,8 +272,8 @@ function Item({ boardId, cardId, checklistId, item }: ItemProps) {
             {...drag.listeners}
             onDoubleClick={() => setRenaming(true)}
             title="Двойной клик — поправить"
-            className={`min-w-0 flex-1 cursor-grab text-sm leading-snug outline-none focus-visible:ring-1 focus-visible:ring-neutral-600 ${
-              done ? 'text-neutral-500 line-through' : 'text-neutral-200'
+            className={`min-w-0 flex-1 cursor-grab text-sm leading-snug outline-none focus-visible:ring-1 focus-visible:ring-accent-line ${
+              done ? 'text-fog-dim line-through' : 'text-fog'
             }`}
           >
             {item.title}

@@ -29,12 +29,12 @@ export function CardDescription({ boardId, cardId, description }: Props) {
   return (
     <section>
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <h3 className="text-xs text-neutral-500">Описание</h3>
+        <h3 className="text-[11px] tracking-[0.14em] text-fog-faint uppercase">Описание</h3>
         {editing ? null : (
           <button
             type="button"
             onClick={() => setDraft(description ?? '')}
-            className="rounded px-1.5 py-0.5 text-xs text-neutral-500 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-visible:ring-1 focus-visible:ring-neutral-600"
+            className="btn-quiet px-1.5 py-0.5 text-xs"
           >
             {description ? 'Править' : 'Добавить'}
           </button>
@@ -62,7 +62,7 @@ export function CardDescription({ boardId, cardId, description }: Props) {
                 save()
               }
             }}
-            className="w-full resize-y rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5 font-mono text-sm leading-relaxed text-neutral-100 outline-none focus-visible:border-neutral-500"
+            className="field w-full resize-y px-2 py-1.5 font-mono text-sm leading-relaxed"
           />
 
           <div className="mt-2 flex items-center gap-2">
@@ -70,27 +70,27 @@ export function CardDescription({ boardId, cardId, description }: Props) {
               type="button"
               onClick={save}
               disabled={describe.isPending}
-              className="rounded bg-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-900 outline-none hover:bg-white focus-visible:ring-1 focus-visible:ring-neutral-400 disabled:bg-neutral-800 disabled:text-neutral-500"
+              className="btn-primary px-3 py-1.5 text-sm"
             >
               Сохранить
             </button>
             <button
               type="button"
               onClick={() => setDraft(null)}
-              className="rounded px-3 py-1.5 text-sm text-neutral-400 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-visible:ring-1 focus-visible:ring-neutral-600"
+              className="btn-quiet px-3 py-1.5 text-sm"
             >
               Отмена
             </button>
-            <span className="text-xs text-neutral-600">Ctrl+Enter сохраняет</span>
+            <span className="text-xs text-fog-faint">Ctrl+Enter сохраняет</span>
           </div>
         </>
       ) : description ? (
         <div
-          className="markdown text-sm text-neutral-200"
+          className="markdown text-sm text-fog"
           dangerouslySetInnerHTML={{ __html: renderMarkdown(description) }}
         />
       ) : (
-        <p className="text-sm text-neutral-600">пусто</p>
+        <p className="text-sm text-fog-faint">пусто</p>
       )}
 
       <Failure error={describe.error} className="pt-1" />

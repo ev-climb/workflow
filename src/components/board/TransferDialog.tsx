@@ -51,12 +51,12 @@ export function TransferDialog({ boards, boardId, listId, card, onClose }: Props
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 w-96 max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-neutral-800 bg-neutral-950 p-4 shadow-xl outline-none">
-          <Dialog.Title className="text-sm font-medium text-neutral-100">
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px]" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 z-50 w-96 max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 surface-sheet rounded-2xl p-4 outline-none">
+          <Dialog.Title className="text-sm font-medium text-fog">
             Перенести карточку
           </Dialog.Title>
-          <Dialog.Description className="mt-0.5 truncate text-xs text-neutral-500">
+          <Dialog.Description className="mt-0.5 truncate text-xs text-fog-dim">
             {card.title}
           </Dialog.Description>
 
@@ -78,20 +78,20 @@ export function TransferDialog({ boards, boardId, listId, card, onClose }: Props
           </div>
 
           {target.data && !target.data.lists.length ? (
-            <p className="mt-3 text-xs text-neutral-500">На доске нет ни одного списка.</p>
+            <p className="mt-3 text-xs text-fog-dim">На доске нет ни одного списка.</p>
           ) : null}
 
           <div className="mt-3 min-h-8">
             {preview.data?.droppedLabels.length ? (
               <>
-                <p className="text-xs text-amber-300">
+                <p className="text-xs text-caution">
                   Этих меток на доске-приёмнике нет, они снимутся:
                 </p>
                 <ul className="mt-1.5 flex flex-wrap gap-1.5">
                   {preview.data.droppedLabels.map((label) => (
                     <li
                       key={label.id}
-                      className="flex items-center gap-1.5 rounded bg-neutral-900 px-1.5 py-0.5 text-xs text-neutral-300"
+                      className="flex items-center gap-1.5 rounded-lg bg-white/6 px-2 py-0.5 text-xs text-fog-muted"
                     >
                       <span
                         className="h-1.5 w-4 rounded-full"
@@ -103,21 +103,21 @@ export function TransferDialog({ boards, boardId, listId, card, onClose }: Props
                 </ul>
               </>
             ) : preview.data?.keptLabels.length ? (
-              <p className="text-xs text-neutral-500">Метки переедут все.</p>
+              <p className="text-xs text-fog-dim">Метки переедут все.</p>
             ) : null}
           </div>
 
           <Failure error={preview.error ?? transfer.error} className="pt-1" />
 
           <div className="mt-4 flex justify-end gap-2">
-            <Dialog.Close className="rounded px-3 py-1.5 text-sm text-neutral-400 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-visible:ring-1 focus-visible:ring-neutral-600">
+            <Dialog.Close className="btn-quiet px-3 py-1.5 text-sm">
               Отмена
             </Dialog.Close>
             <button
               type="button"
               disabled={unchanged || transfer.isPending}
               onClick={submit}
-              className="rounded bg-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-900 outline-none hover:bg-white focus-visible:ring-1 focus-visible:ring-neutral-400 disabled:bg-neutral-800 disabled:text-neutral-500"
+              className="btn-primary px-3 py-1.5 text-sm"
             >
               Перенести
             </button>
@@ -139,28 +139,28 @@ type ChoiceProps = {
 function Choice({ label, value, options, placeholder, onChange }: ChoiceProps) {
   return (
     <div>
-      <p className="mb-1 text-xs text-neutral-500">{label}</p>
+      <p className="mb-1 text-xs text-fog-dim">{label}</p>
       <Select.Root value={value ?? undefined} onValueChange={onChange}>
         <Select.Trigger
           aria-label={label}
           disabled={!options.length}
-          className="flex w-full items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus-visible:ring-1 focus-visible:ring-neutral-500 disabled:text-neutral-500"
+          className="field flex w-full items-center justify-between gap-2 px-2 py-1.5 text-sm disabled:text-fog-dim"
         >
           <Select.Value placeholder={placeholder} />
-          <Select.Icon className="text-neutral-500">▾</Select.Icon>
+          <Select.Icon className="text-fog-dim">▾</Select.Icon>
         </Select.Trigger>
         <Select.Portal>
           <Select.Content
             position="popper"
             sideOffset={4}
-            className="z-50 max-h-64 overflow-hidden rounded border border-neutral-800 bg-neutral-900 shadow-lg"
+            className="z-50 max-h-64 overflow-hidden surface-menu"
           >
             <Select.Viewport className="p-1">
               {options.map((option) => (
                 <Select.Item
                   key={option.id}
                   value={option.id}
-                  className="cursor-pointer rounded px-2 py-1 text-sm text-neutral-200 outline-none select-none data-[highlighted]:bg-neutral-800 data-[state=checked]:text-white"
+                  className="menu-item px-2 py-1 text-sm"
                 >
                   <Select.ItemText>{option.title}</Select.ItemText>
                 </Select.Item>

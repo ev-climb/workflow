@@ -14,14 +14,14 @@ export function ReauthBanner({ accounts }: Props) {
   return (
     <div
       role="status"
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-amber-900 bg-amber-950 px-3 py-2 text-xs text-amber-200"
+      className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-caution-line bg-caution-wash px-4 py-2 text-xs text-caution backdrop-blur-md"
     >
       <span>Google отозвал доступ — события не обновляются, пока не подключишь заново.</span>
       {accounts.map((account) => (
         <a
           key={account.id}
           href={connectUrl(account.email)}
-          className="rounded border border-amber-700 px-2 py-1 font-medium text-amber-100 outline-none hover:bg-amber-900 focus-visible:ring-1 focus-visible:ring-amber-500"
+          className="rounded-lg border border-caution-line px-2.5 py-1 font-medium text-caution outline-none transition-colors hover:bg-caution-wash focus-visible:ring-1 focus-visible:ring-caution-line"
         >
           Подключить заново {account.email}
         </a>

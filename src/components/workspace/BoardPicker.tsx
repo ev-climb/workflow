@@ -24,16 +24,16 @@ export function BoardPicker({ boards, boardId, label, onChoose }: Props) {
     >
       <Select.Trigger
         aria-label={label}
-        className="flex items-center gap-2 rounded px-2 py-1 text-sm font-medium text-neutral-100 outline-none hover:bg-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-500 data-[state=open]:bg-neutral-900"
+        className="flex items-center gap-2 rounded-lg px-2 py-1 text-[15.5px] font-semibold tracking-[-0.01em] text-fog transition-colors outline-none hover:bg-white/8 focus-visible:ring-1 focus-visible:ring-accent-line data-[state=open]:bg-white/8"
       >
         <Select.Value />
-        <Select.Icon className="text-neutral-500">▾</Select.Icon>
+        <Select.Icon className="text-[9px] text-fog-dim">▾</Select.Icon>
       </Select.Trigger>
       <Select.Portal>
         <Select.Content
           position="popper"
           sideOffset={4}
-          className="z-50 overflow-hidden rounded border border-neutral-800 bg-neutral-900 shadow-lg"
+          className="z-50 overflow-hidden surface-menu"
         >
           <Select.Viewport className="p-1">
             <Item value={EMPTY}>Пусто</Item>
@@ -53,7 +53,7 @@ function Item({ value, children }: { value: string; children: React.ReactNode })
   return (
     <Select.Item
       value={value}
-      className="cursor-pointer rounded px-2 py-1 text-sm text-neutral-200 outline-none select-none data-[highlighted]:bg-neutral-800 data-[state=checked]:text-white"
+      className="menu-item px-2 py-1 text-sm"
     >
       <Select.ItemText>{children}</Select.ItemText>
     </Select.Item>

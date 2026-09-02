@@ -31,7 +31,7 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         {/* доски должны просвечивать: накладка притеняет стол, но не закрывает его */}
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]" />
         <Dialog.Content
           onEscapeKeyDown={(event) => {
             // Radix слушает Escape на документе в захвате, погасить его всплытием нельзя.
@@ -39,7 +39,7 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
             // панель закрывает только Escape снаружи.
             if (dragging || document.activeElement?.tagName === 'TEXTAREA') event.preventDefault()
           }}
-          className="fixed top-0 right-0 z-50 flex h-full w-112 max-w-[calc(100vw-3rem)] flex-col overflow-y-auto border-l border-neutral-800 bg-neutral-950 p-4 shadow-xl outline-none"
+          className="surface-sheet fixed top-0 right-0 z-50 flex h-full w-112 max-w-[calc(100vw-3rem)] flex-col overflow-y-auto rounded-l-2xl border-y-0 border-r-0 p-5 outline-none"
         >
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
@@ -54,28 +54,28 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
                     label="Заголовок карточки"
                     onSubmit={(next) => rename.mutate(next)}
                     onClose={() => setRenaming(false)}
-                    className="w-full rounded bg-neutral-800 px-1 text-base leading-snug font-medium text-neutral-100"
+                    className="w-full rounded-lg bg-white/10 px-1.5 text-base leading-snug font-medium text-fog"
                   />
                 </>
               ) : (
-                <Dialog.Title className="text-base leading-snug font-medium text-neutral-100">
+                <Dialog.Title className="text-base leading-snug font-medium text-fog">
                   <button
                     type="button"
                     onClick={() => setRenaming(true)}
                     title="Переименовать"
-                    className="w-full rounded px-1 text-left outline-none hover:bg-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-600"
+                    className="w-full rounded-lg px-1.5 py-0.5 text-left outline-none transition-colors hover:bg-white/6 focus-visible:ring-1 focus-visible:ring-accent-line"
                   >
                     {heading}
                   </button>
                 </Dialog.Title>
               )}
-              <Dialog.Description className="mt-1 truncate text-xs text-neutral-500">
+              <Dialog.Description className="mt-1 truncate text-xs text-fog-dim">
                 {data ? `${data.boardTitle} › ${data.listTitle}` : 'Читаем карточку…'}
               </Dialog.Description>
             </div>
             <Dialog.Close
               aria-label="Закрыть"
-              className="rounded px-1.5 text-neutral-500 outline-none hover:bg-neutral-900 hover:text-neutral-200 focus-visible:ring-1 focus-visible:ring-neutral-600"
+              className="btn-quiet px-2 py-0.5 leading-none"
             >
               ✕
             </Dialog.Close>
@@ -84,7 +84,7 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
           <Failure error={rename.error} className="pt-2" />
 
           {error ? (
-            <p role="status" className="mt-6 text-sm text-red-300">
+            <p role="status" className="mt-6 text-sm text-alarm">
               Карточка не прочиталась: {error.message}
             </p>
           ) : isPending ? null : (
