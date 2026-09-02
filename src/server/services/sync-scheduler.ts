@@ -16,6 +16,9 @@ export const STARTUP_DELAY_MS = 5_000
 type SchedulerState = {
   timer: ReturnType<typeof setTimeout> | null
   stopped: boolean
+  running: boolean
+  /** Проход попросили, пока шёл предыдущий: следующий пойдёт сразу, а не по расписанию. */
+  again: boolean
 }
 
 const store = globalThis as typeof globalThis & { syncScheduler?: SchedulerState }
@@ -40,6 +43,7 @@ function schedule(state: SchedulerState, delay: number): void {
 async function pass(state: SchedulerState): Promise<void> {
   if (state.stopped) return
 
+  state.running = true
   try {
     const run = await syncAllCalendars()
     for (const failure of run.failures) {
@@ -50,9 +54,32 @@ async function pass(state: SchedulerState): Promise<void> {
     console.warn('проход синхронизации упал:', error)
   }
 
+  state.running = false
+
   // отсчёт от конца прохода, а не от начала: медленная синхронизация не должна
   // наслаиваться сама на себя
-  schedule(state, nextDelayMs())
+  const asked = state.again
+  state.again = false
+  schedule(state, asked ? 0 : nextDelayMs())
+}
+
+/**
+ * Проход прямо сейчас, не дожидаясь очередного тика. Зовётся, когда ждать нечего и незачем:
+ * аккаунт только что подключили, и до фонового тика его события не появились бы десять
+ * минут. Просьба во время идущего прохода не запускает второй, а переносит следующий на
+ * его конец: параллельные проходы удвоили бы запросы к Google без всякой пользы.
+ */
+export function syncNow(): void {
+  const state = store.syncScheduler
+  if (!state || state.stopped) return
+
+  if (state.running) {
+    state.again = true
+    return
+  }
+
+  if (state.timer) clearTimeout(state.timer)
+  schedule(state, 0)
 }
 
 /**
@@ -66,7 +93,7 @@ export function startSyncScheduler(): void {
   }
   if (store.syncScheduler) return
 
-  const state: SchedulerState = { timer: null, stopped: false }
+  const state: SchedulerState = { timer: null, stopped: false, running: false, again: false }
   store.syncScheduler = state
   schedule(state, STARTUP_DELAY_MS)
 }

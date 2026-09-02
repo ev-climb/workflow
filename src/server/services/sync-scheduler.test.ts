@@ -5,6 +5,7 @@ import {
   STARTUP_DELAY_MS,
   startSyncScheduler,
   stopSyncScheduler,
+  syncNow,
 } from './sync-scheduler.ts'
 
 vi.mock('./google-sync.ts', () => ({ syncAllCalendars: vi.fn() }))
@@ -155,6 +156,55 @@ describe('таймер синхронизации', () => {
     stopSyncScheduler()
 
     await vi.advanceTimersByTimeAsync(BACKGROUND_INTERVAL_MS * 2)
+    expect(syncAllCalendars).not.toHaveBeenCalled()
+  })
+
+  it('просьба пройтись сейчас не ждёт очередного тика', async () => {
+    startSyncScheduler()
+    await vi.advanceTimersByTimeAsync(STARTUP_DELAY_MS)
+    expect(syncAllCalendars).toHaveBeenCalledTimes(1)
+
+    syncNow()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(syncAllCalendars).toHaveBeenCalledTimes(2)
+  })
+
+  it('после внеочередного прохода расписание продолжается как обычно', async () => {
+    startSyncScheduler()
+    await vi.advanceTimersByTimeAsync(STARTUP_DELAY_MS)
+
+    syncNow()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(syncAllCalendars).toHaveBeenCalledTimes(2)
+
+    await vi.advanceTimersByTimeAsync(BACKGROUND_INTERVAL_MS)
+    expect(syncAllCalendars).toHaveBeenCalledTimes(3)
+  })
+
+  it('просьба во время прохода переносит следующий на его конец, а не запускает второй', async () => {
+    let finish = () => {}
+    syncAllCalendars.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve(idle)
+        }),
+    )
+    startSyncScheduler()
+    await vi.advanceTimersByTimeAsync(STARTUP_DELAY_MS)
+
+    syncNow()
+    await vi.advanceTimersByTimeAsync(BACKGROUND_INTERVAL_MS)
+    expect(syncAllCalendars).toHaveBeenCalledTimes(1)
+
+    finish()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(syncAllCalendars).toHaveBeenCalledTimes(2)
+  })
+
+  it('без поднятого таймера просьба ничего не делает', async () => {
+    syncNow()
+
+    await vi.advanceTimersByTimeAsync(BACKGROUND_INTERVAL_MS)
     expect(syncAllCalendars).not.toHaveBeenCalled()
   })
 })

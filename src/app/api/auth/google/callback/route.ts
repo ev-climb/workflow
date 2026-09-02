@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { OAUTH_STATE_COOKIE } from '@/lib/google-oauth'
 import { InvalidInputError } from '@/server/services/errors'
 import { connectGoogleAccount } from '@/server/services/google-accounts'
+import { syncNow } from '@/server/services/sync-scheduler'
 
 /**
  * Возврат из Google. Разбирает вход, зовёт сервис, уводит обратно в настройки —
@@ -32,6 +33,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const account = await connectGoogleAccount(code)
+    // события подключённого аккаунта нужны сейчас, а не через фоновый тик
+    syncNow()
     return settled(['connected', account.email])
   } catch (error) {
     if (error instanceof InvalidInputError) return settled(['error', error.message])
