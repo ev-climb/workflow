@@ -4,7 +4,7 @@ import { addDays } from '../../lib/calendar-grid.ts'
 import { momentInMoscow } from '../../lib/dates.ts'
 import { descriptionHtml, descriptionText } from '../../lib/event-description.ts'
 import { db } from '../db/client.ts'
-import { calendarEvents, googleCalendars, timeBlocks } from '../db/schema.ts'
+import { calendarEvents, googleAccounts, googleCalendars, timeBlocks } from '../db/schema.ts'
 import {
   EventEtagMismatchError,
   type EventDraft,
@@ -26,7 +26,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/
 export type CalendarEvent = {
   id: string
   calendarId: string
-  /** Цвет календаря, к которому событие относится: у события своего цвета нет. */
+  /** Цвет аккаунта, а если у календаря выбран свой — его: события своего цвета не имеют. */
   color: string
   title: string | null
   allDay: boolean
@@ -74,7 +74,7 @@ const EVENT = {
 const LISTED = {
   id: calendarEvents.id,
   calendarId: calendarEvents.calendarId,
-  color: googleCalendars.color,
+  color: sql<string | null>`coalesce(${googleCalendars.color}, ${googleAccounts.color})`,
   title: calendarEvents.title,
   allDay: calendarEvents.allDay,
   startsAt: calendarEvents.startsAt,
@@ -114,6 +114,7 @@ export async function listEvents(from: string, to: string): Promise<CalendarEven
     .select(LISTED)
     .from(calendarEvents)
     .innerJoin(googleCalendars, eq(googleCalendars.id, calendarEvents.calendarId))
+    .innerJoin(googleAccounts, eq(googleAccounts.id, googleCalendars.accountId))
     .where(
       and(
         eq(googleCalendars.visible, true),
@@ -156,6 +157,7 @@ export async function getEvent(id: string): Promise<CalendarEventDetails> {
     .select(DETAILED)
     .from(calendarEvents)
     .innerJoin(googleCalendars, eq(googleCalendars.id, calendarEvents.calendarId))
+    .innerJoin(googleAccounts, eq(googleAccounts.id, googleCalendars.accountId))
     .where(
       and(
         eq(calendarEvents.id, id),

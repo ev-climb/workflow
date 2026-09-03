@@ -139,12 +139,18 @@ export const checklistItemPatchBody = z.union(
   { error: 'ожидается {title}, {done} или {checklistId}' },
 )
 
-/** Правка календаря: цвет, видимость или оба сразу. Цвет сервис сверяет с форматом. */
+/**
+ * Правка календаря: цвет, видимость или оба сразу. Цвет сервис сверяет с форматом,
+ * `null` возвращает календарь к цвету аккаунта.
+ */
 export const calendarPatchBody = z
-  .object({ color: z.string().optional(), visible: z.boolean().optional() })
+  .object({ color: z.string().nullable().optional(), visible: z.boolean().optional() })
   .refine((body) => body.color !== undefined || body.visible !== undefined, {
     error: 'ожидается {color}, {visible} или оба',
   })
+
+/** Правка аккаунта: пока только цвет, которым красятся все его события. */
+export const accountPatchBody = z.object({ color: z.string() })
 
 /**
  * Время события с клиента. Пара дат у события на весь день и пара моментов у обычного

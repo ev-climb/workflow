@@ -300,10 +300,16 @@ describe('правка события в Google', () => {
   })
 })
 
-async function calendar(patch: { color?: string; visible?: boolean; accessRole?: string } = {}) {
+async function calendar(
+  patch: { color?: string; accountColor?: string; visible?: boolean; accessRole?: string } = {},
+) {
   const [account] = await db
     .insert(googleAccounts)
-    .values({ email: `me${counter++}@gmail.com`, refreshTokenEncrypted: 'шифротекст' })
+    .values({
+      email: `me${counter++}@gmail.com`,
+      color: patch.accountColor ?? null,
+      refreshTokenEncrypted: 'шифротекст',
+    })
     .returning({ id: googleAccounts.id })
 
   const [row] = await db
@@ -510,7 +516,7 @@ describe('создание события в Google', () => {
 
 describe('события в окне сетки', () => {
   it('отдаёт событие со временем вместе с цветом календаря', async () => {
-    const calendarId = await calendar({ color: '#039be5' })
+    const calendarId = await calendar({ color: '#039be5', accountColor: '#f6bf26' })
     const id = await put(calendarId, {
       startsAt: new Date('2026-09-02T09:00:00Z'),
       endsAt: new Date('2026-09-02T10:00:00Z'),
@@ -532,7 +538,18 @@ describe('события в окне сетки', () => {
     ])
   })
 
-  it('подставляет запасной цвет календарю без цвета', async () => {
+  it('красит событие цветом аккаунта, пока у календаря своего нет', async () => {
+    const calendarId = await calendar({ accountColor: '#f6bf26' })
+    await put(calendarId, {
+      startsAt: new Date('2026-09-02T09:00:00Z'),
+      endsAt: new Date('2026-09-02T10:00:00Z'),
+    })
+
+    const [event] = await listEvents('2026-09-02', '2026-09-02')
+    expect(event.color).toBe('#f6bf26')
+  })
+
+  it('подставляет запасной цвет, когда цвета нет ни у календаря, ни у аккаунта', async () => {
     const calendarId = await calendar()
     await put(calendarId, {
       startsAt: new Date('2026-09-02T09:00:00Z'),

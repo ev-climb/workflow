@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { asc, eq } from 'drizzle-orm'
+import { isCalendarColor, nextAccountColor } from '../../lib/calendar-colors.ts'
 import { db } from '../db/client.ts'
-import { googleAccounts } from '../db/schema.ts'
+import { googleAccounts, googleCalendars } from '../db/schema.ts'
 import { type GoogleCalendarEntry, fetchCalendarList } from '../google/calendars.ts'
 import {
   type GoogleAccessToken,
@@ -19,6 +20,8 @@ import { saveCalendarList } from './google-calendars.ts'
 export type GoogleAccountSummary = {
   id: string
   email: string
+  /** Цвет событий аккаунта на сетке. */
+  color: string | null
   needsReauth: boolean
   connectedAt: Date
 }
@@ -29,6 +32,7 @@ const EXPIRY_MARGIN_MS = 60_000
 const SELECT = {
   id: googleAccounts.id,
   email: googleAccounts.email,
+  color: googleAccounts.color,
   needsReauth: googleAccounts.needsReauth,
   connectedAt: googleAccounts.createdAt,
 }
@@ -84,9 +88,12 @@ export async function connectGoogleAccount(code: string): Promise<GoogleAccountS
     accessTokenExpiresAt: tokens.expiresAt,
   }
 
+  // цвет выбран пользователем, поэтому повторное подключение его не трогает
+  const used = await db.select({ color: googleAccounts.color }).from(googleAccounts)
+
   const [account] = await db
     .insert(googleAccounts)
-    .values({ email, ...secrets })
+    .values({ email, color: nextAccountColor(used.map((row) => row.color)), ...secrets })
     .onConflictDoUpdate({
       target: googleAccounts.email,
       set: { ...secrets, needsReauth: false, updatedAt: new Date() },
@@ -94,6 +101,36 @@ export async function connectGoogleAccount(code: string): Promise<GoogleAccountS
     .returning(SELECT)
 
   await saveCalendarList(account.id, calendars)
+
+  return account
+}
+
+/**
+ * Цвет аккаунта. Заодно снимает цвета с его календарей: они наследуют цвет аккаунта, а
+ * выбор, сделанный для отдельного календаря, после смены общего цвета означал бы совсем
+ * не то, что означал раньше.
+ */
+export async function updateGoogleAccount(
+  id: string,
+  changes: { color: string },
+): Promise<GoogleAccountSummary> {
+  const color = changes.color.trim().toLowerCase()
+  if (!isCalendarColor(color)) {
+    throw new InvalidInputError(`цвет аккаунта: ожидается #rrggbb, а не «${changes.color}»`)
+  }
+
+  const [account] = await db
+    .update(googleAccounts)
+    .set({ color, updatedAt: new Date() })
+    .where(eq(googleAccounts.id, id))
+    .returning(SELECT)
+
+  if (!account) throw new NotFoundError(`аккаунта ${id} нет`)
+
+  await db
+    .update(googleCalendars)
+    .set({ color: null, updatedAt: new Date() })
+    .where(eq(googleCalendars.accountId, id))
 
   return account
 }

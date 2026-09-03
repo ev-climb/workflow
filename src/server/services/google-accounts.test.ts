@@ -11,6 +11,7 @@ import {
   connectGoogleAccount,
   listAccountsNeedingReauth,
   listGoogleAccounts,
+  updateGoogleAccount,
 } from './google-accounts.ts'
 import {
   type GoogleCalendarSummary,
@@ -31,7 +32,6 @@ function entry(patch: Partial<GoogleCalendarEntry> = {}): GoogleCalendarEntry {
   return {
     googleCalendarId: 'ru.russian#holiday@group.v.calendar.google.com',
     title: 'Праздники России',
-    color: '#16a765',
     selected: true,
     accessRole: 'reader',
     primary: false,
@@ -55,7 +55,7 @@ function googleAnswers(
 ) {
   exchangeCode.mockResolvedValue(tokens(patch))
   fetchCalendarList.mockResolvedValue([
-    entry({ googleCalendarId: email, title: email, color: '#9fe1e7', primary: true }),
+    entry({ googleCalendarId: email, title: email, primary: true }),
     ...calendars,
   ])
 }
@@ -120,6 +120,44 @@ describe('подключение аккаунта Google', () => {
     ])
   })
 
+  it('аккаунты разводятся цветом сами, а выбранный цвет подключение не трогает', async () => {
+    googleAnswers('first@gmail.com')
+    const first = await connectGoogleAccount('code')
+    googleAnswers('second@gmail.com')
+    await connectGoogleAccount('code')
+
+    expect((await listGoogleAccounts()).map((a) => a.color)).toEqual(['#039be5', '#f6bf26'])
+
+    await updateGoogleAccount(first.id, { color: '#8E24AA' })
+    googleAnswers('first@gmail.com')
+    await connectGoogleAccount('code')
+
+    expect((await listGoogleAccounts()).map((a) => a.color)).toEqual(['#8e24aa', '#f6bf26'])
+  })
+
+  it('смена цвета аккаунта возвращает его календари к наследованию', async () => {
+    googleAnswers('me@gmail.com', {}, [entry()])
+    const account = await connectGoogleAccount('code')
+    const holidays = byId(await listGoogleCalendars(), entry().googleCalendarId)
+    await updateGoogleCalendar(holidays.id, { color: '#d50000' })
+
+    await updateGoogleAccount(account.id, { color: '#f6bf26' })
+
+    expect(await listGoogleCalendars()).toMatchObject([
+      { color: null, accountColor: '#f6bf26' },
+      { color: null, accountColor: '#f6bf26' },
+    ])
+  })
+
+  it('цвет аккаунта не из шестнадцатеричного формата — ошибка входа', async () => {
+    googleAnswers('me@gmail.com')
+    const account = await connectGoogleAccount('code')
+
+    await expect(updateGoogleAccount(account.id, { color: 'жёлтый' })).rejects.toThrow(
+      InvalidInputError,
+    )
+  })
+
   it('календари аккаунта заводятся сразу за ним', async () => {
     googleAnswers('me@gmail.com', {}, [entry({ selected: false })])
 
@@ -129,13 +167,13 @@ describe('подключение аккаунта Google', () => {
     expect(calendars.map((calendar) => calendar.accountId)).toEqual([account.id, account.id])
     expect(byId(calendars, 'me@gmail.com')).toMatchObject({
       title: 'me@gmail.com',
-      color: '#9fe1e7',
+      color: null,
       visible: true,
     })
     // снятая в Google отметка — это «не показывать»
     expect(byId(calendars, entry().googleCalendarId)).toMatchObject({
       title: 'Праздники России',
-      color: '#16a765',
+      color: null,
       visible: false,
     })
   })

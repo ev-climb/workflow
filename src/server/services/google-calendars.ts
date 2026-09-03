@@ -1,7 +1,7 @@
 import { asc, eq, sql } from 'drizzle-orm'
 import { isCalendarColor } from '../../lib/calendar-colors.ts'
 import { db } from '../db/client.ts'
-import { googleCalendars } from '../db/schema.ts'
+import { googleAccounts, googleCalendars } from '../db/schema.ts'
 import type { GoogleCalendarEntry } from '../google/calendars.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 
@@ -10,7 +10,9 @@ export type GoogleCalendarSummary = {
   accountId: string
   googleCalendarId: string
   title: string
+  /** Свой цвет календаря; пусто — красится цветом аккаунта. */
   color: string | null
+  accountColor: string | null
   visible: boolean
   /** Можно ли писать в календарь: подписной вроде «Праздников России» — только читать. */
   writable: boolean
@@ -22,6 +24,7 @@ const SELECT = {
   googleCalendarId: googleCalendars.googleCalendarId,
   title: googleCalendars.title,
   color: googleCalendars.color,
+  accountColor: googleAccounts.color,
   visible: googleCalendars.visible,
   accessRole: googleCalendars.accessRole,
 }
@@ -45,9 +48,10 @@ function summarize<T extends { accessRole: string | null }>(
 }
 
 /**
- * Список календарей аккаунта после подключения. Незнакомый заводится с цветом и отметкой,
- * как в Google; у знакомого обновляется только название — цвет и видимость выбраны
- * пользователем, и повторное подключение аккаунта не должно затирать этот выбор.
+ * Список календарей аккаунта после подключения. Незнакомый заводится с отметкой, как в
+ * Google, и без своего цвета — красится цветом аккаунта; у знакомого обновляется только
+ * название, потому что цвет и видимость выбраны пользователем, и повторное подключение
+ * аккаунта не должно затирать этот выбор.
  *
  * Пропавший из Google календарь не удаляем: его события уже лежат у нас, а разбирается
  * с этим синхронизация.
@@ -65,7 +69,6 @@ export async function saveCalendarList(
         accountId,
         googleCalendarId: entry.googleCalendarId,
         title: entry.title,
-        color: entry.color,
         accessRole: entry.accessRole,
         visible: entry.selected,
       })),
@@ -84,35 +87,50 @@ export async function saveCalendarList(
 
 /** Все календари всех аккаунтов: экран настроек сам раскладывает их по аккаунтам. */
 export async function listGoogleCalendars(): Promise<GoogleCalendarSummary[]> {
-  const rows = await db.select(SELECT).from(googleCalendars).orderBy(asc(googleCalendars.title))
+  const rows = await db
+    .select(SELECT)
+    .from(googleCalendars)
+    .innerJoin(googleAccounts, eq(googleAccounts.id, googleCalendars.accountId))
+    .orderBy(asc(googleCalendars.title))
   return rows.map(summarize)
 }
 
 /**
- * Цвет и видимость календаря. Цвет — любой `#rrggbb`, а не значение из набора: пришедший
- * из Google в набор не входит, и проверка по списку сбрасывала бы его на чужой.
+ * Цвет и видимость календаря. Цвет — любой `#rrggbb`, а не значение из набора: набор тут
+ * только подсказка, и проверка по списку сбрасывала бы чужой цвет. `null` возвращает
+ * календарь к цвету аккаунта.
  */
 export async function updateGoogleCalendar(
   id: string,
-  changes: { color?: string; visible?: boolean },
+  changes: { color?: string | null; visible?: boolean },
 ): Promise<GoogleCalendarSummary> {
-  const patch: { color?: string; visible?: boolean; updatedAt: Date } = { updatedAt: new Date() }
+  const patch: { color?: string | null; visible?: boolean; updatedAt: Date } = {
+    updatedAt: new Date(),
+  }
 
   if (changes.color !== undefined) {
-    const color = changes.color.trim().toLowerCase()
-    if (!isCalendarColor(color)) {
+    const color = changes.color?.trim().toLowerCase() ?? null
+    if (color !== null && !isCalendarColor(color)) {
       throw new InvalidInputError(`цвет календаря: ожидается #rrggbb, а не «${changes.color}»`)
     }
     patch.color = color
   }
   if (changes.visible !== undefined) patch.visible = changes.visible
 
-  const [calendar] = await db
+  const [updated] = await db
     .update(googleCalendars)
     .set(patch)
     .where(eq(googleCalendars.id, id))
-    .returning(SELECT)
+    .returning({ id: googleCalendars.id })
 
-  if (!calendar) throw new NotFoundError(`календаря ${id} нет`)
+  if (!updated) throw new NotFoundError(`календаря ${id} нет`)
+
+  // цвет аккаунта живёт в соседней таблице, а `returning` о ней не знает
+  const [calendar] = await db
+    .select(SELECT)
+    .from(googleCalendars)
+    .innerJoin(googleAccounts, eq(googleAccounts.id, googleCalendars.accountId))
+    .where(eq(googleCalendars.id, id))
+
   return summarize(calendar)
 }

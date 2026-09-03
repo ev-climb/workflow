@@ -1,13 +1,12 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Select } from 'radix-ui'
 import { useState, useTransition } from 'react'
 import { sendJson } from '@/lib/api-client'
-import { CALENDAR_COLORS, calendarColorName } from '@/lib/calendar-colors'
 import type { GoogleCalendarSummary } from '@/server/services/google-calendars'
+import { ColorChoice } from './ColorChoice'
 
-type Patch = { color?: string; visible?: boolean }
+type Patch = { color?: string | null; visible?: boolean }
 
 /**
  * Календари одного аккаунта: что показывать в колонке и каким цветом. Список приезжает
@@ -40,8 +39,6 @@ function CalendarRow({ calendar }: { calendar: GoogleCalendarSummary }) {
       .catch((failure: Error) => setError(failure.message))
   }
 
-  const color = calendar.color ?? CALENDAR_COLORS[CALENDAR_COLORS.length - 1].hex
-
   return (
     <li className="flex items-center gap-2">
       <input
@@ -61,58 +58,12 @@ function CalendarRow({ calendar }: { calendar: GoogleCalendarSummary }) {
         {calendar.title}
       </label>
       <ColorChoice
-        value={color}
+        value={calendar.color}
+        inherited={calendar.accountColor ?? undefined}
         label={`Цвет календаря «${calendar.title}»`}
         onChange={(next) => save({ color: next })}
       />
       {error ? <span className="text-xs text-alarm">{error}</span> : null}
     </li>
   )
-}
-
-type ColorProps = { value: string; label: string; onChange: (color: string) => void }
-
-/** Цвет из Google в наборе не значится, поэтому он добавлен в список отдельной строкой. */
-function ColorChoice({ value, label, onChange }: ColorProps) {
-  const known = CALENDAR_COLORS.some((color) => color.hex === value)
-  const options = known
-    ? CALENDAR_COLORS
-    : [{ hex: value, name: calendarColorName(value) }, ...CALENDAR_COLORS]
-
-  return (
-    <Select.Root value={value} onValueChange={onChange}>
-      <Select.Trigger
-        aria-label={label}
-        className="field flex shrink-0 items-center gap-1.5 px-2 py-1 text-xs"
-      >
-        <Swatch color={value} />
-        <span className="w-24 truncate text-left">{calendarColorName(value)}</span>
-        <Select.Icon className="text-fog-dim">▾</Select.Icon>
-      </Select.Trigger>
-      <Select.Portal>
-        <Select.Content
-          position="popper"
-          sideOffset={4}
-          className="z-50 max-h-64 overflow-hidden surface-menu"
-        >
-          <Select.Viewport className="p-1">
-            {options.map((color) => (
-              <Select.Item
-                key={color.hex}
-                value={color.hex}
-                className="menu-item flex items-center gap-2 px-2 py-1 text-sm"
-              >
-                <Swatch color={color.hex} />
-                <Select.ItemText>{color.name}</Select.ItemText>
-              </Select.Item>
-            ))}
-          </Select.Viewport>
-        </Select.Content>
-      </Select.Portal>
-    </Select.Root>
-  )
-}
-
-function Swatch({ color }: { color: string }) {
-  return <span className="h-2 w-5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
 }

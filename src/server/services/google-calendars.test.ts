@@ -5,10 +5,10 @@ import type { GoogleCalendarEntry } from '../google/calendars.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { listGoogleCalendars, saveCalendarList, updateGoogleCalendar } from './google-calendars.ts'
 
-async function account(email = 'me@gmail.com'): Promise<string> {
+async function account(email = 'me@gmail.com', color = '#039be5'): Promise<string> {
   const [row] = await db
     .insert(googleAccounts)
-    .values({ email, refreshTokenEncrypted: 'шифротекст' })
+    .values({ email, color, refreshTokenEncrypted: 'шифротекст' })
     .returning({ id: googleAccounts.id })
   return row.id
 }
@@ -17,7 +17,6 @@ function entry(patch: Partial<GoogleCalendarEntry> = {}): GoogleCalendarEntry {
   return {
     googleCalendarId: 'me@gmail.com',
     title: 'me@gmail.com',
-    color: '#9fe1e7',
     selected: true,
     accessRole: 'owner',
     primary: true,
@@ -53,6 +52,12 @@ describe('календари аккаунта', () => {
     ).toEqual({ 'me@gmail.com': true, 'Праздники России': false })
   })
 
+  it('заведённый календарь красится цветом аккаунта, пока свой не выбран', async () => {
+    await saveCalendarList(await account('me@gmail.com', '#f6bf26'), [entry()])
+
+    expect(await listGoogleCalendars()).toMatchObject([{ color: null, accountColor: '#f6bf26' }])
+  })
+
   it('отобранные права обновляются, а цвет и видимость остаются выбранными', async () => {
     const id = await account()
     await saveCalendarList(id, [entry()])
@@ -86,6 +91,17 @@ describe('правка календаря', () => {
     expect(await updateGoogleCalendar(calendar.id, { visible: false })).toMatchObject({
       color: '#d50000',
       visible: false,
+    })
+  })
+
+  it('снятый цвет возвращает календарь к цвету аккаунта', async () => {
+    await saveCalendarList(await account('me@gmail.com', '#f6bf26'), [entry()])
+    const [calendar] = await listGoogleCalendars()
+    await updateGoogleCalendar(calendar.id, { color: '#d50000' })
+
+    expect(await updateGoogleCalendar(calendar.id, { color: null })).toMatchObject({
+      color: null,
+      accountColor: '#f6bf26',
     })
   })
 

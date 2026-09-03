@@ -175,6 +175,8 @@ export const googleAccounts = pgTable(
   {
     id: pk(),
     email: text().notNull(),
+    // цвет всех событий аккаунта; календарь внутри него перебивает своим, если задан
+    color: text(),
     refreshTokenEncrypted: text().notNull(),
     accessTokenEncrypted: text(),
     accessTokenExpiresAt: tstz(),
@@ -194,6 +196,8 @@ export const googleCalendars = pgTable(
       .references(() => googleAccounts.id, { onDelete: 'cascade' }),
     googleCalendarId: text().notNull(),
     title: text().notNull(),
+    // пусто — берётся цвет аккаунта; из Google не заполняется: там основные календари
+    // разных аккаунтов приходят одним и тем же цветом
     color: text(),
     // права из calendarList: owner, writer, reader, freeBusyReader. Пусто у строк,
     // заведённых до того, как мы стали их спрашивать

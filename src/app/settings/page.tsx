@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { AccountCalendars } from '@/components/settings/AccountCalendars'
+import { AccountColor } from '@/components/settings/AccountColor'
 import { formatMoment } from '@/lib/dates'
 import { connectUrl } from '@/lib/google-oauth'
 import { listGoogleAccounts } from '@/server/services/google-accounts'
@@ -42,8 +43,11 @@ export default async function SettingsPage({ searchParams }: Props) {
           <ul className="mt-3 divide-y divide-hair">
             {accounts.map((account) => (
               <li key={account.id} className="py-3">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-sm">{account.email}</span>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-sm">{account.email}</span>
+                    <AccountColor account={account} />
+                  </div>
                   {account.needsReauth ? (
                     <a
                       href={connectUrl(account.email)}

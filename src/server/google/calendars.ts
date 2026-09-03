@@ -1,4 +1,3 @@
-import { DEFAULT_CALENDAR_COLOR } from '../../lib/calendar-colors.ts'
 import { refuse } from './oauth.ts'
 
 const CALENDAR_LIST = 'https://www.googleapis.com/calendar/v3/users/me/calendarList'
@@ -6,8 +5,6 @@ const CALENDAR_LIST = 'https://www.googleapis.com/calendar/v3/users/me/calendarL
 export type GoogleCalendarEntry = {
   googleCalendarId: string
   title: string
-  /** Цвет календаря в Google, `#rrggbb`. Начальный: дальше его выбирает пользователь. */
-  color: string
   /** Отмечен ли календарь в самом Google — с него начинается наша видимость. */
   selected: boolean
   /** `owner`, `writer`, `reader` или `freeBusyReader`: в чужой подписной не записать. */
@@ -19,7 +16,6 @@ type ListItem = {
   id: string
   summary?: string
   summaryOverride?: string
-  backgroundColor?: string
   selected?: boolean
   hidden?: boolean
   accessRole?: string
@@ -29,8 +25,9 @@ type ListItem = {
 
 /**
  * Календари аккаунта целиком, включая подписные вроде «Праздников России»: колонка
- * сводит все, а прячет их пользователь. Проверено живьём — в ответе есть `backgroundColor`,
- * `selected` и `primary`, а `hidden` и `deleted` Google опускает вместо `false`.
+ * сводит все, а прячет их пользователь. Проверено живьём — в ответе есть `selected` и
+ * `primary`, а `hidden` и `deleted` Google опускает вместо `false`. Цвет оттуда не берём:
+ * основные календари разных аккаунтов приходят одинаковыми, и различать их нечем.
  */
 export async function fetchCalendarList(accessToken: string): Promise<GoogleCalendarEntry[]> {
   const entries: GoogleCalendarEntry[] = []
@@ -50,7 +47,6 @@ export async function fetchCalendarList(accessToken: string): Promise<GoogleCale
       entries.push({
         googleCalendarId: item.id,
         title: item.summaryOverride ?? item.summary ?? item.id,
-        color: item.backgroundColor ?? DEFAULT_CALENDAR_COLOR,
         selected: item.selected === true && item.hidden !== true,
         accessRole: item.accessRole ?? 'reader',
         primary: item.primary === true,

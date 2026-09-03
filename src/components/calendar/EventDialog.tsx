@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Dialog, Select } from 'radix-ui'
 import { useState } from 'react'
 import { Failure } from '@/components/board/Failure'
+import { paintOf } from '@/lib/calendar-colors'
 import { rangeTimes, timeLabel, type Range } from '@/lib/calendar-drag'
 import { rangeLabel } from '@/lib/calendar-grid'
 import { useCreateEvent } from '@/lib/calendar-mutations'
@@ -92,7 +93,9 @@ export function EventDialog({ range, onClose }: Props) {
                             <span
                               aria-hidden
                               className="size-2 shrink-0 rounded-full"
-                              style={{ backgroundColor: calendar.color ?? undefined }}
+                              style={{
+                                backgroundColor: paintOf(calendar.color, calendar.accountColor),
+                              }}
                             />
                             <Select.ItemText>{calendar.title}</Select.ItemText>
                           </Select.Item>

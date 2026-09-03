@@ -36,6 +36,13 @@
       "when": 1788382027068,
       "tag": "0004_omniscient_yellow_claw",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788416462271,
+      "tag": "0005_curly_doctor_octopus",
+      "breakpoints": true
     }
   ]
 }
