@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { sendJson } from './api-client'
 import { calendarKey } from './calendar-query'
 import type { EventWriteResult } from '@/server/services/google-events'
+import type { TaskWriteResult } from '@/server/services/google-tasks'
 import type { EventTimesInput } from './calendar-view'
 
 /**
@@ -58,3 +59,25 @@ export const useRemoveTimeBlock = () =>
 
 export const useRemoveEvent = () =>
   useCalendarChange((id: string) => sendJson('DELETE', `/api/calendar/events/${id}`))
+
+/** Правка задачи Google полями панели: уходит только то, что действительно правили. */
+export type TaskEdit = {
+  title?: string
+  notes?: string
+  due?: string | null
+  completed?: boolean
+}
+
+export const useEditTask = (id: string) =>
+  useCalendarChange((changes: TaskEdit) =>
+    sendJson<TaskWriteResult>('PATCH', `/api/calendar/tasks/${id}`, changes),
+  )
+
+/**
+ * Отметка выполнения с полосы. Тот же `PATCH`, что и из панели: чекбокс на сетке и
+ * чекбокс в панели — два входа в одну запись.
+ */
+export const useSetTaskDone = () =>
+  useCalendarChange(({ id, completed }: { id: string; completed: boolean }) =>
+    sendJson<TaskWriteResult>('PATCH', `/api/calendar/tasks/${id}`, { completed }),
+  )

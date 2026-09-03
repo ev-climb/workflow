@@ -202,3 +202,23 @@ export const timeBlockPatchBody = z.union(
   [z.object({ startsAt: z.string(), endsAt: z.string() }), mirrorBody],
   { error: 'ожидается {startsAt, endsAt} или {calendarId}' },
 )
+
+/**
+ * Правка задачи Google: название, заметки, срок, отметка выполнения — по отдельности или
+ * вместе. Срок — голая дата либо `null`, форму сверяет сервис; времени у него нет.
+ */
+export const taskPatchBody = z
+  .object({
+    title: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
+    due: z.string().nullable().optional(),
+    completed: z.boolean().optional(),
+  })
+  .refine(
+    (body) =>
+      body.title !== undefined ||
+      body.notes !== undefined ||
+      body.due !== undefined ||
+      body.completed !== undefined,
+    { error: 'ожидается {title}, {notes}, {due}, {completed} или всё сразу' },
+  )

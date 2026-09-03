@@ -6,8 +6,9 @@ import { useState } from 'react'
 import { CalendarGrid } from '@/components/calendar/CalendarGrid'
 import { EventDialog } from '@/components/calendar/EventDialog'
 import { EventPanel } from '@/components/calendar/EventPanel'
+import { TaskPanel } from '@/components/calendar/TaskPanel'
 import type { Range } from '@/lib/calendar-drag'
-import { calendarQuery, duesQuery, timeBlocksQuery } from '@/lib/calendar-query'
+import { calendarQuery, duesQuery, tasksQuery, timeBlocksQuery } from '@/lib/calendar-query'
 import {
   daysOf,
   moscowToday,
@@ -29,10 +30,12 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
   const [anchor, setAnchor] = useState(today)
   const [range, setRange] = useState<Range | null>(null)
   const [opened, setOpened] = useState<{ id: string; title: string } | null>(null)
+  const [openedTask, setOpenedTask] = useState<{ id: string; title: string } | null>(null)
   const days = daysOf(mode, anchor)
   const events = useQuery(calendarQuery(days[0], days[days.length - 1]))
   const dues = useQuery(duesQuery(days[0], days[days.length - 1]))
   const blocks = useQuery(timeBlocksQuery(days[0], days[days.length - 1]))
+  const tasks = useQuery(tasksQuery(days[0], days[days.length - 1]))
 
   return (
     <aside className="surface-panel flex w-76 shrink-0 flex-col border-r border-hair">
@@ -78,13 +81,22 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
         events={events.data ?? []}
         blocks={blocks.data ?? []}
         dues={dues.data ?? []}
+        tasks={tasks.data ?? []}
         onSelect={setRange}
         onOpen={(event) => setOpened({ id: event.id, title: event.title ?? 'Без названия' })}
+        onOpenTask={(task) => setOpenedTask({ id: task.id, title: task.title ?? 'Без названия' })}
       />
 
       {range ? <EventDialog range={range} onClose={() => setRange(null)} /> : null}
       {opened ? (
         <EventPanel eventId={opened.id} title={opened.title} onClose={() => setOpened(null)} />
+      ) : null}
+      {openedTask ? (
+        <TaskPanel
+          taskId={openedTask.id}
+          title={openedTask.title}
+          onClose={() => setOpenedTask(null)}
+        />
       ) : null}
 
       <footer className="shrink-0 border-t border-hair px-5 py-3 text-xs text-fog-dim">

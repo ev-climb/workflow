@@ -34,13 +34,16 @@ import {
 import {
   placeAllDay,
   placeDay,
-  placeDues,
+  placeStripe,
+  stripeItems,
   type PlacedAllDay,
-  type PlacedDue,
   type PlacedEvent,
+  type PlacedStripe,
+  type StripeEntry,
 } from '@/lib/calendar-layout'
-import { useCreateTimeBlock, useSetEventTimes } from '@/lib/calendar-mutations'
+import { useCreateTimeBlock, useSetEventTimes, useSetTaskDone } from '@/lib/calendar-mutations'
 import type { CalendarEventView, CardDueView, TimeBlockView } from '@/lib/calendar-view'
+import type { CalendarTask } from '@/server/services/google-tasks'
 import { TimeBlockMenu } from './TimeBlockMenu'
 import { isOverdue, moscowParts } from '@/lib/dates'
 
@@ -56,8 +59,8 @@ const ALL_DAY_PX = 16
 /** Выше полоса не растёт, а прокручивается: сетка со временем важнее списка дат. */
 const ALL_DAY_MAX_PX = ALL_DAY_PX * 4
 
-const DUE_PX = 14
-const DUE_MAX_PX = DUE_PX * 4
+const STRIPE_PX = 14
+const STRIPE_MAX_PX = STRIPE_PX * 4
 
 /** Ниже блок читается только как полоса цвета: время в нём уже не помещается. */
 const TIME_VISIBLE_PX = 28
@@ -83,8 +86,10 @@ type Props = {
   events: CalendarEventView[]
   blocks: TimeBlockView[]
   dues: CardDueView[]
+  tasks: CalendarTask[]
   onSelect: (range: Range) => void
   onOpen: (event: CalendarEventView) => void
+  onOpenTask: (task: CalendarTask) => void
 }
 
 /**
@@ -125,7 +130,16 @@ function pointerOf(activator: Event, delta: { x: number; y: number }): { x: numb
   return { x: activator.clientX + delta.x, y: activator.clientY + delta.y }
 }
 
-export function CalendarGrid({ days, events, blocks, dues, onSelect, onOpen }: Props) {
+export function CalendarGrid({
+  days,
+  events,
+  blocks,
+  dues,
+  tasks,
+  onSelect,
+  onOpen,
+  onOpenTask,
+}: Props) {
   // на сервере момента нет: отрисуй его там — и разметка разойдётся с браузерной
   const [now, setNow] = useState<Date | null>(null)
   const scroll = useRef<HTMLDivElement>(null)
@@ -193,8 +207,8 @@ export function CalendarGrid({ days, events, blocks, dues, onSelect, onOpen }: P
   // события на весь день во временную сетку не попадают: они полосой сверху, инвариант 3
   const timed = events.filter(isTimed)
   const allDay = placeAllDay(events.filter(isAllDay), days)
-  // срок — не событие и не отрезок времени: своя полоса под событиями на весь день
-  const placedDues = placeDues(dues, days)
+  // срок и задача — не события и не отрезки времени: своя полоса под событиями на весь день
+  const stripes = placeStripe(stripeItems(dues, tasks), days)
 
   const held = drag ?? pending
   const heldId = held?.id ?? null
@@ -314,22 +328,36 @@ export function CalendarGrid({ days, events, blocks, dues, onSelect, onOpen }: P
         </div>
       ) : null}
 
-      {placedDues.length > 0 ? (
+      {stripes.length > 0 ? (
         <div
           className="flex shrink-0 overflow-y-auto border-b border-hair px-3"
-          style={{ maxHeight: DUE_MAX_PX }}
+          style={{ maxHeight: STRIPE_MAX_PX }}
         >
           <div className={RAIL} />
           <div
             className="grid flex-1 gap-px py-px"
             style={{
               gridTemplateColumns: columns(days.length),
-              gridAutoRows: `${DUE_PX}px`,
+              gridAutoRows: `${STRIPE_PX}px`,
             }}
           >
-            {placedDues.map((placed) => (
-              <DueStripe key={placed.due.id} placed={placed} now={now} />
-            ))}
+            {stripes.map((placed) =>
+              placed.item.kind === 'due' ? (
+                <DueStripe
+                  key={`due:${placed.item.due.id}`}
+                  placed={placed}
+                  due={placed.item.due}
+                  now={now}
+                />
+              ) : (
+                <TaskStripe
+                  key={`task:${placed.item.task.id}`}
+                  placed={placed}
+                  task={placed.item.task}
+                  onOpen={onOpenTask}
+                />
+              ),
+            )}
           </div>
         </div>
       ) : null}
@@ -483,6 +511,9 @@ function AllDayStripe({
   )
 }
 
+/** Место в полосе: сроку и задаче от раскладки нужны только клетка дня и ряд в ней. */
+type StripePlace = PlacedStripe<StripeEntry<CardDueView, CalendarTask>>
+
 /**
  * Срок карточки. Событие — заливка цветом календаря, срок — пунктирный контур без
  * заливки: с одного взгляда видно, что это не встреча, а граница работы.
@@ -491,8 +522,15 @@ function AllDayStripe({
  * в слот, и делает это на серверной отрисовке. Мягкий переход состояние стола не
  * пересобирает, и карточка чужой доски осталась бы неоткрытой.
  */
-function DueStripe({ placed, now }: { placed: PlacedDue<CardDueView>; now: Date | null }) {
-  const { due, index, lane } = placed
+function DueStripe({
+  placed,
+  due,
+  now,
+}: {
+  placed: StripePlace
+  due: CardDueView
+  now: Date | null
+}) {
   const overdue = now !== null && isOverdue(due.dueAt, due.dueDone, due.dueHasTime, now.getTime())
   const time = due.dueHasTime ? moscowParts(due.dueAt).time : null
 
@@ -507,12 +545,68 @@ function DueStripe({ placed, now }: { placed: PlacedDue<CardDueView>; now: Date 
             ? 'border-hair text-fog-faint line-through hover:bg-white/6'
             : 'border-hair-lit text-fog-muted hover:bg-white/6'
       }`}
-      style={{ gridColumn: index + 1, gridRow: lane + 1 }}
+      style={{ gridColumn: placed.index + 1, gridRow: placed.lane + 1 }}
     >
       <span aria-hidden className="size-1.5 shrink-0 rotate-45 border border-current" />
       {time ? <span className="shrink-0 font-mono tabular-nums">{time}</span> : null}
       <span className="truncate">{due.title}</span>
     </a>
+  )
+}
+
+/**
+ * Задача Google. Четвёртая сущность на сетке, и различается она тем же, чем и остальные,
+ * — материалом, а не цветом (ADR-011): сплошной контур цветом аккаунта и квадратный
+ * чекбокс слева. У события заливка, у срока пунктир с ромбом, у блока штриховка.
+ *
+ * Чекбокс и название — две кнопки рядом, а не кнопка внутри кнопки: клик по квадрату
+ * закрывает задачу, клик по названию открывает панель.
+ */
+function TaskStripe({
+  placed,
+  task,
+  onOpen,
+}: {
+  placed: StripePlace
+  task: CalendarTask
+  onOpen: (task: CalendarTask) => void
+}) {
+  const setDone = useSetTaskDone()
+  const title = task.title ?? 'Без названия'
+  // отметка ходит в Google и приезжает обратно синхронизацией: пока идёт, показываем свою
+  const done = setDone.isPending ? !task.completed : task.completed
+
+  return (
+    <div
+      className={`flex items-center gap-1 overflow-hidden rounded-lg border px-1 text-[10px] leading-[12px] transition-colors ${
+        done ? 'text-fog-faint line-through' : 'text-fog-muted'
+      }`}
+      style={{
+        gridColumn: placed.index + 1,
+        gridRow: placed.lane + 1,
+        borderColor: done ? undefined : `${task.color}80`,
+      }}
+    >
+      <button
+        type="button"
+        aria-label={done ? `Снять отметку: ${title}` : `Выполнить: ${title}`}
+        aria-pressed={done}
+        disabled={setDone.isPending}
+        onClick={() => setDone.mutate({ id: task.id, completed: !task.completed })}
+        className="grid size-2.5 shrink-0 place-items-center rounded-[3px] border text-[8px] leading-none outline-none transition-colors hover:bg-white/10 focus-visible:ring-1 focus-visible:ring-accent-line"
+        style={{ borderColor: done ? undefined : task.color }}
+      >
+        {done ? <span aria-hidden>✓</span> : null}
+      </button>
+      <button
+        type="button"
+        onClick={() => onOpen(task)}
+        title={`Задача: ${title}`}
+        className="min-w-0 flex-1 truncate text-left outline-none transition-colors hover:text-fog focus-visible:ring-1 focus-visible:ring-accent-line"
+      >
+        {title}
+      </button>
+    </div>
   )
 }
 

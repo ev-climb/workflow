@@ -3,9 +3,11 @@ import {
   MIN_EVENT_MINUTES,
   placeAllDay,
   placeDay,
-  placeDues,
+  placeStripe,
+  stripeItems,
   type AllDayEvent,
   type DueItem,
+  type TaskItem,
   type TimedEvent,
 } from './calendar-layout'
 import { daysOf } from './calendar-grid'
@@ -214,41 +216,86 @@ describe('placeAllDay', () => {
 })
 
 /** Срок задаётся московскими стенными часами: тем же боком он и показан на карточке. */
-function due(id: string, wall: string): DueItem {
+function due(id: string, wall: string): DueItem & { id: string } {
   return { id, dueAt: moment(wall) }
 }
 
-function stripes(placed: ReturnType<typeof placeDues<DueItem>>) {
-  return placed.map((one) => ({ id: one.due.id, index: one.index, lane: one.lane }))
+/** У задачи Google срок — голая дата: времени у неё нет вовсе. */
+function task(id: string, day: string): TaskItem & { id: string } {
+  return { id, due: day }
 }
 
-describe('placeDues', () => {
+/** Полоса целиком: то, что показывает сетка, — слияние и раскладка вместе. */
+function stripe(
+  dues: (DueItem & { id: string })[],
+  tasks: (TaskItem & { id: string })[],
+  days: readonly string[],
+) {
+  return placeStripe(stripeItems(dues, tasks), days).map((one) => ({
+    id: one.item.kind === 'due' ? one.item.due.id : one.item.task.id,
+    kind: one.item.kind,
+    index: one.index,
+    lane: one.lane,
+  }))
+}
+
+describe('stripeItems', () => {
   it('кладёт срок в день своих московских часов, а не UTC', () => {
     // 2026-09-03 00:30 по Москве — это ещё 2 сентября по UTC
+    expect(stripeItems([due('a', '2026-09-03 00:30')], [])).toEqual([
+      { kind: 'due', day: '2026-09-03', due: { id: 'a', dueAt: moment('2026-09-03 00:30') } },
+    ])
+  })
+
+  it('берёт дату задачи как есть, без перевода в часовой пояс', () => {
+    expect(stripeItems([], [task('a', '2026-10-01')])).toEqual([
+      { kind: 'task', day: '2026-10-01', task: { id: 'a', due: '2026-10-01' } },
+    ])
+  })
+})
+
+describe('placeStripe', () => {
+  it('кладёт срок в день своих московских часов, а не UTC', () => {
     const week = daysOf('week', DAY)
 
-    expect(stripes(placeDues([due('a', '2026-09-03 00:30')], week))).toEqual([
-      { id: 'a', index: 3, lane: 0 },
+    expect(stripe([due('a', '2026-09-03 00:30')], [], week)).toEqual([
+      { id: 'a', kind: 'due', index: 3, lane: 0 },
     ])
   })
 
   it('срок без времени лежит в своём дне, а не в предыдущем', () => {
-    expect(stripes(placeDues([due('a', '2026-10-01 00:00')], daysOf('week', '2026-10-01')))).toEqual(
-      [{ id: 'a', index: 3, lane: 0 }],
-    )
+    expect(stripe([due('a', '2026-10-01 00:00')], [], daysOf('week', '2026-10-01'))).toEqual([
+      { id: 'a', kind: 'due', index: 3, lane: 0 },
+    ])
+  })
+
+  it('задача первого числа не уезжает на сутки', () => {
+    expect(stripe([], [task('a', '2026-10-01')], daysOf('week', '2026-10-01'))).toEqual([
+      { id: 'a', kind: 'task', index: 3, lane: 0 },
+    ])
   })
 
   it('сроки одного дня становятся друг под другом входным порядком', () => {
     const dues = [due('a', '09:00'), due('b', '18:00'), due('c', '2026-09-03 09:00')]
 
-    expect(stripes(placeDues(dues, daysOf('week', DAY)))).toEqual([
-      { id: 'a', index: 2, lane: 0 },
-      { id: 'b', index: 2, lane: 1 },
-      { id: 'c', index: 3, lane: 0 },
+    expect(stripe(dues, [], daysOf('week', DAY))).toEqual([
+      { id: 'a', kind: 'due', index: 2, lane: 0 },
+      { id: 'b', kind: 'due', index: 2, lane: 1 },
+      { id: 'c', kind: 'due', index: 3, lane: 0 },
     ])
   })
 
-  it('срок вне окна не показывается', () => {
-    expect(placeDues([due('a', '2026-09-03 09:00')], [DAY])).toEqual([])
+  it('задача не ложится на срок того же дня, а встаёт под ним', () => {
+    const days = daysOf('week', DAY)
+
+    expect(stripe([due('a', '09:00')], [task('t', DAY), task('u', DAY)], days)).toEqual([
+      { id: 'a', kind: 'due', index: 2, lane: 0 },
+      { id: 't', kind: 'task', index: 2, lane: 1 },
+      { id: 'u', kind: 'task', index: 2, lane: 2 },
+    ])
+  })
+
+  it('срок и задача вне окна не показываются', () => {
+    expect(stripe([due('a', '2026-09-03 09:00')], [task('t', '2026-09-03')], [DAY])).toEqual([])
   })
 })

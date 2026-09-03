@@ -147,35 +147,60 @@ export function placeAllDay<T extends AllDayEvent>(
   })
 }
 
-export type DueItem = { id: string; dueAt: string }
+/** Элемент полосы под сеткой: свой день московскими стенными часами. */
+export type StripeItem = { day: string }
 
-/** Срок на сетке: клетка своего дня и ряд внутри него. Ширину срок ни с кем не делит. */
-export type PlacedDue<T> = {
-  due: T
+/** Место в полосе: клетка своего дня и ряд внутри него. Ширину элемент ни с кем не делит. */
+export type PlacedStripe<T> = {
+  item: T
   index: number
   lane: number
 }
 
 /**
- * Раскладка сроков карточек. Срок — граница дня, а не отрезок на нём: даже заданный со
- * временем, он занимает одну клетку в полосе, а не место во временной сетке. День берётся
- * московскими стенными часами, тем же боком, каким срок показан на самой карточке.
+ * Раскладка полосы под сеткой: сроки карточек и задачи Google лежат в ней вперемешку.
+ * Ни то, ни другое не отрезок времени: срок — граница дня, у задачи времени нет вовсе, и
+ * каждый занимает одну клетку своего дня, а не место во временной сетке.
  *
- * Порядок сохраняется входной: сроки приезжают отсортированными по моменту, и ряд внутри
- * дня набирается тем же порядком.
+ * Ряды набираются входным порядком, общим счётчиком на день: иначе задача легла бы на срок.
  */
-export function placeDues<T extends DueItem>(
-  dues: readonly T[],
+export function placeStripe<T extends StripeItem>(
+  items: readonly T[],
   days: readonly string[],
-): PlacedDue<T>[] {
+): PlacedStripe<T>[] {
   const taken = new Map<number, number>()
 
-  return dues.flatMap((due) => {
-    const index = days.indexOf(moscowParts(due.dueAt).date)
+  return items.flatMap((item) => {
+    const index = days.indexOf(item.day)
     if (index === -1) return []
 
     const lane = taken.get(index) ?? 0
     taken.set(index, lane + 1)
-    return [{ due, index, lane }]
+    return [{ item, index, lane }]
   })
+}
+
+export type DueItem = { dueAt: string }
+/** У задачи Google срок — дата без времени: через часовой пояс она не идёт, инвариант 3. */
+export type TaskItem = { due: string }
+
+export type StripeEntry<D, T> =
+  | { kind: 'due'; day: string; due: D }
+  | { kind: 'task'; day: string; task: T }
+
+/**
+ * Содержимое полосы: сроки карточек и задачи Google одним списком. День срока считается
+ * московскими стенными часами, тем же боком, каким срок показан на самой карточке, а
+ * дата задачи берётся как есть — переводить её было бы сдвигом на сутки.
+ *
+ * Сроки идут перед задачами: в дне, где есть и то и другое, своя работа выше зеркала Google.
+ */
+export function stripeItems<D extends DueItem, T extends TaskItem>(
+  dues: readonly D[],
+  tasks: readonly T[],
+): StripeEntry<D, T>[] {
+  return [
+    ...dues.map((due) => ({ kind: 'due' as const, day: moscowParts(due.dueAt).date, due })),
+    ...tasks.map((task) => ({ kind: 'task' as const, day: task.due, task })),
+  ]
 }

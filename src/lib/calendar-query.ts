@@ -1,4 +1,5 @@
 import type { GoogleCalendarSummary } from '@/server/services/google-calendars'
+import type { CalendarTask, CalendarTaskDetails } from '@/server/services/google-tasks'
 import { getJson } from './api-client'
 import type {
   CalendarEventDetailsView,
@@ -41,6 +42,30 @@ export function timeBlocksQuery(from: string, to: string) {
     queryKey: [...calendarKey, 'blocks', from, to] as const,
     queryFn: (): Promise<TimeBlockView[]> =>
       getJson<TimeBlockView[]>(`/api/calendar/time-blocks?from=${from}&to=${to}`),
+  }
+}
+
+/**
+ * Задачи Google растут из корня сетки: их привозит та же синхронизация, что и события, и
+ * тем же сигналом `calendar-changed` гасятся оба чтения разом.
+ *
+ * Своих типов для клиента у задачи нет: моментов в ней не бывает, а срок — строка с датой
+ * по обе стороны JSON.
+ */
+export function tasksQuery(from: string, to: string) {
+  return {
+    queryKey: [...calendarKey, 'tasks', from, to] as const,
+    queryFn: (): Promise<CalendarTask[]> =>
+      getJson<CalendarTask[]>(`/api/calendar/tasks?from=${from}&to=${to}`),
+  }
+}
+
+/** Задача целиком, для панели правки: заметки в сетку не ездят, на полосе их не видно. */
+export function taskQuery(id: string) {
+  return {
+    queryKey: [...calendarKey, 'task', id] as const,
+    queryFn: (): Promise<CalendarTaskDetails> =>
+      getJson<CalendarTaskDetails>(`/api/calendar/tasks/${id}`),
   }
 }
 
