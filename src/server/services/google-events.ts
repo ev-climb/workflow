@@ -4,7 +4,13 @@ import { addDays } from '../../lib/calendar-grid.ts'
 import { momentInMoscow } from '../../lib/dates.ts'
 import { descriptionHtml, descriptionText } from '../../lib/event-description.ts'
 import { db } from '../db/client.ts'
-import { calendarEvents, googleAccounts, googleCalendars, timeBlocks } from '../db/schema.ts'
+import {
+  calendarEvents,
+  googleAccounts,
+  googleCalendars,
+  googleTasks,
+  timeBlocks,
+} from '../db/schema.ts'
 import {
   EventEtagMismatchError,
   type EventDraft,
@@ -35,6 +41,12 @@ export type CalendarEvent = {
   startDate: string | null
   endDate: string | null
   recurringEventId: string | null
+  /**
+   * Задача Google, зеркалом которой событие является: ADR-013. У такого события есть
+   * чекбокс, и закрывает он задачу, а не событие. У обычного события — `null`.
+   */
+  taskId: string | null
+  taskCompleted: boolean | null
 }
 
 /** Событие изнутри, для панели правки: то же, что в сетке, плюс описание и календарь. */
@@ -82,6 +94,28 @@ const LISTED = {
   startDate: calendarEvents.startDate,
   endDate: calendarEvents.endDate,
   recurringEventId: calendarEvents.recurringEventId,
+  taskId: googleTasks.id,
+  taskStatus: googleTasks.status,
+}
+
+/**
+ * Зеркало задачи и сама задача — одна запись Google, разложенная у нас по двум таблицам.
+ * Связь через идентификатор задачи, вынутый из описания зеркала, и всегда внутри одного
+ * аккаунта: у двух аккаунтов идентификаторы задач независимы.
+ */
+const mirroredTask = and(
+  eq(googleTasks.accountId, googleCalendars.accountId),
+  eq(googleTasks.googleTaskId, calendarEvents.googleTaskId),
+  isNull(googleTasks.deletedAt),
+)
+
+function withTask<T extends { color: string | null; taskStatus: string | null }>(row: T) {
+  const { taskStatus, ...rest } = row
+  return {
+    ...rest,
+    color: rest.color ?? DEFAULT_CALENDAR_COLOR,
+    taskCompleted: taskStatus === null ? null : taskStatus === 'completed',
+  }
 }
 
 const DETAILED = {
@@ -115,6 +149,7 @@ export async function listEvents(from: string, to: string): Promise<CalendarEven
     .from(calendarEvents)
     .innerJoin(googleCalendars, eq(googleCalendars.id, calendarEvents.calendarId))
     .innerJoin(googleAccounts, eq(googleAccounts.id, googleCalendars.accountId))
+    .leftJoin(googleTasks, mirroredTask)
     .where(
       and(
         eq(googleCalendars.visible, true),
@@ -145,7 +180,7 @@ export async function listEvents(from: string, to: string): Promise<CalendarEven
       sql`${calendarEvents.startsAt} asc nulls first`,
     )
 
-  return rows.map((row) => ({ ...row, color: row.color ?? DEFAULT_CALENDAR_COLOR }))
+  return rows.map(withTask)
 }
 
 /**
@@ -158,6 +193,7 @@ export async function getEvent(id: string): Promise<CalendarEventDetails> {
     .from(calendarEvents)
     .innerJoin(googleCalendars, eq(googleCalendars.id, calendarEvents.calendarId))
     .innerJoin(googleAccounts, eq(googleAccounts.id, googleCalendars.accountId))
+    .leftJoin(googleTasks, mirroredTask)
     .where(
       and(
         eq(calendarEvents.id, id),
@@ -169,8 +205,7 @@ export async function getEvent(id: string): Promise<CalendarEventDetails> {
 
   const { descriptionHtml: html, ...event } = row
   return {
-    ...event,
-    color: event.color ?? DEFAULT_CALENDAR_COLOR,
+    ...withTask(event),
     description: html === null ? null : descriptionText(html),
   }
 }
@@ -265,6 +300,7 @@ function goneEvent(googleEventId: string): GoogleEvent {
     googleUpdatedAt: null,
     recurringEventId: null,
     htmlLink: null,
+    googleTaskId: null,
     times: null,
   }
 }

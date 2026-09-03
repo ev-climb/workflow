@@ -89,7 +89,7 @@ type Props = {
   tasks: CalendarTask[]
   onSelect: (range: Range) => void
   onOpen: (event: CalendarEventView) => void
-  onOpenTask: (task: CalendarTask) => void
+  onOpenTask: TaskOpenHandler
 }
 
 /**
@@ -405,18 +405,25 @@ export function CalendarGrid({
                 style={{ backgroundImage: HOUR_LINES }}
               >
                 {placeDay(items, day).map((placed) =>
-                  placed.event.kind === 'event' ? (
+                  placed.event.kind !== 'event' ? (
+                    <TimeBlockChip
+                      key={placed.key}
+                      placed={{ ...placed, event: placed.event.block }}
+                    />
+                  ) : placed.event.event.taskId ? (
+                    <TaskBlock
+                      key={placed.key}
+                      placed={{ ...placed, event: placed.event.event }}
+                      taskId={placed.event.event.taskId}
+                      onOpen={onOpenTask}
+                    />
+                  ) : (
                     <EventBlock
                       key={placed.key}
                       placed={{ ...placed, event: placed.event.event }}
                       day={day}
                       onGrab={grab}
                       onOpen={onOpen}
-                    />
-                  ) : (
-                    <TimeBlockChip
-                      key={placed.key}
-                      placed={{ ...placed, event: placed.event.block }}
                     />
                   ),
                 )}
@@ -461,6 +468,9 @@ function isAllDay(event: CalendarEventView): event is AllDayView {
 }
 
 type OpenHandler = (event: CalendarEventView) => void
+
+/** Панель задачи открывается и с полосы, и с зеркала на сетке: у зеркала своей строки нет. */
+type TaskOpenHandler = (task: { id: string; title: string | null }) => void
 
 /**
  * Экземпляр повторяющегося события. Серию целиком мы не правим (ADR-004), поэтому на блоке
@@ -569,7 +579,7 @@ function TaskStripe({
 }: {
   placed: StripePlace
   task: CalendarTask
-  onOpen: (task: CalendarTask) => void
+  onOpen: TaskOpenHandler
 }) {
   const setDone = useSetTaskDone()
   const title = task.title ?? 'Без названия'
@@ -649,6 +659,75 @@ function TimeBlockChip({ placed }: { placed: PlacedEvent<TimeBlockView> }) {
         </span>
       </a>
       <TimeBlockMenu blockId={block.id} cardTitle={block.cardTitle} calendarId={block.calendarId} />
+    </div>
+  )
+}
+
+/**
+ * Зеркало задачи Google на сетке: задаче, которой в Google выставили время, календарь
+ * заводит парное событие, и приезжает оно к нам обычным событием (ADR-013). Править его
+ * бесполезно — Google сам пишет в описании, что правка не сохранится, — поэтому блок не
+ * тащится и не растягивается, а чекбокс закрывает задачу, стоящую за ним.
+ *
+ * Чекбокс и название — две кнопки рядом, а не кнопка внутри кнопки, как и в полосе задач.
+ */
+function TaskBlock({
+  placed,
+  taskId,
+  onOpen,
+}: {
+  placed: PlacedEvent<TimedView>
+  taskId: string
+  onOpen: TaskOpenHandler
+}) {
+  const { event, start, end, column, columns } = placed
+  const setDone = useSetTaskDone()
+  const height = ((end - start) / MINUTES_IN_DAY) * DAY_PX
+  const title = event.title ?? 'Без названия'
+  const time = moscowParts(event.startsAt).time
+  // отметка ходит в Google и приезжает обратно синхронизацией: пока идёт, показываем свою
+  const done = setDone.isPending ? event.taskCompleted !== true : event.taskCompleted === true
+
+  return (
+    <div
+      className="absolute flex items-start gap-1 overflow-hidden rounded-[11px] px-1.5 py-0.5 text-[10px] leading-tight shadow-[0_6px_18px_rgb(0_0_0/0.3)]"
+      style={{
+        top: (start / MINUTES_IN_DAY) * DAY_PX,
+        height,
+        left: `${(column / columns) * 100}%`,
+        width: `calc(${100 / columns}% - 2px)`,
+        border: `1px solid ${event.color}66`,
+        background: `linear-gradient(135deg, ${event.color}8c, ${event.color}52)`,
+        opacity: done ? 0.55 : undefined,
+      }}
+    >
+      <button
+        type="button"
+        aria-label={done ? `Снять отметку: ${title}` : `Выполнить: ${title}`}
+        aria-pressed={done}
+        disabled={setDone.isPending}
+        onClick={() => setDone.mutate({ id: taskId, completed: event.taskCompleted !== true })}
+        className="mt-0.5 grid size-2.5 shrink-0 place-items-center rounded-[3px] border border-white/60 text-[8px] leading-none text-white outline-none transition-colors hover:bg-white/20 focus-visible:ring-1 focus-visible:ring-accent-line"
+      >
+        {done ? <span aria-hidden>✓</span> : null}
+      </button>
+      <button
+        type="button"
+        onClick={() => onOpen({ id: taskId, title: event.title })}
+        title={`Задача: ${time} ${title}`}
+        className="min-w-0 flex-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent-line"
+      >
+        {height >= TIME_VISIBLE_PX ? (
+          <span className="block truncate font-mono text-[9.5px] text-white/70 tabular-nums">
+            {time}
+          </span>
+        ) : null}
+        <span
+          className={`block truncate font-medium ${done ? 'text-fog-faint line-through' : 'text-fog'}`}
+        >
+          {title}
+        </span>
+      </button>
     </div>
   )
 }

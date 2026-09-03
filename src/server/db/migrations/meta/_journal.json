@@ -50,6 +50,13 @@
       "when": 1788420200498,
       "tag": "0006_peaceful_siren",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788436003393,
+      "tag": "0007_nasty_rockslide",
+      "breakpoints": true
     }
   ]
 }

@@ -358,3 +358,36 @@ describe('удаление события', () => {
     expect(String((failure as Error).message)).not.toContain('secret')
   })
 })
+
+describe('зеркало задачи Google', () => {
+  it('вынимает из описания идентификатор задачи в форме Tasks API', () => {
+    const event = mapEvent({
+      id: 'e1',
+      summary: 'продвинуться в workflow',
+      description:
+        'Изменения в названии, описании или прикрепленных файлах не сохранятся. Чтобы' +
+        ' изменить данные, перейдите по ссылке https://tasks.google.com/task/PHVqUsLkK7cpjmO0.',
+      start: { dateTime: '2026-09-02T15:30:00+03:00' },
+      end: { dateTime: '2026-09-02T16:30:00+03:00' },
+    })
+
+    expect(event?.googleTaskId).toBe('UEhWcVVzTGtLN2Nwam1PMA')
+  })
+
+  it('у обычного события задачи за спиной нет', () => {
+    const event = mapEvent({
+      id: 'e1',
+      description: 'Созвон по проекту, ссылка в приглашении',
+      start: { dateTime: '2026-09-02T15:30:00+03:00' },
+      end: { dateTime: '2026-09-02T16:30:00+03:00' },
+    })
+
+    expect(event?.googleTaskId).toBeNull()
+  })
+
+  it('событие без описания не роняет разбор', () => {
+    const event = mapEvent({ id: 'e1', start: { date: '2026-09-02' }, end: { date: '2026-09-03' } })
+
+    expect(event?.googleTaskId).toBeNull()
+  })
+})

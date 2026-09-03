@@ -23,6 +23,8 @@ export type GoogleEvent = {
   recurringEventId: string | null
   /** Ссылка на событие в веб-интерфейсе Google. Своей мы её не собираем: формат не описан. */
   htmlLink: string | null
+  /** Задача Google, зеркалом которой это событие является; у обычного события — `null`. */
+  googleTaskId: string | null
   /** У отменённого события Google присылает только идентификатор и статус — времени нет. */
   times: EventTimes | null
 }
@@ -119,6 +121,21 @@ function timesOf(start: EventTime | undefined, end: EventTime | undefined): Even
  * Событие Google в нашу форму. Времени может не быть вовсе — у отменённого события
  * дельта приносит один идентификатор со статусом, и это не ошибка разбора.
  */
+/**
+ * Задаче Google, которой выставили время, календарь заводит парное событие: править его
+ * нельзя, а ссылка на задачу лежит в описании. Идентификатор из ссылки — тот же, что в
+ * Tasks API, но в base64url; сверено на всех задачах обоих аккаунтов.
+ *
+ * Судить по `eventType: focusTime` нельзя: «время для сосредоточенной работы» заводится
+ * и само по себе, без всякой задачи.
+ */
+const TASK_LINK = /tasks\.google\.com\/task\/([A-Za-z0-9_-]+)/
+
+function taskIdOf(description: string | null): string | null {
+  const found = description?.match(TASK_LINK)
+  return found ? Buffer.from(found[1], 'utf8').toString('base64url') : null
+}
+
 export function mapEvent(item: EventItem): GoogleEvent | null {
   if (!item.id) return null
 
@@ -133,6 +150,7 @@ export function mapEvent(item: EventItem): GoogleEvent | null {
     googleUpdatedAt: updated && !Number.isNaN(updated.getTime()) ? updated : null,
     recurringEventId: item.recurringEventId ?? null,
     htmlLink: item.htmlLink ?? null,
+    googleTaskId: taskIdOf(item.description ?? null),
     times: timesOf(item.start, item.end),
   }
 }

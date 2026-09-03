@@ -240,6 +240,9 @@ export const calendarEvents = pgTable(
     recurringEventId: text(),
     // ADR-004: серия правится только в Google, и ссылку туда даёт он сам
     htmlLink: text(),
+    // ADR-013: у зеркала задачи Google здесь её идентификатор, вынутый из ссылки в
+    // описании. Не ключ, а обычное поле с индексом — инвариант 4
+    googleTaskId: text(),
     deletedAt: tstz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -252,6 +255,7 @@ export const calendarEvents = pgTable(
     index('calendar_events_starts_at_idx').on(t.startsAt),
     index('calendar_events_start_date_idx').on(t.startDate),
     index('calendar_events_recurring_event_id_idx').on(t.recurringEventId),
+    index('calendar_events_google_task_id_idx').on(t.googleTaskId),
     check('calendar_events_status', sql`${t.status} in ('confirmed', 'tentative', 'cancelled')`),
     // инвариант 3: заполнена ровно одна пара времени.
     // end_date у Google исключающая, а равную start_date он принимает и возвращает как есть —

@@ -1,7 +1,13 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/client.ts'
-import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts'
+import {
+  calendarEvents,
+  googleAccounts,
+  googleCalendars,
+  googleTaskLists,
+  googleTasks,
+} from '../db/schema.ts'
 import { EventEtagMismatchError, type GoogleEvent } from '../google/events.ts'
 import { DEFAULT_CALENDAR_COLOR } from '../../lib/calendar-colors.ts'
 import { ConflictError, ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
@@ -43,6 +49,7 @@ function googleEvent(patch: Partial<GoogleEvent> = {}): GoogleEvent {
     googleUpdatedAt: new Date('2026-09-02T10:00:00Z'),
     recurringEventId: null,
     htmlLink: null,
+    googleTaskId: null,
     times: {
       allDay: false,
       startsAt: new Date('2026-09-02T09:00:00Z'),
@@ -534,6 +541,8 @@ describe('события в окне сетки', () => {
         startDate: null,
         endDate: null,
         recurringEventId: null,
+        taskId: null,
+        taskCompleted: null,
       },
     ])
   })
@@ -641,5 +650,95 @@ describe('события в окне сетки', () => {
   it('не принимает кривое окно', async () => {
     await expect(listEvents('вчера', '2026-09-02')).rejects.toThrow(InvalidInputError)
     await expect(listEvents('2026-09-03', '2026-09-02')).rejects.toThrow(InvalidInputError)
+  })
+})
+
+describe('зеркало задачи на сетке', () => {
+  const TASK = 'UEhWcVVzTGtLN2Nwam1PMA'
+
+  async function mirrored(
+    patch: { status?: string; deletedAt?: Date; taskAccount?: 'own' | 'other' } = {},
+  ) {
+    const calendarId = await calendar({ color: '#039be5' })
+    const [own] = await db
+      .select({ accountId: googleCalendars.accountId })
+      .from(googleCalendars)
+      .where(eq(googleCalendars.id, calendarId))
+
+    const accountId =
+      patch.taskAccount === 'other'
+        ? await db
+            .insert(googleAccounts)
+            .values({ email: `other${counter++}@gmail.com`, refreshTokenEncrypted: 'шифротекст' })
+            .returning({ id: googleAccounts.id })
+            .then(([row]) => row.id)
+        : own.accountId
+
+    const [list] = await db
+      .insert(googleTaskLists)
+      .values({ accountId, googleTaskListId: 'MTIz', title: 'Мои задачи' })
+      .returning({ id: googleTaskLists.id })
+
+    const [task] = await db
+      .insert(googleTasks)
+      .values({
+        accountId,
+        taskListId: list.id,
+        googleTaskId: TASK,
+        title: 'продвинуться в workflow',
+        due: '2026-09-02',
+        status: patch.status ?? 'needsAction',
+        deletedAt: patch.deletedAt ?? null,
+      })
+      .returning({ id: googleTasks.id })
+
+    const eventId = await put(calendarId, {
+      startsAt: new Date('2026-09-02T12:30:00Z'),
+      endsAt: new Date('2026-09-02T13:30:00Z'),
+      googleTaskId: TASK,
+    })
+
+    return { eventId, taskId: task.id }
+  }
+
+  it('отдаёт задачу, стоящую за событием: закрывать надо её, а не событие', async () => {
+    const { eventId, taskId } = await mirrored()
+
+    const [event] = await listEvents('2026-09-02', '2026-09-02')
+
+    expect(event).toMatchObject({ id: eventId, taskId, taskCompleted: false })
+  })
+
+  it('отметка выполнения видна прямо на зеркале', async () => {
+    await mirrored({ status: 'completed' })
+
+    expect((await listEvents('2026-09-02', '2026-09-02'))[0].taskCompleted).toBe(true)
+  })
+
+  it('задача чужого аккаунта за зеркало не считается', async () => {
+    await mirrored({ taskAccount: 'other' })
+
+    const [event] = await listEvents('2026-09-02', '2026-09-02')
+
+    expect(event.taskId).toBeNull()
+    expect(event.taskCompleted).toBeNull()
+  })
+
+  it('погашенная задача чекбокса не даёт', async () => {
+    await mirrored({ deletedAt: new Date('2026-09-02T00:00:00Z') })
+
+    expect((await listEvents('2026-09-02', '2026-09-02'))[0].taskId).toBeNull()
+  })
+
+  it('обычное событие задачи за собой не тянет', async () => {
+    const calendarId = await calendar()
+    await put(calendarId, {
+      startsAt: new Date('2026-09-02T09:00:00Z'),
+      endsAt: new Date('2026-09-02T10:00:00Z'),
+    })
+
+    const [event] = await listEvents('2026-09-02', '2026-09-02')
+
+    expect(event).toMatchObject({ taskId: null, taskCompleted: null })
   })
 })
