@@ -5,7 +5,7 @@ import { Dialog, Select } from 'radix-ui'
 import { useState } from 'react'
 import { Failure } from '@/components/board/Failure'
 import { paintOf } from '@/lib/calendar-colors'
-import { rangeTimes, timeLabel, type Range } from '@/lib/calendar-drag'
+import { rangeDates, rangeTimes, timeLabel, type Range } from '@/lib/calendar-drag'
 import { rangeLabel } from '@/lib/calendar-grid'
 import { useCreateEvent } from '@/lib/calendar-mutations'
 import { calendarsQuery } from '@/lib/calendar-query'
@@ -16,6 +16,9 @@ type Props = { range: Range; onClose: () => void }
  * Новое событие: название и календарь, в который оно ляжет. Время здесь не правится — его
  * задали выделением по сетке, а поправят перетаскиванием.
  *
+ * Отметка «весь день» — единственный способ завести такое событие: выделением по сетке
+ * его не получить, минут у него нет. Время выделения при этом отбрасывается.
+ *
  * Календари предлагаются только показанные: событие, заведённое в спрятанном, пропало бы
  * с глаз сразу после создания.
  */
@@ -24,6 +27,7 @@ export function EventDialog({ range, onClose }: Props) {
   const create = useCreateEvent()
   const [title, setTitle] = useState('')
   const [chosen, setChosen] = useState<string | null>(null)
+  const [allDay, setAllDay] = useState(false)
 
   // только показанные и только те, куда пускают писать: в подписной вроде «Праздников
   // России» Google не даст завести событие
@@ -35,7 +39,8 @@ export function EventDialog({ range, onClose }: Props) {
   function submit(event: React.FormEvent) {
     event.preventDefault()
     if (!calendarId) return
-    create.mutate({ calendarId, title, times: rangeTimes(range) }, { onSuccess: onClose })
+    const times = allDay ? rangeDates(range) : rangeTimes(range)
+    create.mutate({ calendarId, title, times }, { onSuccess: onClose })
   }
 
   return (
@@ -45,7 +50,7 @@ export function EventDialog({ range, onClose }: Props) {
         <Dialog.Content className="fixed top-1/2 left-1/2 z-50 w-96 max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 surface-sheet rounded-2xl p-4 outline-none">
           <Dialog.Title className="text-sm font-medium text-fog">Новое событие</Dialog.Title>
           <Dialog.Description className="mt-0.5 text-xs text-fog-dim">
-            {rangeLabel('day', [range.day])}, {timeLabel(range)}
+            {rangeLabel('day', [range.day])}, {allDay ? 'весь день' : timeLabel(range)}
           </Dialog.Description>
 
           <form onSubmit={submit}>
@@ -105,6 +110,16 @@ export function EventDialog({ range, onClose }: Props) {
                   </Select.Portal>
                 </Select.Root>
               </div>
+
+              <label className="flex items-center gap-2 text-sm text-fog-muted">
+                <input
+                  type="checkbox"
+                  checked={allDay}
+                  onChange={(event) => setAllDay(event.target.checked)}
+                  className="size-3.5 shrink-0 accent-accent"
+                />
+                Весь день
+              </label>
             </div>
 
             {calendars.data && !options.length ? (

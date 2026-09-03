@@ -119,6 +119,15 @@ export function rangeTimes(range: Range): { allDay: false; startsAt: string; end
   }
 }
 
+/**
+ * Отрезок сетки в пару дат события на весь день: минуты отбрасываются, берётся день
+ * выделения. Граница у Google исключающая, поэтому сутки — это следующая дата.
+ * Ни одной конвертации часового пояса здесь нет и быть не должно — инвариант 3.
+ */
+export function rangeDates(range: Range): { allDay: true; startDate: string; endDate: string } {
+  return { allDay: true, startDate: range.day, endDate: addDays(range.day, 1) }
+}
+
 /** Подпись отрезка в диалоге. Полночь снизу показывается как 24:00, а не как 00:00. */
 export function timeLabel(range: Range): string {
   const end = range.end === MINUTES_IN_DAY ? '24:00' : clock(range.end)

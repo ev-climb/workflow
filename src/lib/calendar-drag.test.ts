@@ -4,6 +4,7 @@ import {
   TIME_BLOCK_MINUTES,
   blockAt,
   moved,
+  rangeDates,
   rangeOf,
   rangeTimes,
   resized,
@@ -132,5 +133,20 @@ describe('blockAt', () => {
 
   it('у нижнего края суток блок поднимается, а не вылезает за полночь', () => {
     expect(blockAt(DAY, 1425)).toEqual({ day: DAY, start: 1440 - TIME_BLOCK_MINUTES, end: 1440 })
+  })
+})
+
+describe('rangeDates', () => {
+  it('отдаёт день выделения и следующую дату: граница у Google исключающая', () => {
+    expect(rangeDates({ day: DAY, start: 540, end: 630 })).toEqual({
+      allDay: true,
+      startDate: DAY,
+      endDate: NEXT,
+    })
+  })
+
+  it('первое число не уезжает на сутки, какими бы ни были минуты', () => {
+    expect(rangeDates({ day: '2026-03-01', start: 0, end: 60 }).startDate).toBe('2026-03-01')
+    expect(rangeDates({ day: '2026-03-01', start: 1380, end: 1440 }).startDate).toBe('2026-03-01')
   })
 })
