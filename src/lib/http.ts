@@ -203,6 +203,13 @@ export const timeBlockPatchBody = z.union(
   { error: 'ожидается {startsAt, endsAt} или {calendarId}' },
 )
 
+/** Новая задача: список, название и срок датой. Форму срока сверяет сервис. */
+export const taskBody = z.object({
+  taskListId: z.uuid(),
+  title: z.string(),
+  due: z.string().nullable().optional(),
+})
+
 /**
  * Правка задачи Google: название, заметки, срок, отметка выполнения — по отдельности или
  * вместе. Срок — голая дата либо `null`, форму сверяет сервис; времени у него нет.

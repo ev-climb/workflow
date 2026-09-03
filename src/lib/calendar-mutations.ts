@@ -60,6 +60,12 @@ export const useRemoveTimeBlock = () =>
 export const useRemoveEvent = () =>
   useCalendarChange((id: string) => sendJson('DELETE', `/api/calendar/events/${id}`))
 
+/** Новая задача: список, название и срок днём выделения. Времени у срока нет. */
+export type NewTask = { taskListId: string; title: string; due: string }
+
+export const useCreateTask = () =>
+  useCalendarChange((draft: NewTask) => sendJson('POST', '/api/calendar/tasks', draft))
+
 /** Правка задачи Google полями панели: уходит только то, что действительно правили. */
 export type TaskEdit = {
   title?: string

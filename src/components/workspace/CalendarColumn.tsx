@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useState } from 'react'
 import { CalendarGrid } from '@/components/calendar/CalendarGrid'
-import { EventDialog } from '@/components/calendar/EventDialog'
+import { CreateDialog } from '@/components/calendar/CreateDialog'
 import { EventPanel } from '@/components/calendar/EventPanel'
 import { TaskPanel } from '@/components/calendar/TaskPanel'
 import type { Range } from '@/lib/calendar-drag'
@@ -87,7 +87,7 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
         onOpenTask={(task) => setOpenedTask({ id: task.id, title: task.title ?? 'Без названия' })}
       />
 
-      {range ? <EventDialog range={range} onClose={() => setRange(null)} /> : null}
+      {range ? <CreateDialog range={range} onClose={() => setRange(null)} /> : null}
       {opened ? (
         <EventPanel eventId={opened.id} title={opened.title} onClose={() => setOpened(null)} />
       ) : null}

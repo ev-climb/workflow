@@ -1,5 +1,9 @@
 import type { GoogleCalendarSummary } from '@/server/services/google-calendars'
-import type { CalendarTask, CalendarTaskDetails } from '@/server/services/google-tasks'
+import type {
+  CalendarTask,
+  CalendarTaskDetails,
+  TaskListSummary,
+} from '@/server/services/google-tasks'
 import { getJson } from './api-client'
 import type {
   CalendarEventDetailsView,
@@ -90,4 +94,13 @@ export const calendarsQuery = {
   queryKey: calendarsKey,
   queryFn: (): Promise<GoogleCalendarSummary[]> =>
     getJson<GoogleCalendarSummary[]>('/api/google/calendars'),
+}
+
+/** Списки задач для выбора при создании задачи. Читаются, когда диалог открывают. */
+export const taskListsKey = ['google-task-lists'] as const
+
+export const taskListsQuery = {
+  queryKey: taskListsKey,
+  queryFn: (): Promise<TaskListSummary[]> =>
+    getJson<TaskListSummary[]>('/api/google/task-lists'),
 }

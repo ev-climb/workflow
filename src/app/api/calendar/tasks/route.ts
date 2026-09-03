@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse } from '@/lib/http'
-import { listTasks } from '@/server/services/google-tasks'
+import { errorResponse, jsonBody, taskBody } from '@/lib/http'
+import { createTask, listTasks } from '@/server/services/google-tasks'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +10,16 @@ export async function GET(request: Request) {
 
   try {
     return NextResponse.json(await listTasks(params.get('from') ?? '', params.get('to') ?? ''))
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const body = await jsonBody(request, taskBody)
+    const created = await createTask(body.taskListId, { title: body.title, due: body.due })
+    return NextResponse.json(created, { status: 201 })
   } catch (error) {
     return errorResponse(error)
   }
