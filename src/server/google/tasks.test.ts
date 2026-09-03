@@ -5,6 +5,7 @@ import {
   TasksApiError,
   fetchTaskLists,
   fetchTasks,
+  insertTask,
   mapTask,
   patchTask,
 } from './tasks.ts'
@@ -227,5 +228,55 @@ describe('запись задачи', () => {
     await expect(
       patchTask('ya29.access', 'MTIz', 't1', { completed: true }, '"old"'),
     ).rejects.toBeInstanceOf(TaskEtagMismatchError)
+  })
+})
+
+describe('создание задачи', () => {
+  it('уходит POST в список, без If-Match: затирать ещё нечего', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(answer({ id: 't9', title: 'Купить билеты' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const task = await insertTask('ya29.access', 'MTIz', { title: 'Купить билеты' })
+
+    const [url, init] = fetchMock.mock.calls[0] as [
+      string,
+      { method: string; body: string; headers: Record<string, string> },
+    ]
+    expect(url).toBe('https://tasks.googleapis.com/tasks/v1/lists/MTIz/tasks')
+    expect(init.method).toBe('POST')
+    expect(init.headers['if-match']).toBeUndefined()
+    expect(JSON.parse(init.body)).toEqual({ title: 'Купить билеты' })
+    expect(task.googleTaskId).toBe('t9')
+  })
+
+  it('срок посылается полным RFC3339 и возвращается датой', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(answer({ id: 't9', due: '2026-03-01T00:00:00.000Z' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const task = await insertTask('ya29.access', 'MTIz', { title: 'Отчёт', due: '2026-03-01' })
+
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body)).toEqual({
+      title: 'Отчёт',
+      due: '2026-03-01T00:00:00.000Z',
+    })
+    expect(task.due).toBe('2026-03-01')
+  })
+
+  it('отказ без области tasks отличается от прочих', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(refusal('insufficientPermissions')))
+
+    await expect(insertTask('ya29.access', 'MTIz', { title: 'Отчёт' })).rejects.toBeInstanceOf(
+      TasksAccessError,
+    )
+  })
+
+  it('задача без идентификатора — отказ, а не пустая запись', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(answer({ title: 'Купить билеты' })))
+
+    await expect(insertTask('ya29.access', 'MTIz', { title: 'Купить билеты' })).rejects.toBeInstanceOf(
+      TasksApiError,
+    )
   })
 })

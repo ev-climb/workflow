@@ -3,19 +3,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/client.ts'
 import { googleAccounts, googleTaskLists, googleTasks } from '../db/schema.ts'
 import { type GoogleTask, TaskEtagMismatchError } from '../google/tasks.ts'
-import { ConflictError, NotFoundError } from './errors.ts'
-import { getTask, listTasks, updateTask } from './google-tasks.ts'
+import { ConflictError, InvalidInputError, NotFoundError } from './errors.ts'
+import { createTask, getTask, listTaskLists, listTasks, updateTask } from './google-tasks.ts'
 
 vi.mock('../google/tasks.ts', async (importActual) => {
   const actual = await importActual<typeof import('../google/tasks.ts')>()
-  return { ...actual, fetchTask: vi.fn(), patchTask: vi.fn() }
+  return { ...actual, fetchTask: vi.fn(), insertTask: vi.fn(), patchTask: vi.fn() }
 })
 vi.mock('./google-accounts.ts', async (importActual) => {
   const actual = await importActual<typeof import('./google-accounts.ts')>()
   return { ...actual, accessTokenFor: vi.fn() }
 })
 
-const { fetchTask, patchTask } = vi.mocked(await import('../google/tasks.ts'))
+const { fetchTask, insertTask, patchTask } = vi.mocked(await import('../google/tasks.ts'))
 const { accessTokenFor } = vi.mocked(await import('./google-accounts.ts'))
 
 beforeEach(() => {
@@ -204,5 +204,74 @@ describe('отметка выполнения', () => {
     await expect(updateTask(id, { completed: true })).rejects.toBeInstanceOf(ConflictError)
     expect(patchTask).toHaveBeenCalledTimes(2)
     warn.mockRestore()
+  })
+})
+
+describe('списки задач для выбора', () => {
+  it('отдаёт живые списки с почтой аккаунта и его цветом', async () => {
+    const { taskListId } = await stored()
+
+    const lists = await listTaskLists()
+
+    expect(lists).toHaveLength(1)
+    expect(lists[0]).toMatchObject({ id: taskListId, title: 'Мои задачи', color: '#3b82f6' })
+    expect(lists[0].accountEmail).toMatch(/@gmail\.com$/)
+  })
+
+  it('погашенный список не предлагается: писать в него уже некуда', async () => {
+    const { taskListId } = await stored()
+    await db
+      .update(googleTaskLists)
+      .set({ deletedAt: new Date() })
+      .where(eq(googleTaskLists.id, taskListId))
+
+    expect(await listTaskLists()).toHaveLength(0)
+  })
+})
+
+describe('создание задачи', () => {
+  it('заводит задачу в Google и раскладывает ответ Google у себя', async () => {
+    const { taskListId } = await stored()
+    insertTask.mockResolvedValue(google({ googleTaskId: 't9', title: 'Купить билеты' }))
+
+    const { taskId } = await createTask(taskListId, { title: 'Купить билеты' })
+
+    expect(insertTask).toHaveBeenCalledWith('ya29.access', 'MTIz', { title: 'Купить билеты' })
+    const [saved] = await db.select().from(googleTasks).where(eq(googleTasks.id, taskId))
+    expect(saved.googleTaskId).toBe('t9')
+    expect(saved.title).toBe('Купить билеты')
+  })
+
+  it('срок на первое число не уезжает на сутки ни по дороге в Google, ни в базе', async () => {
+    const { taskListId } = await stored()
+    insertTask.mockResolvedValue(google({ googleTaskId: 't9', due: '2026-03-01' }))
+
+    const { taskId } = await createTask(taskListId, { title: 'Отчёт', due: '2026-03-01' })
+
+    expect(insertTask).toHaveBeenCalledWith('ya29.access', 'MTIz', {
+      title: 'Отчёт',
+      due: '2026-03-01',
+    })
+    const [saved] = await db.select().from(googleTasks).where(eq(googleTasks.id, taskId))
+    expect(saved.due).toBe('2026-03-01')
+  })
+
+  it('срок не датой до Google не доходит', async () => {
+    const { taskListId } = await stored()
+
+    await expect(createTask(taskListId, { title: 'Отчёт', due: 'завтра' })).rejects.toBeInstanceOf(
+      InvalidInputError,
+    )
+    expect(insertTask).not.toHaveBeenCalled()
+  })
+
+  it('в погашенный список задача не заводится', async () => {
+    const { taskListId } = await stored()
+    await db
+      .update(googleTaskLists)
+      .set({ deletedAt: new Date() })
+      .where(eq(googleTaskLists.id, taskListId))
+
+    await expect(createTask(taskListId, { title: 'Отчёт' })).rejects.toBeInstanceOf(NotFoundError)
   })
 })

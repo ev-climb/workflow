@@ -268,3 +268,28 @@ export async function patchTask(
   if (!task) throw new TasksApiError('Google вернул задачу без идентификатора', response.status)
   return task
 }
+
+/**
+ * Новая задача в списке. Тело то же, что у правки: создание от неё Tasks не отличает, —
+ * и `If-Match` здесь не нужен, затирать ещё нечего.
+ */
+export async function insertTask(
+  accessToken: string,
+  googleTaskListId: string,
+  patch: TaskPatch,
+): Promise<GoogleTask> {
+  const response = await fetch(`${TASKS_API}/lists/${encodeURIComponent(googleTaskListId)}/tasks`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(patchBody(patch)),
+  })
+  const body = await response.text()
+  if (!response.ok) throw fail('создание задачи', response.status, body)
+
+  const task = mapTask(JSON.parse(body) as TaskItem)
+  if (!task) throw new TasksApiError('Google вернул задачу без идентификатора', response.status)
+  return task
+}
