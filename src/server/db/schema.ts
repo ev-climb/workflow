@@ -270,6 +270,67 @@ export const calendarEvents = pgTable(
   ],
 )
 
+export const googleTaskLists = pgTable(
+  'google_task_lists',
+  {
+    id: pk(),
+    accountId: uuid()
+      .notNull()
+      .references(() => googleAccounts.id, { onDelete: 'cascade' }),
+    googleTaskListId: text().notNull(),
+    title: text().notNull(),
+    // ADR-012: sync-токена в Tasks нет, догон идёт по updatedMin. Метка берётся из
+    // серверного `updated` последней виденной задачи, а не по нашим часам
+    updatedMin: tstz(),
+    syncedAt: tstz(),
+    deletedAt: tstz(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('google_task_lists_account_id_google_task_list_id_key').on(
+      t.accountId,
+      t.googleTaskListId,
+    ),
+  ],
+)
+
+export const googleTasks = pgTable(
+  'google_tasks',
+  {
+    id: pk(),
+    accountId: uuid()
+      .notNull()
+      .references(() => googleAccounts.id, { onDelete: 'cascade' }),
+    // ADR-012: список — обычное поле, а не часть ключа. При переезде задачи между списками
+    // её идентификатор в Google не меняется, а из исходного списка она исчезает бесследно
+    taskListId: uuid()
+      .notNull()
+      .references(() => googleTaskLists.id, { onDelete: 'cascade' }),
+    googleTaskId: text().notNull(),
+    title: text(),
+    notes: text(),
+    // инвариант 3: срок — дата, и через часовой пояс она не идёт. Времени у него нет и в
+    // источнике: `due` со временем возвращается из Tasks с обнулённым временем
+    due: date({ mode: 'string' }),
+    // ADR-012: выполнение — это status, а не hidden; hidden означает «Google убрал с глаз»
+    status: text().notNull().default('needsAction'),
+    completedAt: tstz(),
+    etag: text(),
+    googleUpdatedAt: tstz(),
+    webViewLink: text(),
+    deletedAt: tstz(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    uniqueIndex('google_tasks_account_id_google_task_id_key').on(t.accountId, t.googleTaskId),
+    index('google_tasks_task_list_id_idx').on(t.taskListId),
+    index('google_tasks_due_idx').on(t.due),
+    check('google_tasks_status', sql`${t.status} in ('needsAction', 'completed')`),
+  ],
+)
+
 export const timeBlocks = pgTable(
   'time_blocks',
   {

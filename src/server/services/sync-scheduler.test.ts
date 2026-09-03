@@ -9,9 +9,11 @@ import {
 } from './sync-scheduler.ts'
 
 vi.mock('./google-sync.ts', () => ({ syncAllCalendars: vi.fn() }))
+vi.mock('./google-tasks-sync.ts', () => ({ syncAllTasks: vi.fn() }))
 vi.mock('./viewers.ts', () => ({ viewersOnline: vi.fn() }))
 
 const { syncAllCalendars } = vi.mocked(await import('./google-sync.ts'))
+const { syncAllTasks } = vi.mocked(await import('./google-tasks-sync.ts'))
 const { viewersOnline } = vi.mocked(await import('./viewers.ts'))
 
 const idle = { results: [], failures: [] }
@@ -22,6 +24,7 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.spyOn(console, 'info').mockImplementation(() => {})
   syncAllCalendars.mockResolvedValue(idle)
+  syncAllTasks.mockResolvedValue(idle)
   viewersOnline.mockReturnValue(0)
   delete process.env.SYNC_DISABLED
 })

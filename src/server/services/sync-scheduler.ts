@@ -1,4 +1,5 @@
 import { syncAllCalendars } from './google-sync.ts'
+import { syncAllTasks } from './google-tasks-sync.ts'
 import { viewersOnline } from './viewers.ts'
 
 /** Открыт хотя бы один стол: правку, сделанную в Google, ждём в течение минуты. */
@@ -48,6 +49,13 @@ async function pass(state: SchedulerState): Promise<void> {
     const run = await syncAllCalendars()
     for (const failure of run.failures) {
       console.warn(`синхронизация календаря ${failure.calendarId} упала:`, failure.error)
+    }
+
+    // задачи идут тем же расписанием и тем же проходом: сетка показывает их вперемешку
+    // с событиями, и разъезжаться этим двум выборкам незачем
+    const tasks = await syncAllTasks()
+    for (const failure of tasks.failures) {
+      console.warn(`синхронизация задач аккаунта ${failure.accountId} упала:`, failure.error)
     }
   } catch (error) {
     // проход упал целиком — база или сеть; следующий по расписанию попробует заново
