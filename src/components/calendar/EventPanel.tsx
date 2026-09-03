@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Dialog } from 'radix-ui'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Failure } from '@/components/board/Failure'
 import { addDays } from '@/lib/calendar-grid'
 import { useEditEvent, useRemoveEvent, type EventEdit } from '@/lib/calendar-mutations'
@@ -13,16 +13,27 @@ import { momentInMoscow, moscowParts } from '@/lib/dates'
 type Props = { eventId: string; title: string; onClose: () => void }
 
 /**
- * Событие изнутри. Время правится и здесь, и перетаскиванием по сетке — это два входа в
- * одну запись: оба собирают ту же пару времени и уходят тем же `PATCH`.
+ * Событие изнутри. Поля записываются сами, при уходе фокуса: кнопки «Сохранить» нет, и
+ * закрытие панели правку не теряет — несохранённое дописывается перед ним.
+ *
+ * Время правится и здесь, и перетаскиванием по сетке — это два входа в одну запись: оба
+ * собирают ту же пару времени и уходят тем же `PATCH`.
  *
  * Название известно заранее, из сетки: пока событие читается, у диалога есть имя.
  */
 export function EventPanel({ eventId, title, onClose }: Props) {
   const { data, error, isPending } = useQuery(eventQuery(eventId))
+  const flush = useRef<() => void>(() => {})
 
   return (
-    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+    <Dialog.Root
+      open
+      onOpenChange={(open) => {
+        if (open) return
+        flush.current()
+        onClose()
+      }}
+    >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]" />
         <Dialog.Content className="surface-sheet fixed top-0 right-0 z-50 flex h-full w-112 max-w-[calc(100vw-3rem)] flex-col overflow-y-auto rounded-l-2xl border-y-0 border-r-0 p-5 outline-none">
@@ -35,7 +46,10 @@ export function EventPanel({ eventId, title, onClose }: Props) {
                 {data ? data.calendarTitle : 'Читаем событие…'}
               </Dialog.Description>
             </div>
-            <Dialog.Close aria-label="Закрыть" className="btn-quiet px-2 py-0.5 leading-none">
+            <Dialog.Close
+              aria-label="Закрыть панель"
+              className="btn-quiet px-2 py-0.5 leading-none"
+            >
               ✕
             </Dialog.Close>
           </div>
@@ -45,7 +59,7 @@ export function EventPanel({ eventId, title, onClose }: Props) {
               Событие не прочиталось: {error.message}
             </p>
           ) : isPending ? null : (
-            <EventForm key={data.id} event={data} onClose={onClose} />
+            <EventForm key={data.id} event={data} flush={flush} onClose={onClose} />
           )}
         </Dialog.Content>
       </Dialog.Portal>
@@ -105,6 +119,24 @@ function timesOf(draft: Draft, allDay: boolean): EventTimesInput | null {
   }
 }
 
+/**
+ * Почему пару времени записывать рано. Полупустая и вывернутая пара до сервера не доходит:
+ * иначе правка каждого поля по отдельности упиралась бы в отказ.
+ */
+function timesProblem(draft: Draft, allDay: boolean): string | null {
+  if (allDay) {
+    if (!draft.startDate || !draft.endDate) return 'дни заполнены не полностью'
+    return draft.endDate < draft.startDate ? 'конец раньше начала' : null
+  }
+
+  if (!draft.startDate || !draft.startTime || !draft.endDate || !draft.endTime) {
+    return 'время заполнено не полностью'
+  }
+  const from = momentInMoscow(draft.startDate, draft.startTime)
+  const to = momentInMoscow(draft.endDate, draft.endTime)
+  return to <= from ? 'конец не позже начала' : null
+}
+
 function sameTimes(a: Draft, b: Draft): boolean {
   return (
     a.startDate === b.startDate &&
@@ -114,40 +146,71 @@ function sameTimes(a: Draft, b: Draft): boolean {
   )
 }
 
-function EventForm({ event, onClose }: { event: CalendarEventDetailsView; onClose: () => void }) {
-  const saved = draftOf(event)
-  const [draft, setDraft] = useState(saved)
+function withTimesOf(draft: Draft, source: Draft): Draft {
+  return {
+    ...draft,
+    startDate: source.startDate,
+    startTime: source.startTime,
+    endDate: source.endDate,
+    endTime: source.endTime,
+  }
+}
+
+function EventForm({
+  event,
+  flush,
+  onClose,
+}: {
+  event: CalendarEventDetailsView
+  /** Дописать несохранённое перед закрытием панели: снятия фокуса при этом не будет. */
+  flush: React.RefObject<() => void>
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState(() => draftOf(event))
   const [confirming, setConfirming] = useState(false)
   const [gone, setGone] = useState(false)
   const edit = useEditEvent(event.id)
   const remove = useRemoveEvent()
 
+  // что уже записано: своя запись и правка, приехавшая из Google, двигают точку отсчёта.
+  // Без неё одно и то же уходило бы вторым `PATCH` на каждый уход фокуса
+  const written = useRef(draft)
+  useEffect(() => {
+    written.current = draftOf(event)
+  }, [event])
+
   const times = timesOf(draft, event.allDay)
-  const changes: EventEdit = {}
-  if (draft.title !== saved.title) changes.title = draft.title
-  if (draft.description !== saved.description) changes.description = draft.description
-  if (times && !sameTimes(draft, saved)) changes.times = times
-  const changed = Object.keys(changes).length > 0
+  const problem = timesProblem(draft, event.allDay)
+
+  function save() {
+    const base = written.current
+    const changes: EventEdit = {}
+    if (draft.title !== base.title) changes.title = draft.title
+    if (draft.description !== base.description) changes.description = draft.description
+    if (times && !problem && !sameTimes(draft, base)) changes.times = times
+    if (Object.keys(changes).length === 0) return
+
+    written.current = changes.times ? { ...draft } : withTimesOf(draft, base)
+    // событие, стёртое в Google из-под нас, правкой не воскрешаем
+    edit.mutate(changes, {
+      onSuccess: (result) => {
+        if (result.goneInGoogle) setGone(true)
+      },
+    })
+  }
+
+  useEffect(() => {
+    flush.current = save
+  })
 
   function field(key: keyof Draft) {
     return (value: string) => setDraft({ ...draft, [key]: value })
   }
 
-  function submit(form: React.FormEvent) {
-    form.preventDefault()
-    if (!changed) {
-      onClose()
-      return
-    }
-    // событие, стёртое в Google из-под нас, правкой не воскрешаем: сказать об этом важнее,
-    // чем закрыть панель как при удачной записи
-    edit.mutate(changes, {
-      onSuccess: (result) => (result.goneInGoogle ? setGone(true) : onClose()),
-    })
-  }
+  const timesHeld = problem !== null && !sameTimes(draft, written.current)
 
   return (
-    <form onSubmit={submit} className="mt-6 flex flex-1 flex-col gap-5">
+    <div className="mt-6 flex flex-1 flex-col gap-5">
       <section>
         <label
           htmlFor="event-title"
@@ -159,6 +222,10 @@ function EventForm({ event, onClose }: { event: CalendarEventDetailsView; onClos
           id="event-title"
           value={draft.title}
           onChange={(input) => field('title')(input.target.value)}
+          onBlur={save}
+          onKeyDown={(key) => {
+            if (key.key === 'Enter') key.currentTarget.blur()
+          }}
           placeholder="Без названия"
           className="field w-full px-2 py-1.5 text-sm"
         />
@@ -175,6 +242,7 @@ function EventForm({ event, onClose }: { event: CalendarEventDetailsView; onClos
             time={event.allDay ? null : draft.startTime}
             onDate={field('startDate')}
             onTime={field('startTime')}
+            onDone={save}
           />
           <Edge
             label="Конец"
@@ -182,9 +250,14 @@ function EventForm({ event, onClose }: { event: CalendarEventDetailsView; onClos
             time={event.allDay ? null : draft.endTime}
             onDate={field('endDate')}
             onTime={field('endTime')}
+            onDone={save}
           />
         </div>
-        {event.allDay ? (
+        {timesHeld ? (
+          <p role="status" className="mt-1.5 text-xs text-alarm">
+            {problem}: пока не записано
+          </p>
+        ) : event.allDay ? (
           <p className="mt-1.5 text-xs text-fog-faint">
             последний день события, а не следующий за ним
           </p>
@@ -205,6 +278,7 @@ function EventForm({ event, onClose }: { event: CalendarEventDetailsView; onClos
           rows={6}
           value={draft.description}
           onChange={(input) => field('description')(input.target.value)}
+          onBlur={save}
           placeholder="Пусто"
           className="field w-full resize-y px-2 py-1.5 text-sm"
         />
@@ -213,25 +287,15 @@ function EventForm({ event, onClose }: { event: CalendarEventDetailsView; onClos
         </p>
       </section>
 
+      <p role="status" className="min-h-4 text-xs text-fog-faint">
+        {edit.isPending ? 'Записываем…' : 'Правка записывается сама'}
+      </p>
       {gone ? (
         <p role="status" className="text-sm text-alarm">
           Событие успели удалить в Google — правка не записана.
         </p>
       ) : null}
       <Failure error={edit.error ?? remove.error} />
-
-      <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={edit.isPending || remove.isPending}
-          className="btn-primary px-3 py-1.5 text-sm"
-        >
-          {changed ? 'Сохранить' : 'Закрыть'}
-        </button>
-        <button type="button" onClick={onClose} className="btn-quiet px-3 py-1.5 text-sm">
-          Отмена
-        </button>
-      </div>
 
       <div className="mt-auto border-t border-hair pt-4">
         {confirming ? (
@@ -267,7 +331,7 @@ function EventForm({ event, onClose }: { event: CalendarEventDetailsView; onClos
           </button>
         )}
       </div>
-    </form>
+    </div>
   )
 }
 
@@ -277,6 +341,7 @@ function Edge({
   time,
   onDate,
   onTime,
+  onDone,
 }: {
   label: string
   date: string
@@ -284,6 +349,7 @@ function Edge({
   time: string | null
   onDate: (value: string) => void
   onTime: (value: string) => void
+  onDone: () => void
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -293,6 +359,7 @@ function Edge({
         aria-label={`${label}: дата`}
         value={date}
         onChange={(input) => onDate(input.target.value)}
+        onBlur={onDone}
         className="field px-2 py-1 text-sm"
       />
       {time === null ? null : (
@@ -301,6 +368,7 @@ function Edge({
           aria-label={`${label}: время`}
           value={time}
           onChange={(input) => onTime(input.target.value)}
+          onBlur={onDone}
           className="field px-2 py-1 text-sm"
         />
       )}
