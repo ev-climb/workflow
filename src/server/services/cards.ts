@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, gte, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { addDays } from '../../lib/calendar-grid.ts'
 import { momentInMoscow, moscowParts } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
@@ -409,6 +409,102 @@ export async function listDueCards(from: string, to: string): Promise<CardDue[]>
 
   // условие выборки уже отсекло карточки без срока, но в типе колонка остаётся нулевой
   return rows.flatMap((row) => (row.dueAt === null ? [] : [{ ...row, dueAt: row.dueAt }]))
+}
+
+export type CardHit = {
+  id: string
+  title: string
+  boardId: string
+  boardTitle: string
+  listId: string
+  listTitle: string
+  dueAt: Date | null
+  dueHasTime: boolean
+  dueDone: boolean
+}
+
+export type CardSearch = {
+  text?: string
+  boardId?: string
+  labelId?: string
+  dueFrom?: string
+  dueTo?: string
+  limit?: number
+}
+
+const HITS_DEFAULT = 50
+const HITS_MAX = 200
+
+/** В `LIKE` проценты и подчёркивания — служебные: искомое «100%» иначе совпадёт со всем. */
+function likePattern(text: string): string {
+  return `%${text.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`
+}
+
+/**
+ * Поиск карточек по тексту, метке, доске и окну срока. Ищется по заголовку и описанию;
+ * архив не отдаётся ни на одном уровне, как и в сроках.
+ *
+ * Выдача всегда обрезана: без предела ответ на «покажи всё» съел бы контекст целиком.
+ * Сначала идут ближайшие сроки, бессрочные — в конце (в Postgres `NULL` при `ASC`
+ * ложится последним).
+ */
+export async function searchCards(filter: CardSearch): Promise<CardHit[]> {
+  const where = [isNull(cards.archivedAt), isNull(lists.archivedAt), isNull(boards.archivedAt)]
+
+  const text = filter.text?.trim()
+  if (text) {
+    const pattern = likePattern(text)
+    const found = or(ilike(cards.title, pattern), ilike(cards.description, pattern))
+    if (found) where.push(found)
+  }
+
+  if (filter.boardId) where.push(eq(boards.id, filter.boardId))
+
+  if (filter.labelId) {
+    where.push(
+      inArray(
+        cards.id,
+        db
+          .select({ cardId: cardLabels.cardId })
+          .from(cardLabels)
+          .where(eq(cardLabels.labelId, filter.labelId)),
+      ),
+    )
+  }
+
+  if (filter.dueFrom !== undefined || filter.dueTo !== undefined) {
+    const from = filter.dueFrom ?? filter.dueTo
+    const to = filter.dueTo ?? filter.dueFrom
+    if (!DATE.test(from ?? '') || !DATE.test(to ?? '')) {
+      throw new InvalidInputError('границы срока — даты вида 2026-09-02')
+    }
+    if ((to as string) < (from as string)) {
+      throw new InvalidInputError('окно кончается не раньше, чем начинается')
+    }
+    where.push(gte(cards.dueAt, momentInMoscow(from as string, '00:00')))
+    where.push(lt(cards.dueAt, momentInMoscow(addDays(to as string, 1), '00:00')))
+  }
+
+  const limit = Math.min(Math.max(Math.trunc(filter.limit ?? HITS_DEFAULT), 1), HITS_MAX)
+
+  return db
+    .select({
+      id: cards.id,
+      title: cards.title,
+      boardId: boards.id,
+      boardTitle: boards.title,
+      listId: cards.listId,
+      listTitle: lists.title,
+      dueAt: cards.dueAt,
+      dueHasTime: cards.dueHasTime,
+      dueDone: cards.dueDone,
+    })
+    .from(cards)
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .innerJoin(boards, eq(lists.boardId, boards.id))
+    .where(and(...where))
+    .orderBy(asc(cards.dueAt), asc(cards.title))
+    .limit(limit)
 }
 
 /**
