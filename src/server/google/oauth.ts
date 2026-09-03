@@ -1,10 +1,13 @@
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 
-/** Больше областей не запрашиваем: чтение и запись событий плюс список календарей. */
+/** Больше областей не запрашиваем: события, список календарей и задачи Google Tasks. */
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  // задачи — отдельный продукт со своим API; выданный до этой строки refresh-токен
+  // доступа к нему не даёт, аккаунт придётся подключить заново
+  'https://www.googleapis.com/auth/tasks',
 ].join(' ')
 
 /** Отказ на стороне Google: сеть жива, ответ разобран, но подключиться не вышло. */
