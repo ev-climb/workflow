@@ -50,6 +50,7 @@ function googleEvent(patch: Partial<GoogleEvent> = {}): GoogleEvent {
     googleUpdatedAt: null,
     recurringEventId: null,
     htmlLink: null,
+    googleTaskId: null,
     times: null,
     ...patch,
   }
