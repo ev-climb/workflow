@@ -13,7 +13,11 @@ type Props = {
 
 const INHERIT = 'inherit'
 
-/** Цвет из Google в наборе не значится, поэтому он добавлен в список отдельной строкой. */
+/**
+ * Набор — подсказка, а не словарь: сервис принимает любой `#rrggbb`, и выбранный цвет
+ * вне набора получает свою строку в списке — иначе `Select` остался бы без выбранного
+ * пункта и показал бы пустоту.
+ */
 export function ColorChoice({ value, label, inherited, onChange }: Props) {
   const known = value === null || CALENDAR_COLORS.some((color) => color.hex === value)
   const options = known

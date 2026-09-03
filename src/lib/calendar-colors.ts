@@ -1,7 +1,6 @@
 /**
- * Цвет календаря храним готовым `#rrggbb`, а не именем из набора, как у меток: Google
- * отдаёт цвет календаря сразу шестнадцатеричным, и своего набора имён у него нет —
- * приводить чужой цвет к нашему словарю значило бы терять его.
+ * Цвет храним готовым `#rrggbb`, а не именем из набора, как у меток: набор — подсказка
+ * для выбора, а не словарь, и сервис принимает любой шестнадцатеричный цвет.
  */
 const PALETTE: { hex: string; name: string }[] = [
   { hex: '#7986cb', name: 'лавандовый' },
@@ -41,7 +40,7 @@ const HEX = /^#[0-9a-f]{6}$/
 
 export const isCalendarColor = (value: string): boolean => HEX.test(value)
 
-/** Подпись в выборе цвета. Цвет, пришедший из Google, в набор обычно не попадает. */
+/** Подпись в выборе цвета. Цвет вне набора называть нечем — показываем сам код. */
 export function calendarColorName(hex: string): string {
-  return PALETTE.find((color) => color.hex === hex)?.name ?? 'как в Google'
+  return PALETTE.find((color) => color.hex === hex)?.name ?? hex
 }
