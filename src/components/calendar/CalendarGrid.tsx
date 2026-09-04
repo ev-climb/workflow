@@ -41,7 +41,12 @@ import {
   type PlacedStripe,
   type StripeEntry,
 } from '@/lib/calendar-layout'
-import { useCreateTimeBlock, useSetEventTimes, useSetTaskDone } from '@/lib/calendar-mutations'
+import {
+  useCreateTimeBlock,
+  useMoveTimeBlock,
+  useSetEventTimes,
+  useSetTaskDone,
+} from '@/lib/calendar-mutations'
 import type { CalendarEventView, CardDueView, TimeBlockView } from '@/lib/calendar-view'
 import type { CalendarTask } from '@/server/services/google-tasks'
 import { TimeBlockMenu } from './TimeBlockMenu'
@@ -71,15 +76,32 @@ const BOTH_HANDLES_PX = 20
 /** Что тянут: пустую сетку под новое событие, блок целиком или один из его краёв. */
 type DragKind = 'select' | 'move' | 'start' | 'end'
 
+/** Кого тащат: событие календаря или тайм-блок. Время у них правится разными записями. */
+type Target = { type: 'event' | 'block'; id: string }
+
 type Drag = {
   kind: DragKind
-  /** Событие, которое тащат; у выделения его нет. */
-  id: string | null
+  /** Что тащат; у выделения цели нет. */
+  target: Target | null
   base: Range
   range: Range
   /** Минута, за которую взялись: сдвиг блока считается от неё, а не от его начала. */
   grabbed: number
 }
+
+type GrabHandler = (
+  event: React.PointerEvent,
+  kind: DragKind,
+  base: Range,
+  target: Target | null,
+) => void
+
+function holds(target: Target | null, type: Target['type'], id: string): boolean {
+  return target?.type === type && target.id === id
+}
+
+/** Ссылка в карточку: страница стола открывает её на серверной отрисовке, см. `DueStripe`. */
+const cardHref = (cardId: string) => `/?card=${cardId}`
 
 type Props = {
   days: string[]
@@ -155,8 +177,9 @@ export function CalendarGrid({
    * Отрезок, записанный в Google, но ещё не приехавший обратно: пока идёт запрос, блок
    * держится на новом месте. Иначе событие прыгало бы назад на время похода в сеть.
    */
-  const [pending, setPending] = useState<{ id: string; range: Range } | null>(null)
+  const [pending, setPending] = useState<{ target: Target; range: Range } | null>(null)
   const setTimes = useSetEventTimes()
+  const moveBlock = useMoveTimeBlock()
   const createBlock = useCreateTimeBlock()
 
   /** Карточка, которую держат над сеткой: под курсором её ждёт заготовка тайм-блока. */
@@ -166,7 +189,9 @@ export function CalendarGrid({
 
   /**
    * Куда попадёт брошенная карточка. День берётся перебором колонок по месту курсора, а не
-   * у dnd-kit: цель у сетки одна на все колонки, а колонок то одна, то семь.
+   * у dnd-kit: цель у сетки одна на все колонки, а колонок то одна, то семь. Слева от
+   * колонок лежит рейка со временем, и карточка, брошенная на неё, попадает в первый день,
+   * а не пропадает: мёртвой полосы внутри цели быть не должно.
    */
   function dropOf(drag: DragMoveEvent | DragEndEvent) {
     const data = drag.active.data.current as DragData | undefined
@@ -175,12 +200,16 @@ export function CalendarGrid({
     const point = pointerOf(drag.activatorEvent, drag.delta)
     if (!point) return null
 
-    for (const [day, column] of columnNodes.current) {
-      const box = column.getBoundingClientRect()
-      if (point.x < box.left || point.x >= box.right) continue
-      return { card: data.card, range: blockAt(day, snapMinutes(point.y - box.top, box.height)) }
+    const boxes = days
+      .map((day) => ({ day, box: columnNodes.current.get(day)?.getBoundingClientRect() }))
+      .filter((one): one is { day: string; box: DOMRect } => one.box !== undefined)
+    if (boxes.length === 0) return null
+
+    const hit = boxes.find(({ box }) => point.x < box.right) ?? boxes[boxes.length - 1]
+    return {
+      card: data.card,
+      range: blockAt(hit.day, snapMinutes(point.y - hit.box.top, hit.box.height)),
     }
-    return null
   }
 
   useDndMonitor({
@@ -211,10 +240,17 @@ export function CalendarGrid({
   const stripes = placeStripe(stripeItems(dues, tasks), days)
 
   const held = drag ?? pending
-  const heldId = held?.id ?? null
-  // блок, который тащат, рисуется заготовкой: на прежнем месте его быть не должно
-  const shown = heldId === null ? timed : timed.filter((event) => event.id !== heldId)
-  const items = gridItems(shown, blocks)
+  const target = held?.target ?? null
+  // то, что тащат, рисуется заготовкой: на прежнем месте его быть не должно
+  const shown = timed.filter((event) => !holds(target, 'event', event.id))
+  const items = gridItems(
+    shown,
+    blocks.filter((block) => !holds(target, 'block', block.id)),
+  )
+  const heldEvent =
+    target?.type === 'event' ? (timed.find((one) => one.id === target.id) ?? null) : null
+  const heldBlock =
+    target?.type === 'block' ? (blocks.find((one) => one.id === target.id) ?? null) : null
 
   const scrolled = useRef(false)
   useEffect(() => {
@@ -226,7 +262,7 @@ export function CalendarGrid({
     box.scrollTop = (minutes / MINUTES_IN_DAY) * DAY_PX - box.clientHeight * SCROLL_ANCHOR
   }, [days, now])
 
-  function grab(event: React.PointerEvent, kind: DragKind, base: Range, id: string | null) {
+  const grab: GrabHandler = (event, kind, base, dragging) => {
     if (event.button !== 0) return
     const column = event.currentTarget.closest<HTMLElement>('[data-day]')
     if (!column) return
@@ -235,7 +271,7 @@ export function CalendarGrid({
     column.setPointerCapture(event.pointerId)
     const grabbed = minutesIn(column, event.clientY)
     const range = kind === 'select' ? selection(base.day, grabbed, grabbed) : base
-    setDrag({ kind, id, base, range, grabbed })
+    setDrag({ kind, target: dragging, base, range, grabbed })
   }
 
   /**
@@ -268,20 +304,29 @@ export function CalendarGrid({
       onSelect(current.range)
       return
     }
-    if (!current.id) return
+    const moving = current.target
+    if (!moving) return
 
-    // блок отпустили там же, где взяли: это щелчок по событию, а не правка времени
+    // отпустили там же, где взяли: это щелчок, а не правка времени
     if (sameRange(current.range, current.base)) {
-      const clicked = timed.find((one) => one.id === current.id)
-      if (clicked) onOpen(clicked)
+      if (moving.type === 'event') {
+        const clicked = timed.find((one) => one.id === moving.id)
+        if (clicked) onOpen(clicked)
+        return
+      }
+      const clicked = blocks.find((one) => one.id === moving.id)
+      if (clicked) window.location.href = cardHref(clicked.cardId)
       return
     }
 
-    setPending({ id: current.id, range: current.range })
-    setTimes.mutate(
-      { id: current.id, times: rangeTimes(current.range) },
-      { onSettled: () => setPending(null) },
-    )
+    setPending({ target: moving, range: current.range })
+    const times = rangeTimes(current.range)
+    const settle = { onSettled: () => setPending(null) }
+    if (moving.type === 'event') {
+      setTimes.mutate({ id: moving.id, times }, settle)
+      return
+    }
+    moveBlock.mutate({ id: moving.id, startsAt: times.startsAt, endsAt: times.endsAt }, settle)
   }
 
   return (
@@ -362,7 +407,10 @@ export function CalendarGrid({
         </div>
       ) : null}
 
-      <Failure error={setTimes.error ?? createBlock.error} className="px-3 pt-1" />
+      <Failure
+        error={setTimes.error ?? moveBlock.error ?? createBlock.error}
+        className="px-3 pt-1"
+      />
 
       <div
         ref={(node) => {
@@ -409,6 +457,8 @@ export function CalendarGrid({
                     <TimeBlockChip
                       key={placed.key}
                       placed={{ ...placed, event: placed.event.block }}
+                      day={day}
+                      onGrab={grab}
                     />
                   ) : placed.event.event.taskId ? (
                     <TaskBlock
@@ -428,7 +478,7 @@ export function CalendarGrid({
                   ),
                 )}
                 {held && held.range.day === day ? (
-                  <Draft range={held.range} event={timed.find((one) => one.id === heldId) ?? null} />
+                  <Draft range={held.range} event={heldEvent} title={heldBlock?.cardTitle} />
                 ) : null}
                 {dropping?.range.day === day ? (
                   <Draft range={dropping.range} event={null} title={dropping.title} />
@@ -627,11 +677,23 @@ function TaskStripe({
  * приходит из Google и может совпасть с акцентом, форма — нет.
  *
  * Своего названия у блока нет — он показывает карточку и в неё же ведёт, как и полоса срока.
+ * Время у блока правится тем же движением, что и у события: тащим за середину, тянем за края.
  */
-function TimeBlockChip({ placed }: { placed: PlacedEvent<TimeBlockView> }) {
+function TimeBlockChip({
+  placed,
+  day,
+  onGrab,
+}: {
+  placed: PlacedEvent<TimeBlockView>
+  day: string
+  onGrab: GrabHandler
+}) {
   const { event: block, start, end, column, columns } = placed
   const height = ((end - start) / MINUTES_IN_DAY) * DAY_PX
   const time = moscowParts(block.startsAt).time
+  // кусок блока, обрезанный полуночью, не тащится: правка переписала бы блок целиком
+  const base = rangeOf(block, day)
+  const target: Target = { type: 'block', id: block.id }
 
   return (
     <div
@@ -644,9 +706,17 @@ function TimeBlockChip({ placed }: { placed: PlacedEvent<TimeBlockView> }) {
       }}
     >
       <a
-        href={`/?card=${block.cardId}`}
+        href={cardHref(block.cardId)}
+        draggable={false}
+        onPointerDown={base ? (pointer) => onGrab(pointer, 'move', base, target) : undefined}
+        onClick={(pointer) => {
+          // мышь ведёт `finish`: он один отличает щелчок от переноса. Клавиатуре ссылка остаётся
+          if (base && pointer.detail !== 0) pointer.preventDefault()
+        }}
         title={`Время под карточку ${time}${block.calendarId ? ', видно в Google' : ''}: ${block.cardTitle} — ${block.boardTitle}`}
-        className="block h-full overflow-hidden px-1.5 py-0.5 text-left text-[10px] leading-tight text-fog-muted outline-none hover:bg-white/8 focus-visible:ring-1 focus-visible:ring-accent-line"
+        className={`block h-full overflow-hidden px-1.5 py-0.5 text-left text-[10px] leading-tight text-fog-muted outline-none hover:bg-white/8 focus-visible:ring-1 focus-visible:ring-accent-line ${
+          base ? 'cursor-grab active:cursor-grabbing' : ''
+        }`}
       >
         {height >= TIME_VISIBLE_PX ? (
           <span className="block truncate font-mono text-[9.5px] text-accent tabular-nums">
@@ -658,6 +728,14 @@ function TimeBlockChip({ placed }: { placed: PlacedEvent<TimeBlockView> }) {
           <span className="truncate font-medium">{block.cardTitle}</span>
         </span>
       </a>
+
+      {base && height >= BOTH_HANDLES_PX ? (
+        <Handle edge="start" onPointerDown={(pointer) => onGrab(pointer, 'start', base, target)} />
+      ) : null}
+      {base ? (
+        <Handle edge="end" onPointerDown={(pointer) => onGrab(pointer, 'end', base, target)} />
+      ) : null}
+
       <TimeBlockMenu blockId={block.id} cardTitle={block.cardTitle} calendarId={block.calendarId} />
     </div>
   )
@@ -735,7 +813,7 @@ function TaskBlock({
 type BlockProps = {
   placed: PlacedEvent<TimedView>
   day: string
-  onGrab: (event: React.PointerEvent, kind: DragKind, base: Range, id: string | null) => void
+  onGrab: GrabHandler
   onOpen: OpenHandler
 }
 
@@ -746,6 +824,7 @@ function EventBlock({ placed, day, onGrab, onOpen }: BlockProps) {
   const time = moscowParts(event.startsAt).time
   // кусок события, обрезанный полуночью, не тащится: правка переписала бы событие целиком
   const base = rangeOf(event, day)
+  const target: Target = { type: 'event', id: event.id }
 
   /**
    * Мышь ведёт `finish`: он один отличает щелчок от перетаскивания. Сюда доходит либо
@@ -758,7 +837,7 @@ function EventBlock({ placed, day, onGrab, onOpen }: BlockProps) {
   return (
     <button
       type="button"
-      onPointerDown={base ? (pointer) => onGrab(pointer, 'move', base, event.id) : undefined}
+      onPointerDown={base ? (pointer) => onGrab(pointer, 'move', base, target) : undefined}
       onClick={open}
       className={`absolute overflow-hidden rounded-[11px] px-1.5 py-0.5 text-left text-[10px] leading-tight text-fog shadow-[0_6px_18px_rgb(0_0_0/0.3)] outline-none transition-[filter] hover:brightness-110 focus-visible:ring-1 focus-visible:ring-accent-line ${
         base ? 'cursor-grab active:cursor-grabbing' : ''
@@ -784,10 +863,10 @@ function EventBlock({ placed, day, onGrab, onOpen }: BlockProps) {
       </span>
 
       {base && height >= BOTH_HANDLES_PX ? (
-        <Handle edge="start" onPointerDown={(pointer) => onGrab(pointer, 'start', base, event.id)} />
+        <Handle edge="start" onPointerDown={(pointer) => onGrab(pointer, 'start', base, target)} />
       ) : null}
       {base ? (
-        <Handle edge="end" onPointerDown={(pointer) => onGrab(pointer, 'end', base, event.id)} />
+        <Handle edge="end" onPointerDown={(pointer) => onGrab(pointer, 'end', base, target)} />
       ) : null}
     </button>
   )

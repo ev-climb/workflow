@@ -6,8 +6,10 @@ import {
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
+  pointerWithin,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -16,7 +18,7 @@ import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMoveCard, useMoveList } from '@/lib/board-mutations'
-import { isCalendarDrop } from '@/lib/calendar-drag'
+import { CALENDAR_DROP, isCalendarDrop } from '@/lib/calendar-drag'
 import { planListMove, planMove, type DragData } from '@/lib/board-move'
 import { boardKey } from '@/lib/board-query'
 import type { BoardView } from '@/lib/board-view'
@@ -33,6 +35,20 @@ const across = (from: DragData) => (from.type === 'list' ? LIST_ACROSS_BOARDS : 
 const NOTICE_MS = 6000
 
 const dragData = (data: unknown): DragData | undefined => data as DragData | undefined
+
+/**
+ * Сетка календаря выбирается курсором, всё остальное — по расстоянию до углов. Сетка
+ * высокая и узкая: её углы далеко от точки броска, и `closestCorners` отдаёт её любой
+ * колонке доски, оказавшейся рядом, — попадёт карточка в календарь или нет, решала бы
+ * высота соседней колонки. Сортировке карточек углы по-прежнему подходят лучше курсора,
+ * а списку на сетке делать нечего: тайм-блок заводится только карточкой.
+ */
+const collide: CollisionDetection = (args) => {
+  if (dragData(args.active.data.current)?.type !== 'card') return closestCorners(args)
+
+  const calendar = pointerWithin(args).find((one) => one.id === CALENDAR_DROP)
+  return calendar ? [calendar] : closestCorners(args)
+}
 
 /**
  * Перетаскивание карточек и списков на весь стол. Контекст один на обе доски, а не по
@@ -121,7 +137,7 @@ export function CardDragArea({ children }: { children: ReactNode }) {
       // номер выходит другой, чем на клиенте: гидратация расходится на aria-describedby
       id="card-drag"
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={collide}
       onDragStart={start}
       onDragOver={hover}
       onDragEnd={end}

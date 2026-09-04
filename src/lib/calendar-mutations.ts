@@ -48,6 +48,15 @@ export const useCreateTimeBlock = () =>
     sendJson('POST', '/api/calendar/time-blocks', block),
   )
 
+/**
+ * Перенос и растягивание блока по сетке. Пара границ уходит целиком, как и у события:
+ * промежуточного состояния у блока нет.
+ */
+export const useMoveTimeBlock = () =>
+  useCalendarChange(({ id, startsAt, endsAt }: { id: string; startsAt: string; endsAt: string }) =>
+    sendJson('PATCH', `/api/calendar/time-blocks/${id}`, { startsAt, endsAt }),
+  )
+
 /** Зеркало блока в Google: календарь показа либо `null` — убрать зеркало. */
 export const useMirrorTimeBlock = (id: string) =>
   useCalendarChange((calendarId: string | null) =>
