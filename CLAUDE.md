@@ -21,8 +21,14 @@
 ## Команды
 
 ```bash
-docker compose up -d db     # Postgres
-pnpm dev                    # приложение на localhost:3000
+workflow                    # рабочий запуск: контейнеры и стол в браузере на APP_PORT
+workflow stop               # остановить
+workflow logs               # лог приложения
+workflow password           # сменить пароль входа: спросит, впишет в .env, перезапустит
+# команда ставится симлинком: ln -s "$PWD/bin/workflow" ~/.local/bin/workflow
+
+docker compose up -d db     # только Postgres, если приложение поднимаешь руками
+pnpm dev                    # разработка: приложение на localhost:3000
 pnpm typecheck              # tsc --noEmit
 pnpm test                   # vitest, юнит-тесты сервисов
 pnpm test:e2e               # playwright, дымовой сценарий

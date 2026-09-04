@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Запуск приложения одной командой из любого каталога. Ставится симлинком:
+#   ln -s "$PWD/bin/workflow" ~/.local/bin/workflow
+set -euo pipefail
+
+# корень проекта берётся от самого скрипта, а не из окружения: симлинк разворачивается
+root=$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")/.." && pwd)
+cd "$root"
+
+IMAGE=workflow-app
+WATCH=(src scripts package.json pnpm-lock.yaml next.config.ts postcss.config.mjs tsconfig.json Dockerfile docker-compose.yml)
+
+if [[ ! -f .env ]]; then
+  echo "нет .env: скопируй .env.example в .env и заполни" >&2
+  exit 1
+fi
+
+port=$(sed -n 's/^APP_PORT=\([0-9]\+\).*/\1/p' .env | tail -1)
+url="http://localhost:${port:-8477}/"
+
+running() {
+  docker compose ps --status running --services 2>/dev/null | grep -qx app
+}
+
+# образа нет или исходники свежее его — иначе в браузере откроется вчерашняя сборка
+stale() {
+  local created
+  created=$(docker image inspect -f '{{.Created}}' "$IMAGE" 2>/dev/null) || return 0
+  created=$(printf '%s' "$created" | sed -E 's/\.[0-9]+//')
+  [[ -n $(find "${WATCH[@]}" -newermt "$created" -print -quit 2>/dev/null) ]]
+}
+
+wait_ready() {
+  for _ in $(seq 60); do
+    curl -sf -o /dev/null "$url" && return 0
+    sleep 1
+  done
+  echo "приложение не ответило на $url за минуту, смотри: workflow logs" >&2
+  return 1
+}
+
+case "${1:-start}" in
+  start)
+    if stale; then
+      echo "исходники свежее образа, пересобираю"
+      docker compose build --quiet
+      docker compose up -d
+    elif ! running; then
+      docker compose up -d
+    fi
+    wait_ready
+    xdg-open "$url" >/dev/null 2>&1 &
+    echo "$url"
+    ;;
+  stop)
+    # stop, а не down: контейнеры остаются, и следующий запуск не пересоздаёт их с нуля
+    docker compose stop
+    ;;
+  restart)
+    docker compose stop
+    exec "$0" start
+    ;;
+  logs)
+    exec docker compose logs -f app
+    ;;
+  password)
+    # scrypt необратим: старый пароль не восстановить, только завести новый
+    line=$(pnpm auth:hash)
+    if grep -q '^APP_PASSWORD_HASH=' .env; then
+      sed -i "s|^APP_PASSWORD_HASH=.*|$line|" .env
+    else
+      printf '%s\n' "$line" >> .env
+    fi
+    exec "$0" restart
+    ;;
+  *)
+    echo "workflow [start|stop|restart|logs|password]" >&2
+    exit 1
+    ;;
+esac

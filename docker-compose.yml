@@ -1,7 +1,28 @@
+name: workflow
+
+x-app: &app
+  build: .
+  image: workflow-app
+  env_file: .env
+  environment:
+    # внутри сети приложение ходит в базу по имени сервиса, а не через порт хоста
+    DATABASE_URL: postgres://${POSTGRES_USER:-workflow}:${POSTGRES_PASSWORD:-workflow}@db:5432/${POSTGRES_DB:-workflow}
+    ATTACHMENTS_DIR: /app/attachments
+  volumes:
+    - ./attachments:/app/attachments
+
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    # один пользователь и один процесс приложения: настройки по умолчанию рассчитаны
+    # на нагрузку, которой здесь никогда не будет
+    command: >
+      postgres
+      -c max_connections=20
+      -c shared_buffers=48MB
+      -c work_mem=2MB
+      -c maintenance_work_mem=32MB
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-workflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-workflow}
@@ -10,11 +31,35 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
+    mem_limit: 256m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-workflow} -d ${POSTGRES_DB:-workflow}"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      interval: 2s
+      timeout: 2s
+      retries: 20
+      start_period: 3s
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["node", "scripts/migrate.ts"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    <<: *app
+    restart: unless-stopped
+    # standalone-сервер не разбирает SIGTERM: ждать его десять секунд по умолчанию незачем
+    stop_grace_period: 3s
+    ports:
+      - "${APP_PORT:-8477}:3000"
+    mem_limit: 640m
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   db-data:

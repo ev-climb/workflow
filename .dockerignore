@@ -1,0 +1,23 @@
+.git
+.docs
+.next
+node_modules
+attachments
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+playwright-report
+test-results
+coverage
+e2e
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# в образ не едут тесты и их конфиги: сборка проверяет типы того, что реально работает
+**/*.test.ts
+**/*.test.tsx
+playwright.config.ts
+vitest.config.ts
+vitest.*.ts
