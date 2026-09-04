@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { SESSION_COOKIE } from '@/lib/session'
 import { hasValidSession } from '@/server/services/auth'
 
-const PUBLIC_PATHS = ['/login', '/api/auth/login']
+// у /api/mcp своя дверь — bearer-токен: сессии в браузере у клиента MCP нет
+const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/mcp']
 
 /** В Next 16 middleware переименован в proxy и по умолчанию идёт в рантайме Node. */
 export function proxy(request: NextRequest) {

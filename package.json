@@ -12,7 +12,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "mcp:stdio": "echo 'нет bin/mcp-stdio.ts: pnpm mcp:stdio заработает в фазе 07 (.docs/phases/07-mcp.md)' >&2; exit 1",
+    "mcp:stdio": "node bin/mcp-stdio.ts",
     "build": "next build",
     "start": "next start",
     "test:watch": "vitest",
