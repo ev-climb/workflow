@@ -53,6 +53,7 @@ function timed(patch: Partial<GoogleEvent> = {}): GoogleEvent {
     googleUpdatedAt: new Date('2026-09-01T10:00:00Z'),
     recurringEventId: null,
     htmlLink: null,
+    googleTaskId: null,
     times: {
       allDay: false,
       startsAt: new Date('2026-09-02T09:00:00Z'),
