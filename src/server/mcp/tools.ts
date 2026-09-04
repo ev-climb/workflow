@@ -3,9 +3,9 @@ import type { McpServer } from '@modelcontextprotocol/server'
 import { toEventTimes } from '../../lib/calendar-view.ts'
 import { moscowParts } from '../../lib/dates.ts'
 import { dueInput, eventBody, eventPatchBody, moveBody } from '../../lib/schemas.ts'
-import type { BoardCard, BoardWithLists } from '../services/boards.ts'
+import type { BoardCard, BoardWithLists, LabelSummary } from '../services/boards.ts'
 import { getBoard, listBoards } from '../services/boards.ts'
-import type { CardDetail, CardHit } from '../services/cards.ts'
+import type { CardDetail, CardDue, CardHit } from '../services/cards.ts'
 import {
   archiveCard,
   createCardFromText,
@@ -25,6 +25,9 @@ import type {
 } from '../services/google-events.ts'
 import { createEvent, getEvent, listEvents, updateEvent } from '../services/google-events.ts'
 import { attachLabel, detachLabel } from '../services/labels.ts'
+import type { DayPlan } from '../services/plan.ts'
+import { planDay } from '../services/plan.ts'
+import type { TimeBlock } from '../services/time-blocks.ts'
 
 /**
  * Срок наружу: момент разбирается на московские дату и время, и время показывается только
@@ -41,12 +44,20 @@ function dueOut(
   return { due: hasTime ? `${date} ${time}` : date, dueDone: done }
 }
 
+/**
+ * У метки, приехавшей из Trello, названия может не быть вовсе — только цвет. Пустая
+ * строка наружу бесполезна: читающий не отличит одну такую метку от другой.
+ */
+function labelName(label: LabelSummary): string {
+  return label.name || label.color
+}
+
 function cardOut(card: BoardCard): Record<string, unknown> {
   return {
     id: card.id,
     title: card.title,
     ...dueOut(card.dueAt, card.dueHasTime, card.dueDone),
-    ...(card.labels.length ? { labels: card.labels.map((label) => label.name) } : {}),
+    ...(card.labels.length ? { labels: card.labels.map(labelName) } : {}),
     ...(card.checklistTotal ? { checklist: `${card.checklistDone}/${card.checklistTotal}` } : {}),
   }
 }
@@ -56,7 +67,7 @@ function boardOut(board: BoardWithLists): Record<string, unknown> {
   return {
     id: board.id,
     title: board.title,
-    labels: board.labels.map((label) => ({ id: label.id, name: label.name })),
+    labels: board.labels.map((label) => ({ id: label.id, name: labelName(label) })),
     lists: board.lists.map((list) => ({
       id: list.id,
       title: list.title,
@@ -89,7 +100,7 @@ async function detailOut(cardId: string): Promise<Record<string, unknown>> {
     ...dueOut(card.dueAt, card.dueHasTime, card.dueDone),
     ...(card.description === null ? {} : { description: card.description }),
     ...(card.labels.length
-      ? { labels: card.labels.map((label) => ({ id: label.id, name: label.name })) }
+      ? { labels: card.labels.map((label) => ({ id: label.id, name: labelName(label) })) }
       : {}),
     ...(checklists.length
       ? {
@@ -133,6 +144,44 @@ function eventDetailsOut(event: CalendarEventDetails): Record<string, unknown> {
     ...eventOut(event),
     calendar: event.calendarTitle,
     ...(event.description === null ? {} : { description: event.description }),
+  }
+}
+
+function timeBlockOut(block: TimeBlock): Record<string, unknown> {
+  return {
+    id: block.id,
+    card: block.cardTitle,
+    board: block.boardTitle,
+    from: moment(block.startsAt),
+    to: moment(block.endsAt),
+  }
+}
+
+function dueCardOut(card: CardDue): Record<string, unknown> {
+  return {
+    id: card.id,
+    title: card.title,
+    board: card.boardTitle,
+    ...dueOut(card.dueAt, card.dueHasTime, card.dueDone),
+  }
+}
+
+function planOut(plan: DayPlan): Record<string, unknown> {
+  return {
+    date: plan.date,
+    events: plan.events.map(eventOut),
+    timeBlocks: plan.timeBlocks.map(timeBlockOut),
+    due: plan.due.map(dueCardOut),
+    boards: plan.boards.map((board) => ({
+      id: board.id,
+      title: board.title,
+      inWork: board.inWork.map((list) => ({
+        id: list.id,
+        title: list.title,
+        cards: list.cards.map(cardOut),
+      })),
+      ...(board.lists ? { lists: board.lists } : {}),
+    })),
   }
 }
 
@@ -370,6 +419,19 @@ export const TOOLS: ToolDef[] = [
 
       return { ...eventDetailsOut(await getEvent(input.eventId)), conflict: written.conflict }
     },
+  ),
+
+  tool(
+    'plan_day',
+    {
+      title: 'План дня',
+      description:
+        'Всё про один день одним вызовом: события календарей, тайм-блоки, сроки карточек ' +
+        'на этот день и следующий, содержимое рабочих колонок обеих досок стола. ' +
+        'День — московская дата вида 2026-09-02, по умолчанию сегодняшняя.',
+      input: z.object({ date: z.string().optional() }),
+    },
+    async ({ date }) => planOut(await planDay(date)),
   ),
 ]
 

@@ -3,10 +3,11 @@ import { z } from 'zod'
 import { db } from '../db/client.ts'
 import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts'
 import { createBoard, createList } from '../services/boards.ts'
-import { createCard } from '../services/cards.ts'
+import { createCard, describeCard, setCardDue } from '../services/cards.ts'
 import { createChecklist } from '../services/checklists.ts'
 import { InvalidInputError, NotFoundError } from '../services/errors.ts'
 import { createLabel } from '../services/labels.ts'
+import { setBoardSlot } from '../services/workspace.ts'
 import { TOOLS } from './tools.ts'
 
 type Json = Record<string, unknown>
@@ -294,5 +295,38 @@ describe('события календаря', () => {
     await expect(
       call('list_events', { from: '2026-09-02', to: '2026-09-01' }),
     ).rejects.toBeInstanceOf(InvalidInputError)
+  })
+})
+
+describe('plan_day', () => {
+  it('день кривой — ошибка входа, а не план за случайную дату', async () => {
+    await expect(call('plan_day', { date: '02.09.2026' })).rejects.toBeInstanceOf(
+      InvalidInputError,
+    )
+  })
+
+  it('без аргументов берёт сегодняшний день', async () => {
+    const plan = (await call('plan_day', {})) as Json
+
+    expect(plan.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('отдаёт рабочие колонки стола компактно: срок строкой, описаний нет', async () => {
+    const created = await createBoard({ title: 'BetaSet' })
+    const list = await createList({ boardId: created.id, title: 'Сейчас (максимум 3)' })
+    const card = await createCard({ listId: list.id, title: 'Починить пуши' })
+    await describeCard(card.id, 'длинное описание, которому здесь не место')
+    await setCardDue(card.id, { date: '2026-09-02', time: '12:00' })
+    await setBoardSlot('top', created.id)
+    await setBoardSlot('bottom', null)
+
+    const plan = (await call('plan_day', { date: '2026-09-02' })) as Json
+    const boards = plan.boards as Json[]
+    const inWork = boards[0].inWork as Json[]
+    const cards = inWork[0].cards as Json[]
+
+    expect(inWork[0].title).toBe('Сейчас (максимум 3)')
+    expect(cards[0]).toMatchObject({ title: 'Починить пуши', due: '2026-09-02 12:00' })
+    expect(cards[0]).not.toHaveProperty('description')
   })
 })
