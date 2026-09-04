@@ -1,5 +1,6 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { type NextRequest } from 'next/server'
 import { OAUTH_STATE_COOKIE } from '@/lib/google-oauth'
+import { seeOther } from '@/lib/http'
 import { InvalidInputError } from '@/server/services/errors'
 import { connectGoogleAccount } from '@/server/services/google-accounts'
 import { syncNow } from '@/server/services/sync-scheduler'
@@ -10,11 +11,9 @@ import { syncNow } from '@/server/services/sync-scheduler'
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams
-  const back = new URL('/settings', request.url)
 
   const settled = (query: [string, string]) => {
-    back.searchParams.set(...query)
-    const response = NextResponse.redirect(back, { status: 303 })
+    const response = seeOther(`/settings?${new URLSearchParams([query])}`)
     // заявка отыграна: второй раз тот же `state` не подойдёт
     response.cookies.delete({ name: OAUTH_STATE_COOKIE, path: '/api/auth/google' })
     return response

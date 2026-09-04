@@ -1,4 +1,5 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { type NextRequest } from 'next/server'
+import { seeOther } from '@/lib/http'
 import { SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session'
 import { signIn } from '@/server/services/auth'
 import { UnauthorizedError } from '@/server/services/errors'
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const { token, expiresAt } = await signIn(password)
-    const response = NextResponse.redirect(new URL(next, request.url), { status: 303 })
+    const response = seeOther(next)
     response.cookies.set(SESSION_COOKIE, token, {
       httpOnly: true,
       sameSite: 'lax',
@@ -23,10 +24,9 @@ export async function POST(request: NextRequest) {
     return response
   } catch (error) {
     if (error instanceof UnauthorizedError) {
-      const back = new URL('/login', request.url)
-      back.searchParams.set('error', '1')
-      if (next !== '/') back.searchParams.set('next', next)
-      return NextResponse.redirect(back, { status: 303 })
+      const back = new URLSearchParams({ error: '1' })
+      if (next !== '/') back.set('next', next)
+      return seeOther(`/login?${back}`)
     }
     throw error
   }

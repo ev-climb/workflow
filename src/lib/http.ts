@@ -36,6 +36,15 @@ export function errorResponse(error: unknown): NextResponse {
   throw error
 }
 
+/**
+ * Редирект для браузера с относительным `Location`. Абсолютный адрес собрался бы из
+ * имени, на котором слушает сервер, а не из того, по которому пришёл браузер: за портом
+ * контейнера это увело бы на `0.0.0.0`.
+ */
+export function seeOther(location: string): NextResponse {
+  return new NextResponse(null, { status: 303, headers: { location } })
+}
+
 /** Кривой JSON и несошедшаяся схема — такая же ошибка входа, как и всё остальное. */
 export async function jsonBody<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
   let raw: unknown
