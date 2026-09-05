@@ -458,7 +458,7 @@ describe('срок карточки', () => {
     )
   })
 
-  it('снятый срок снимает и отметку «выполнено»', async () => {
+  it('снятый срок оставляет отметку «выполнено»: она про карточку, а не про срок', async () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
     await setCardDue(ids.a, { date: '2026-10-01' })
@@ -468,14 +468,16 @@ describe('срок карточки', () => {
 
     const card = await getCard(ids.a)
     expect(card.dueAt).toBeNull()
-    expect(card.dueDone).toBe(false)
+    expect(card.dueDone).toBe(true)
   })
 
-  it('отмечать нечего, пока срока нет', async () => {
+  it('карточка без срока тоже отмечается выполненной', async () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
 
-    await expect(setCardDueDone(ids.a, true)).rejects.toThrow(InvalidInputError)
+    await setCardDueDone(ids.a, true)
+
+    expect((await getCard(ids.a)).dueDone).toBe(true)
   })
 
   it('доска отдаёт срок карточки вместе с признаком времени', async () => {

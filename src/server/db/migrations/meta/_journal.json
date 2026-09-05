@@ -57,6 +57,27 @@
       "when": 1788436003393,
       "tag": "0007_nasty_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788601265822,
+      "tag": "0008_rapid_shaman",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788602175102,
+      "tag": "0009_nosy_mikhail_rasputin",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788607459627,
+      "tag": "0010_public_grandmaster",
+      "breakpoints": true
     }
   ]
 }

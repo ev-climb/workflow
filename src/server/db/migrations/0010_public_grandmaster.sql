@@ -1,0 +1,1 @@
+ALTER TABLE "lists" ADD COLUMN "highlighted" boolean DEFAULT false NOT NULL;

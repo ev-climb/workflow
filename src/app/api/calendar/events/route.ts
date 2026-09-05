@@ -23,6 +23,7 @@ export async function POST(request: Request) {
     const created = await createEvent(body.calendarId, {
       title: body.title,
       times: toEventTimes(body.times),
+      ...(body.description === undefined ? {} : { description: body.description }),
     })
     return NextResponse.json(created, { status: 201 })
   } catch (error) {

@@ -16,7 +16,10 @@ export async function seed() {
   const { createCard } = await import('../src/server/services/cards.ts')
   const { setBoardSlot } = await import('../src/server/services/workspace.ts')
 
-  await db.execute(sql`truncate boards, google_accounts, workspace_state restart identity cascade`)
+  await db.execute(
+    sql`truncate boards, google_accounts, workspace_state, notes, note_folders
+        restart identity cascade`,
+  )
 
   const board = await createBoard({ title: BOARD })
   for (const [title, titles] of [

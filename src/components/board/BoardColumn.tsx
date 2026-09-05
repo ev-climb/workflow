@@ -3,14 +3,19 @@
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useState } from 'react'
-import { useArchiveList, useCreateCard, useRenameList } from '@/lib/board-mutations'
+import {
+  useArchiveList,
+  useCreateCard,
+  useHighlightList,
+  useRenameList,
+} from '@/lib/board-mutations'
 import { dragId, type DragData } from '@/lib/board-move'
 import type { ListView } from '@/lib/board-view'
 import type { BoardSummary } from '@/server/services/boards'
-import { ArchiveButton } from './ArchiveButton'
 import { BoardCard } from './BoardCard'
 import { Composer } from './Composer'
 import { Failure } from './Failure'
+import { ListMenu } from './ListMenu'
 import { TitleField } from './TitleField'
 
 type Props = { boards: BoardSummary[]; boardId: string; slot: string; list: ListView }
@@ -20,6 +25,7 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
   const rename = useRenameList(boardId, list.id)
   const create = useCreateCard(boardId, list.id)
   const archive = useArchiveList(boardId, list.id)
+  const highlight = useHighlightList(boardId, list.id)
 
   // список и таскают за шапку, и служит целью для карточки: узел один, роли две
   const data: DragData = { type: 'list', boardId, listId: list.id, list }
@@ -35,7 +41,9 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
       className={`surface-column group/list flex max-h-full w-72 shrink-0 flex-col p-3.5 ${
         // место списка остаётся видимым: под курсором его рисует накладка
         drag.isDragging ? 'opacity-30' : ''
-      } ${drag.isOver ? 'surface-column-target' : ''}`}
+      } ${list.highlighted ? 'surface-column-lit' : ''} ${
+        drag.isOver ? 'surface-column-target' : ''
+      }`}
     >
       <header
         ref={drag.setActivatorNodeRef}
@@ -55,9 +63,12 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
           <h3
             onDoubleClick={() => setRenaming(true)}
             title="Двойной клик — переименовать"
-            className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-fog"
+            className="flex min-w-0 flex-1 items-center gap-2 text-[13.5px] font-semibold text-fog"
           >
-            {list.title}
+            {list.highlighted ? (
+              <span className="pulse block size-1.5 shrink-0 rounded-full bg-[oklch(0.75_0.15_300)] shadow-[0_0_10px_oklch(0.75_0.15_300)]" />
+            ) : null}
+            <span className="truncate">{list.title}</span>
           </h3>
         )}
         <span
@@ -68,16 +79,19 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
         >
           {list.wipLimit === null ? list.cards.length : `${list.cards.length}/${list.wipLimit}`}
         </span>
-        {/* карточки списка уезжают в архив вместе с ним: сколько именно — видно в подсказке */}
-        <ArchiveButton
-          label={`Список в архив${list.cards.length ? `, карточек внутри: ${list.cards.length}` : ''}`}
-          disabled={archive.isPending}
-          onClick={() => archive.mutate()}
+        {/* карточки списка уезжают в архив вместе с ним: сколько именно — видно в строке меню */}
+        <ListMenu
+          highlighted={list.highlighted}
+          archiving={archive.isPending}
+          archiveLabel={`В архив${list.cards.length ? ` с карточками: ${list.cards.length}` : ''}`}
+          onRename={() => setRenaming(true)}
+          onHighlight={() => highlight.mutate(!list.highlighted)}
+          onArchive={() => archive.mutate()}
           className="group-hover/list:opacity-100"
         />
       </header>
 
-      <Failure error={rename.error ?? create.error ?? archive.error} />
+      <Failure error={rename.error ?? create.error ?? highlight.error ?? archive.error} />
 
       <div
         className={`${

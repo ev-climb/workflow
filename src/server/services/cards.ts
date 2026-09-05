@@ -317,7 +317,8 @@ function dueMoment(input: DueInput): { at: Date; hasTime: boolean } {
 /**
  * Срок карточки: дата и необязательное время. Момент из них собирает сервис, а не
  * клиент, — иначе у MCP из фазы 06 появится вторая реализация сведения с часовым поясом.
- * `null` снимает срок вместе с отметкой «выполнено»: без срока ей нечего значить.
+ * `null` снимает только срок: отметка «выполнено» — свойство карточки, а не её срока,
+ * и переживает уборку даты.
  */
 export async function setCardDue(cardId: string, input: DueInput | null): Promise<{ id: string }> {
   const due = input === null ? null : dueMoment(input)
@@ -328,7 +329,6 @@ export async function setCardDue(cardId: string, input: DueInput | null): Promis
     .set({
       dueAt: due?.at ?? null,
       dueHasTime: due?.hasTime ?? true,
-      dueDone: due === null ? false : undefined,
       updatedAt: new Date(),
     })
     .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
@@ -340,17 +340,21 @@ export async function setCardDue(cardId: string, input: DueInput | null): Promis
   return updated
 }
 
-/** Отметка «срок выполнен». Без срока отмечать нечего — это ошибка входа. */
+/**
+ * Отметка «выполнено». Стоит на карточке, а не на её сроке: закрывать приходится и то,
+ * у чего срока нет вовсе. Хранит её поле `dueDone` — имя осталось с тех пор, когда
+ * отметка жила при сроке.
+ */
 export async function setCardDueDone(cardId: string, done: boolean): Promise<{ id: string }> {
   const card = await locateCard(cardId)
 
   const [updated] = await db
     .update(cards)
     .set({ dueDone: done, updatedAt: new Date() })
-    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt), sql`${cards.dueAt} is not null`))
+    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
     .returning({ id: cards.id })
 
-  if (!updated) throw new InvalidInputError(`у карточки ${cardId} нет срока`)
+  if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
 
   publishBoardChanged(card.boardId)
   return updated

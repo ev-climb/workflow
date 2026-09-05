@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server'
 import { errorResponse, jsonBody, patchBody, uuidParam } from '@/lib/http'
-import { archiveList, moveList, renameList, restoreList } from '@/server/services/boards'
+import {
+  archiveList,
+  highlightList,
+  moveList,
+  renameList,
+  restoreList,
+} from '@/server/services/boards'
 
 /** Разбирает вход, зовёт сервис, сериализует ответ. Логики здесь нет — инвариант 2. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ listId: string }> }) {
@@ -11,6 +17,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ li
     const id = uuidParam(listId, 'списка')
 
     if ('title' in body) return NextResponse.json(await renameList(id, body.title))
+    if ('highlighted' in body) {
+      return NextResponse.json(await highlightList(id, body.highlighted))
+    }
     if ('archived' in body) {
       return NextResponse.json(body.archived ? await archiveList(id) : await restoreList(id))
     }

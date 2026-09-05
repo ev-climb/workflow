@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Dialog, VisuallyHidden } from 'radix-ui'
 import { useState } from 'react'
-import { useRenameCard } from '@/lib/board-mutations'
+import { useRenameCard, useSetCardDueDone } from '@/lib/board-mutations'
 import { cardQuery } from '@/lib/card-query'
 import { CardChecklists } from './CardChecklists'
 import { CardDescription } from './CardDescription'
@@ -25,7 +25,9 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
   const [renaming, setRenaming] = useState(false)
   const [dragging, setDragging] = useState(false)
   const rename = useRenameCard(boardId, cardId)
+  const setDone = useSetCardDueDone(boardId, cardId)
   const heading = data?.title ?? title
+  const done = data?.dueDone === true
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
@@ -58,7 +60,11 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
                   />
                 </>
               ) : (
-                <Dialog.Title className="text-base leading-snug font-medium text-fog">
+                <Dialog.Title
+                  className={`text-base leading-snug font-medium ${
+                    done ? 'text-fog-dim line-through' : 'text-fog'
+                  }`}
+                >
                   <button
                     type="button"
                     onClick={() => setRenaming(true)}
@@ -81,7 +87,7 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
             </Dialog.Close>
           </div>
 
-          <Failure error={rename.error} className="pt-2" />
+          <Failure error={rename.error ?? setDone.error} className="pt-2" />
 
           {error ? (
             <p role="status" className="mt-6 text-sm text-alarm">
@@ -102,6 +108,18 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
               <CardDescription boardId={boardId} cardId={cardId} description={data.description} />
 
               <CardChecklists boardId={boardId} cardId={cardId} onDragging={setDragging} />
+
+              <button
+                type="button"
+                aria-pressed={done}
+                disabled={setDone.isPending}
+                onClick={() => setDone.mutate(!done)}
+                className={`w-full px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-accent-line ${
+                  done ? 'btn-done-on' : 'btn-done'
+                }`}
+              >
+                {done ? '✓ Выполнено — снять отметку' : 'Выполнено'}
+              </button>
             </div>
           )}
         </Dialog.Content>

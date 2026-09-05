@@ -91,6 +91,7 @@ describe('createTimeBlock', () => {
         boardTitle: 'Работа',
         startsAt: at('2026-09-02T09:00:00Z'),
         endsAt: at('2026-09-02T10:30:00Z'),
+        cardDone: false,
         calendarId: null,
       },
     ])

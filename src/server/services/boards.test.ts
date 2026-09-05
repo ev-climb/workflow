@@ -15,6 +15,7 @@ import {
   createList,
   getArchive,
   getBoard,
+  highlightList,
   listBoards,
   moveList,
   restoreList,
@@ -206,6 +207,24 @@ describe('списки', () => {
     await archiveList(list.id)
 
     await expect(moveList({ listId: list.id })).rejects.toThrow(NotFoundError)
+  })
+
+  it('выделение списка снимается и видно на доске', async () => {
+    const board = await createBoard({ title: 'Доска' })
+    const list = await createList({ boardId: board.id, title: 'Сейчас' })
+
+    expect(list.highlighted).toBe(false)
+    expect((await highlightList(list.id, true)).highlighted).toBe(true)
+    expect((await getBoard(board.id)).lists[0].highlighted).toBe(true)
+    expect((await highlightList(list.id, false)).highlighted).toBe(false)
+  })
+
+  it('выделение списка из архива — ошибка', async () => {
+    const board = await createBoard({ title: 'Доска' })
+    const list = await createList({ boardId: board.id, title: 'Список' })
+    await archiveList(list.id)
+
+    await expect(highlightList(list.id, true)).rejects.toThrow(NotFoundError)
   })
 
   it('повторное восстановление — ошибка', async () => {

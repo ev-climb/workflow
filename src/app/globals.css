@@ -90,7 +90,8 @@
 
   @media (prefers-reduced-motion: reduce) {
     body::before,
-    .beacon {
+    .beacon,
+    .pulse {
       animation: none;
     }
   }
@@ -134,6 +135,11 @@
     backdrop-filter: blur(18px);
   }
 
+  /* смена вида: колонка календаря разъезжается на всё окно и собирается обратно */
+  .calendar-shell {
+    transition: width 0.42s var(--ease-glide);
+  }
+
   .surface-column {
     border: 1px solid var(--color-hair);
     border-radius: var(--radius-column);
@@ -145,6 +151,32 @@
 
   .surface-column:hover {
     border-color: rgb(255 255 255 / 0.12);
+  }
+
+  /* выделенный список: тот, в котором работа идёт прямо сейчас */
+  .surface-column-lit {
+    border-color: oklch(0.7 0.12 300 / 0.22);
+    background: linear-gradient(170deg, oklch(0.45 0.1 300 / 0.16), rgb(255 255 255 / 0.02));
+    box-shadow:
+      0 0 0 1px oklch(0.7 0.12 300 / 0.05),
+      0 14px 40px oklch(0.35 0.1 300 / 0.25);
+  }
+
+  .surface-column-lit:hover {
+    border-color: oklch(0.75 0.13 300 / 0.4);
+    box-shadow: 0 18px 48px oklch(0.35 0.1 300 / 0.4);
+  }
+
+  /* добавление карточки в выделенный список ведут тем же акцентом, что и сам список */
+  .surface-column-lit .ghost-add {
+    border-color: oklch(0.7 0.12 300 / 0.3);
+    color: rgb(238 235 250 / 0.5);
+  }
+
+  .surface-column-lit .ghost-add:hover {
+    border-color: oklch(0.75 0.14 300 / 0.6);
+    background: oklch(0.5 0.12 300 / 0.16);
+    color: #fff;
   }
 
   /* список под карточкой, которую тащат */
@@ -171,6 +203,134 @@
     transform: translateY(-3px);
     border-color: var(--color-hair-lit);
     box-shadow: 0 14px 30px rgb(0 0 0 / 0.4);
+  }
+
+  /**
+   * Заметка в шторке. Полоска слева отличает список дел от текста: вид заметки виден
+   * раньше, чем прочитан заголовок.
+   */
+  .surface-note {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgb(255 255 255 / 0.08);
+    border-radius: 19px;
+    background: linear-gradient(165deg, rgb(255 255 255 / 0.075), rgb(255 255 255 / 0.022));
+    box-shadow: 0 4px 18px rgb(0 0 0 / 0.22);
+    transition:
+      transform 0.34s var(--ease-glide),
+      box-shadow 0.34s ease,
+      border-color 0.34s ease;
+  }
+
+  .surface-note::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: linear-gradient(180deg, oklch(0.78 0.14 305), oklch(0.6 0.12 285 / 0.2));
+  }
+
+  .surface-note-list::before {
+    background: linear-gradient(180deg, oklch(0.78 0.12 195), oklch(0.62 0.11 215 / 0.2));
+  }
+
+  .surface-note-lift:hover {
+    transform: translateY(-3px);
+    border-color: var(--color-hair-lit);
+    box-shadow: 0 16px 36px rgb(0 0 0 / 0.42);
+  }
+
+  /* завести заметку или список дел: две равные плитки над шторкой */
+  .tile-add {
+    border: 1px solid rgb(255 255 255 / 0.08);
+    border-radius: 14px;
+    background: linear-gradient(150deg, rgb(255 255 255 / 0.075), rgb(255 255 255 / 0.025));
+    color: rgb(238 235 250 / 0.82);
+    outline: none;
+    transition:
+      transform 0.3s var(--ease-glide),
+      border-color 0.3s ease,
+      background 0.3s ease,
+      box-shadow 0.3s ease,
+      color 0.3s ease;
+  }
+
+  .tile-add:hover:not(:disabled) {
+    transform: translateY(-2px);
+    border-color: oklch(0.74 0.13 300 / 0.45);
+    background: linear-gradient(150deg, oklch(0.52 0.12 305 / 0.3), oklch(0.45 0.1 265 / 0.16));
+    box-shadow: 0 10px 26px oklch(0.35 0.1 300 / 0.4);
+    color: #fff;
+  }
+
+  /* список дел ведут холодной половиной палитры — той же, что и полоска у его заметки */
+  .tile-add-cool:hover:not(:disabled) {
+    border-color: oklch(0.74 0.12 195 / 0.45);
+    background: linear-gradient(150deg, oklch(0.5 0.1 195 / 0.3), oklch(0.44 0.08 215 / 0.16));
+    box-shadow: 0 10px 26px oklch(0.35 0.08 210 / 0.4);
+  }
+
+  .tile-add:disabled {
+    color: var(--color-fog-faint);
+  }
+
+  /* отметка пункта списка дел */
+  .tick {
+    display: grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+    border: 1px solid rgb(255 255 255 / 0.16);
+    border-radius: 6px;
+    background: rgb(255 255 255 / 0.04);
+    color: transparent;
+    outline: none;
+    transition:
+      border-color 0.3s var(--ease-glide),
+      background 0.3s var(--ease-glide),
+      box-shadow 0.3s ease,
+      color 0.3s ease;
+  }
+
+  .tick[data-state='checked'] {
+    border-color: oklch(0.78 0.13 210 / 0.5);
+    background: linear-gradient(140deg, oklch(0.66 0.14 195), oklch(0.58 0.13 250));
+    box-shadow: 0 0 14px oklch(0.6 0.13 215 / 0.55);
+    color: #fff;
+  }
+
+  .tick:focus-visible {
+    border-color: var(--color-accent-line);
+  }
+
+  /* сколько пунктов списка дел закрыто */
+  .note-progress {
+    height: 3px;
+    overflow: hidden;
+    border-radius: 99px;
+    background: rgb(255 255 255 / 0.07);
+  }
+
+  .note-progress > span {
+    display: block;
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, oklch(0.78 0.13 195), oklch(0.7 0.13 265));
+    box-shadow: 0 0 12px oklch(0.7 0.13 220 / 0.7);
+    transition: width 0.5s var(--ease-glide);
+  }
+
+  /* шторка заметок: свёрнутая полоска и раскрытая панель — одна поверхность */
+  .surface-notes {
+    border-left: 1px solid rgb(255 255 255 / 0.08);
+    background: linear-gradient(
+      200deg,
+      rgb(255 255 255 / 0.06),
+      rgb(255 255 255 / 0.018) 46%,
+      rgb(255 255 255 / 0.035)
+    );
+    backdrop-filter: blur(22px);
+    box-shadow: -30px 0 60px rgb(0 0 0 / 0.35);
   }
 
   /* панель карточки и модальные окна */
@@ -233,6 +393,10 @@
     transition: background-color 0.2s ease;
   }
 
+  .timeblock:hover {
+    background-color: oklch(0.55 0.12 300 / 0.28);
+  }
+
   /* пунктирная кнопка «добавить»: список, карточка, чек-лист, пункт */
   .ghost-add {
     border: 1px dashed rgb(255 255 255 / 0.1);
@@ -249,6 +413,12 @@
     border-color: var(--color-accent-line);
     background: var(--color-accent-wash);
     color: var(--color-fog);
+  }
+
+  /* добавление в списке дел: холодная половина палитры, как и полоска его заметки */
+  .ghost-add-cool:hover {
+    border-color: oklch(0.74 0.12 195 / 0.45);
+    background: oklch(0.5 0.1 195 / 0.12);
   }
 
   .field {
@@ -295,6 +465,43 @@
     box-shadow: none;
   }
 
+  .btn-done {
+    border-radius: 10px;
+    background: linear-gradient(140deg, oklch(0.62 0.13 168), oklch(0.55 0.12 196));
+    color: #fff;
+    font-weight: 500;
+    outline: none;
+    box-shadow: 0 4px 14px oklch(0.5 0.11 172 / 0.45);
+    transition:
+      filter 0.25s ease,
+      box-shadow 0.25s ease;
+  }
+
+  .btn-done:hover:not(:disabled) {
+    filter: brightness(1.12);
+    box-shadow: 0 6px 20px oklch(0.5 0.11 172 / 0.65);
+  }
+
+  /* отметка уже стоит: кнопка снимает её, поэтому гаснет до контура */
+  .btn-done-on {
+    border-radius: 10px;
+    border: 1px solid oklch(0.62 0.13 168 / 0.45);
+    background: linear-gradient(140deg, oklch(0.62 0.13 168 / 0.16), oklch(0.55 0.12 196 / 0.1));
+    color: var(--color-done);
+    font-weight: 500;
+    outline: none;
+    transition: background 0.25s ease;
+  }
+
+  .btn-done-on:hover:not(:disabled) {
+    background: linear-gradient(140deg, oklch(0.62 0.13 168 / 0.26), oklch(0.55 0.12 196 / 0.18));
+  }
+
+  .btn-done:disabled,
+  .btn-done-on:disabled {
+    filter: saturate(0.4);
+  }
+
   .btn-quiet {
     border-radius: 9px;
     color: var(--color-fog-muted);
@@ -338,6 +545,11 @@
   /* точка текущего времени */
   .beacon {
     animation: beacon 2.6s ease-in-out infinite;
+  }
+
+  /* та же пульсация помедленнее: выделенный список и свёрнутая шторка заметок */
+  .pulse {
+    animation: beacon 3s ease-in-out infinite;
   }
 }
 

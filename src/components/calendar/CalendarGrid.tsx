@@ -9,6 +9,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { Failure } from '@/components/board/Failure'
 import type { DragData } from '@/lib/board-move'
+import { useMoveCardDue, useSetCardDueDone } from '@/lib/board-mutations'
 import {
   CALENDAR_DROP,
   blockAt,
@@ -26,6 +27,7 @@ import {
 import {
   HOURS,
   MINUTES_IN_DAY,
+  addDays,
   dayNumber,
   isToday,
   nowOffset,
@@ -46,8 +48,13 @@ import {
   useMoveTimeBlock,
   useSetEventTimes,
   useSetTaskDone,
+  useSetTaskDue,
 } from '@/lib/calendar-mutations'
 import type { CalendarEventView, CardDueView, TimeBlockView } from '@/lib/calendar-view'
+import { isNoteDrag, useNoteDrop } from '@/lib/note-drop'
+import { noteHeading } from '@/lib/notes'
+import type { CardView } from '@/lib/board-view'
+import type { NoteView } from '@/server/services/notes'
 import type { CalendarTask } from '@/server/services/google-tasks'
 import { TimeBlockMenu } from './TimeBlockMenu'
 import { isOverdue, moscowParts } from '@/lib/dates'
@@ -95,6 +102,27 @@ type GrabHandler = (
   base: Range,
   target: Target | null,
 ) => void
+
+/**
+ * Кого тащат по полосам над сеткой. Отрезка времени ни у одного из троих нет: событие на
+ * весь день, срок карточки и задача Google переезжают целым днём, поэтому и движение у них
+ * только вбок.
+ */
+type StripeTarget =
+  | { kind: 'allday'; event: AllDayView }
+  | { kind: 'due'; due: CardDueView }
+  | { kind: 'task'; task: CalendarTask }
+
+/** Полоса в переносе: за какой день взялись и какой сейчас под курсором. */
+type StripeDrag = { target: StripeTarget; from: string; day: string }
+
+/** Чем полоса цепляется к переносу: захват указателя идёт на ней самой, как и у блока. */
+type Grip = {
+  onPointerDown: (event: React.PointerEvent) => void
+  onPointerMove: (event: React.PointerEvent) => void
+  onPointerUp: () => void
+  onPointerCancel: () => void
+}
 
 function holds(target: Target | null, type: Target['type'], id: string): boolean {
   return target?.type === type && target.id === id
@@ -152,6 +180,13 @@ function pointerOf(activator: Event, delta: { x: number; y: number }): { x: numb
   return { x: activator.clientX + delta.x, y: activator.clientY + delta.y }
 }
 
+type CardDrag = Extract<DragData, { type: 'card' }>
+
+/** Что бросили на сетку: у карточки из этого выйдет тайм-блок, у заметки — окно переноса. */
+type GridDrop =
+  | { kind: 'card'; card: CardView; range: Range }
+  | { kind: 'note'; note: NoteView; range: Range }
+
 export function CalendarGrid({
   days,
   events,
@@ -181,46 +216,87 @@ export function CalendarGrid({
   const setTimes = useSetEventTimes()
   const moveBlock = useMoveTimeBlock()
   const createBlock = useCreateTimeBlock()
+  const setTaskDue = useSetTaskDue()
+  const moveDue = useMoveCardDue()
 
-  /** Карточка, которую держат над сеткой: под курсором её ждёт заготовка тайм-блока. */
+  /** Полоса, которую тащат вбок, вместе с днём под курсором. */
+  const [stripeDrag, setStripeDrag] = useState<StripeDrag | null>(null)
+  /**
+   * Полоса, уехавшая в запрос, но ещё не приехавшая обратно: пока идёт запись, держится на
+   * новом дне — иначе она прыгала бы назад на время похода в сеть, как и блок на сетке.
+   */
+  const [stripeHeld, setStripeHeld] = useState<StripeDrag | null>(null)
+
+  const dropNote = useNoteDrop()
+
+
+  /** Карточка или заметка над сеткой: под курсором её ждёт заготовка тайм-блока. */
   const [dropping, setDropping] = useState<{ title: string; range: Range } | null>(null)
   const columnNodes = useRef(new Map<string, HTMLElement>())
   const grid = useDroppable({ id: CALENDAR_DROP, data: { type: CALENDAR_DROP } })
 
   /**
-   * Куда попадёт брошенная карточка. День берётся перебором колонок по месту курсора, а не
+   * Куда попадёт брошенная карточка или заметка. День берётся перебором колонок по месту курсора, а не
    * у dnd-kit: цель у сетки одна на все колонки, а колонок то одна, то семь. Слева от
    * колонок лежит рейка со временем, и карточка, брошенная на неё, попадает в первый день,
    * а не пропадает: мёртвой полосы внутри цели быть не должно.
    */
-  function dropOf(drag: DragMoveEvent | DragEndEvent) {
-    const data = drag.active.data.current as DragData | undefined
-    if (data?.type !== 'card' || !isCalendarDrop(drag.over?.data.current)) return null
+  function dropOf(drag: DragMoveEvent | DragEndEvent): GridDrop | null {
+    const data = drag.active.data.current
+    if (!isCalendarDrop(drag.over?.data.current)) return null
+
+    const card = (data as DragData | undefined)?.type === 'card' ? (data as CardDrag).card : null
+    const dragged = isNoteDrag(data)
+      ? ({ kind: 'note', note: data.note } as const)
+      : card && ({ kind: 'card', card } as const)
+    if (!dragged) return null
 
     const point = pointerOf(drag.activatorEvent, drag.delta)
     if (!point) return null
 
+    const hit = columnAt(point.x)
+    if (!hit) return null
+
+    return {
+      ...dragged,
+      range: blockAt(hit.day, snapMinutes(point.y - hit.box.top, hit.box.height)),
+    }
+  }
+
+  /**
+   * Колонка дня по месту курсора. Полосы над сеткой размечены теми же долями ширины, что и
+   * сама сетка, поэтому день для них берётся отсюда же.
+   */
+  function columnAt(clientX: number): { day: string; box: DOMRect } | null {
     const boxes = days
       .map((day) => ({ day, box: columnNodes.current.get(day)?.getBoundingClientRect() }))
       .filter((one): one is { day: string; box: DOMRect } => one.box !== undefined)
     if (boxes.length === 0) return null
 
-    const hit = boxes.find(({ box }) => point.x < box.right) ?? boxes[boxes.length - 1]
-    return {
-      card: data.card,
-      range: blockAt(hit.day, snapMinutes(point.y - hit.box.top, hit.box.height)),
-    }
+    return boxes.find(({ box }) => clientX < box.right) ?? boxes[boxes.length - 1]
   }
 
   useDndMonitor({
     onDragMove: (drag) => {
       const target = dropOf(drag)
-      setDropping(target && { title: target.card.title, range: target.range })
+      setDropping(
+        target && {
+          title:
+            target.kind === 'card' ? target.card.title : noteHeading(target.note) || 'Заметка',
+          range: target.range,
+        },
+      )
     },
     onDragEnd: (drag) => {
       const target = dropOf(drag)
       setDropping(null)
       if (!target) return
+
+      // заметка на сетке ещё не событие: что именно завести, спрашивает окно переноса
+      if (target.kind === 'note') {
+        dropNote({ kind: 'calendar', note: target.note, range: target.range })
+        return
+      }
 
       const times = rangeTimes(target.range)
       createBlock.mutate({
@@ -235,9 +311,50 @@ export function CalendarGrid({
   const line = now ? nowOffset(days, now) : null
   // события на весь день во временную сетку не попадают: они полосой сверху, инвариант 3
   const timed = events.filter(isTimed)
-  const allDay = placeAllDay(events.filter(isAllDay), days)
+  const heldStripe = stripeDrag ?? stripeHeld
+  const allDay = placeAllDay(previewAllDay(events.filter(isAllDay)), days)
   // срок и задача — не события и не отрезки времени: своя полоса под событиями на весь день
-  const stripes = placeStripe(stripeItems(dues, tasks), days)
+  const stripes = placeStripe(previewStripes(stripeItems(dues, tasks)), days)
+
+  /**
+   * Полоса, которую тащат, раскладывается по дню под курсором, а не по записанному: так она
+   * встаёт в свободный ряд дня-приёмника, а не наезжает на чужую полосу.
+   */
+  function previewAllDay(shown: AllDayView[]): AllDayView[] {
+    const held = heldStripe
+    if (held === null || held.target.kind !== 'allday') return shown
+
+    const moving = held.target.event.id
+    const shift = days.indexOf(held.day) - days.indexOf(held.from)
+    if (shift === 0) return shown
+
+    return shown.map((event) =>
+      event.id === moving
+        ? {
+            ...event,
+            startDate: addDays(event.startDate, shift),
+            endDate: addDays(event.endDate, shift),
+          }
+        : event,
+    )
+  }
+
+  function previewStripes(
+    items: StripeEntry<CardDueView, CalendarTask>[],
+  ): StripeEntry<CardDueView, CalendarTask>[] {
+    const held = heldStripe
+    if (held === null || held.target.kind === 'allday') return items
+
+    const kind = held.target.kind
+    const moving = held.target.kind === 'due' ? held.target.due.id : held.target.task.id
+    const day = held.day
+
+    return items.map((item) =>
+      item.kind === kind && (item.kind === 'due' ? item.due.id : item.task.id) === moving
+        ? { ...item, day }
+        : item,
+    )
+  }
 
   const held = drag ?? pending
   const target = held?.target ?? null
@@ -293,6 +410,86 @@ export function CalendarGrid({
       return
     }
     setDrag({ ...drag, range: resized(drag.base, drag.kind, minutes) })
+  }
+
+  function grabStripe(event: React.PointerEvent, target: StripeTarget) {
+    if (event.button !== 0) return
+    const day = columnAt(event.clientX)?.day
+    if (!day) return
+
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setStripeDrag({ target, from: day, day })
+  }
+
+  function dragStripe(event: React.PointerEvent) {
+    if (!stripeDrag || !event.currentTarget.hasPointerCapture(event.pointerId)) return
+
+    const day = columnAt(event.clientX)?.day
+    if (day && day !== stripeDrag.day) setStripeDrag({ ...stripeDrag, day })
+  }
+
+  function finishStripe() {
+    const current = stripeDrag
+    setStripeDrag(null)
+    if (!current) return
+
+    // отпустили в том же дне: это щелчок, а не перенос
+    if (current.day === current.from) {
+      openStripe(current.target)
+      return
+    }
+    moveStripe(current)
+  }
+
+  function openStripe(target: StripeTarget) {
+    if (target.kind === 'allday') onOpen(target.event)
+    else if (target.kind === 'task') onOpenTask(target.task)
+    else window.location.href = cardHref(target.due.id)
+  }
+
+  function moveStripe(held: StripeDrag) {
+    setStripeHeld(held)
+    const settle = { onSettled: () => setStripeHeld(null) }
+    const { target } = held
+
+    if (target.kind === 'task') {
+      setTaskDue.mutate({ id: target.task.id, due: held.day }, settle)
+      return
+    }
+    if (target.kind === 'due') {
+      // час срока переезжает вместе с ним: сдвигается день работы, а не время в нём
+      const time = target.due.dueHasTime ? moscowParts(target.due.dueAt).time : null
+      moveDue.mutate(
+        { boardId: target.due.boardId, cardId: target.due.id, due: { date: held.day, time } },
+        settle,
+      )
+      return
+    }
+
+    // событие на весь день переезжает целиком: обе границы сдвигаются на одно число дней
+    const shift = days.indexOf(held.day) - days.indexOf(held.from)
+    const { event } = target
+    setTimes.mutate(
+      {
+        id: event.id,
+        times: {
+          allDay: true,
+          startDate: addDays(event.startDate, shift),
+          endDate: addDays(event.endDate, shift),
+        },
+      },
+      settle,
+    )
+  }
+
+  /** Четыре обработчика, которыми полоса цепляется к переносу. */
+  function stripeGrip(target: StripeTarget): Grip {
+    return {
+      onPointerDown: (pointer) => grabStripe(pointer, target),
+      onPointerMove: dragStripe,
+      onPointerUp: finishStripe,
+      onPointerCancel: () => setStripeDrag(null),
+    }
   }
 
   function finish() {
@@ -360,14 +557,19 @@ export function CalendarGrid({
         >
           <div className={RAIL} />
           <div
-            className="grid flex-1 gap-px py-px"
+            className="grid flex-1 gap-px py-px select-none"
             style={{
               gridTemplateColumns: columns(days.length),
               gridAutoRows: `${ALL_DAY_PX}px`,
             }}
           >
             {allDay.map((placed) => (
-              <AllDayStripe key={placed.key} placed={placed} onOpen={onOpen} />
+              <AllDayStripe
+                key={placed.key}
+                placed={placed}
+                grip={stripeGrip({ kind: 'allday', event: placed.event })}
+                onOpen={onOpen}
+              />
             ))}
           </div>
         </div>
@@ -380,7 +582,7 @@ export function CalendarGrid({
         >
           <div className={RAIL} />
           <div
-            className="grid flex-1 gap-px py-px"
+            className="grid flex-1 gap-px py-px select-none"
             style={{
               gridTemplateColumns: columns(days.length),
               gridAutoRows: `${STRIPE_PX}px`,
@@ -393,12 +595,14 @@ export function CalendarGrid({
                   placed={placed}
                   due={placed.item.due}
                   now={now}
+                  grip={stripeGrip({ kind: 'due', due: placed.item.due })}
                 />
               ) : (
                 <TaskStripe
                   key={`task:${placed.item.task.id}`}
                   placed={placed}
                   task={placed.item.task}
+                  grip={stripeGrip({ kind: 'task', task: placed.item.task })}
                   onOpen={onOpenTask}
                 />
               ),
@@ -408,7 +612,9 @@ export function CalendarGrid({
       ) : null}
 
       <Failure
-        error={setTimes.error ?? moveBlock.error ?? createBlock.error}
+        error={
+          setTimes.error ?? moveBlock.error ?? createBlock.error ?? setTaskDue.error ?? moveDue.error
+        }
         className="px-3 pt-1"
       />
 
@@ -540,9 +746,11 @@ function hintOf(event: CalendarEventView, title: string): string {
 
 function AllDayStripe({
   placed,
+  grip,
   onOpen,
 }: {
   placed: PlacedAllDay<AllDayView>
+  grip: Grip
   onOpen: OpenHandler
 }) {
   const { event, index, span, lane, clippedStart, clippedEnd } = placed
@@ -551,8 +759,12 @@ function AllDayStripe({
   return (
     <button
       type="button"
-      onClick={() => onOpen(event)}
-      className={`overflow-hidden rounded-lg px-1.5 text-left text-[10px] leading-[15px] font-medium text-fog outline-none transition-[filter] hover:brightness-110 focus-visible:ring-1 focus-visible:ring-accent-line ${
+      {...grip}
+      // мышь ведёт `finishStripe`: он один отличает щелчок от переноса. Сюда доходит клавиатура
+      onClick={(pointer) => {
+        if (pointer.detail === 0) onOpen(event)
+      }}
+      className={`cursor-grab overflow-hidden rounded-lg px-1.5 text-left text-[10px] leading-[15px] font-medium text-fog outline-none transition-[filter] hover:brightness-110 focus-visible:ring-1 focus-visible:ring-accent-line active:cursor-grabbing ${
         clippedStart ? 'rounded-l-none' : ''
       } ${clippedEnd ? 'rounded-r-none' : ''}`}
       style={{
@@ -586,19 +798,27 @@ function DueStripe({
   placed,
   due,
   now,
+  grip,
 }: {
   placed: StripePlace
   due: CardDueView
   now: Date | null
+  grip: Grip
 }) {
   const overdue = now !== null && isOverdue(due.dueAt, due.dueDone, due.dueHasTime, now.getTime())
   const time = due.dueHasTime ? moscowParts(due.dueAt).time : null
 
   return (
     <a
-      href={`/?card=${due.id}`}
+      href={cardHref(due.id)}
+      draggable={false}
+      {...grip}
+      onClick={(pointer) => {
+        // мышь ведёт `finishStripe`: он один отличает щелчок от переноса. Клавиатуре ссылка остаётся
+        if (pointer.detail !== 0) pointer.preventDefault()
+      }}
       title={`Срок${time ? ` ${time}` : ''}: ${due.title} — ${due.boardTitle}`}
-      className={`flex items-center gap-1 overflow-hidden rounded-lg border border-dashed px-1.5 text-[10px] leading-[12px] outline-none transition-colors focus-visible:ring-1 focus-visible:ring-accent-line ${
+      className={`flex cursor-grab items-center gap-1 overflow-hidden rounded-lg border border-dashed px-1.5 text-[10px] leading-[12px] outline-none transition-colors focus-visible:ring-1 focus-visible:ring-accent-line active:cursor-grabbing ${
         overdue
           ? 'border-alarm-line text-alarm hover:bg-alarm-wash'
           : due.dueDone
@@ -625,10 +845,12 @@ function DueStripe({
 function TaskStripe({
   placed,
   task,
+  grip,
   onOpen,
 }: {
   placed: StripePlace
   task: CalendarTask
+  grip: Grip
   onOpen: TaskOpenHandler
 }) {
   const setDone = useSetTaskDone()
@@ -660,9 +882,13 @@ function TaskStripe({
       </button>
       <button
         type="button"
-        onClick={() => onOpen(task)}
+        {...grip}
+        // мышь ведёт `finishStripe`: он один отличает щелчок от переноса. Сюда доходит клавиатура
+        onClick={(pointer) => {
+          if (pointer.detail === 0) onOpen(task)
+        }}
         title={`Задача: ${title}`}
-        className="min-w-0 flex-1 truncate text-left outline-none transition-colors hover:text-fog focus-visible:ring-1 focus-visible:ring-accent-line"
+        className="min-w-0 flex-1 cursor-grab truncate text-left outline-none transition-colors hover:text-fog focus-visible:ring-1 focus-visible:ring-accent-line active:cursor-grabbing"
       >
         {title}
       </button>
@@ -673,11 +899,14 @@ function TaskStripe({
 /**
  * Время, отведённое под карточку. Третья сущность на сетке, и различаются они материалом,
  * а не цветом: событие — сплошная заливка цветом своего календаря, срок — пунктирный
- * контур с ромбом, блок — штриховка с полосой слева и квадратной меткой. Цвет календаря
+ * контур с ромбом, блок — штриховка с полосой слева и квадратным чекбоксом. Цвет календаря
  * приходит из Google и может совпасть с акцентом, форма — нет.
  *
  * Своего названия у блока нет — он показывает карточку и в неё же ведёт, как и полоса срока.
  * Время у блока правится тем же движением, что и у события: тащим за середину, тянем за края.
+ *
+ * Чекбокс и ссылка — соседи, а не кнопка внутри ссылки, как и у задач Google: щелчок по
+ * квадрату закрывает карточку, щелчок по названию открывает её.
  */
 function TimeBlockChip({
   placed,
@@ -689,22 +918,39 @@ function TimeBlockChip({
   onGrab: GrabHandler
 }) {
   const { event: block, start, end, column, columns } = placed
+  const setDone = useSetCardDueDone(block.boardId, block.cardId)
   const height = ((end - start) / MINUTES_IN_DAY) * DAY_PX
   const time = moscowParts(block.startsAt).time
+  // доска перечитывается целиком, задержка видна глазом: пока пишем, показываем свою отметку
+  const done = setDone.isPending ? !block.cardDone : block.cardDone
   // кусок блока, обрезанный полуночью, не тащится: правка переписала бы блок целиком
   const base = rangeOf(block, day)
   const target: Target = { type: 'block', id: block.id }
 
   return (
     <div
-      className="timeblock group absolute overflow-hidden"
+      className="timeblock group absolute flex items-start gap-1 overflow-hidden px-1.5 py-0.5"
       style={{
         top: (start / MINUTES_IN_DAY) * DAY_PX,
         height,
         left: `${(column / columns) * 100}%`,
         width: `calc(${100 / columns}% - 2px)`,
+        opacity: done ? 0.5 : undefined,
       }}
     >
+      <button
+        type="button"
+        aria-label={done ? `Снять отметку: ${block.cardTitle}` : `Выполнить: ${block.cardTitle}`}
+        aria-pressed={done}
+        disabled={setDone.isPending}
+        onClick={() => setDone.mutate(!block.cardDone)}
+        // квадрат в 10px мышью не поймать: невидимая рамка вокруг него расширяет цель нажатия
+        className={`relative mt-0.5 grid size-2.5 shrink-0 cursor-default place-items-center rounded-[3px] border text-[8px] leading-none outline-none transition-colors before:absolute before:-inset-1 before:content-[''] hover:bg-white/20 focus-visible:ring-1 focus-visible:ring-accent-line ${
+          done ? 'border-done text-done' : 'border-accent text-accent'
+        }`}
+      >
+        {done ? <span aria-hidden>✓</span> : null}
+      </button>
       <a
         href={cardHref(block.cardId)}
         draggable={false}
@@ -714,7 +960,7 @@ function TimeBlockChip({
           if (base && pointer.detail !== 0) pointer.preventDefault()
         }}
         title={`Время под карточку ${time}${block.calendarId ? ', видно в Google' : ''}: ${block.cardTitle} — ${block.boardTitle}`}
-        className={`block h-full overflow-hidden px-1.5 py-0.5 text-left text-[10px] leading-tight text-fog-muted outline-none hover:bg-white/8 focus-visible:ring-1 focus-visible:ring-accent-line ${
+        className={`block h-full min-w-0 flex-1 overflow-hidden text-left text-[10px] leading-tight text-fog-muted outline-none focus-visible:ring-1 focus-visible:ring-accent-line ${
           base ? 'cursor-grab active:cursor-grabbing' : ''
         }`}
       >
@@ -723,9 +969,10 @@ function TimeBlockChip({
             {time}
           </span>
         ) : null}
-        <span className="flex items-center gap-1">
-          <span aria-hidden className="size-1.5 shrink-0 rounded-[1px] bg-accent" />
-          <span className="truncate font-medium">{block.cardTitle}</span>
+        <span
+          className={`block truncate font-medium ${done ? 'text-fog-faint line-through' : ''}`}
+        >
+          {block.cardTitle}
         </span>
       </a>
 

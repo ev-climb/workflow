@@ -326,7 +326,11 @@ export async function deleteEvent(
 }
 
 /** Новое событие: время обязательно, идентификатор его выдаёт Google. */
-export type EventDraft = { title: string | null; times: EventTimes }
+export type EventDraft = {
+  title: string | null
+  descriptionHtml?: string | null
+  times: EventTimes
+}
 
 export async function insertEvent(
   accessToken: string,

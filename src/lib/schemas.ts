@@ -21,10 +21,15 @@ const listMoveBody = z
     error: 'ожидается хотя бы один сосед: {prevListId} или {nextListId}',
   })
 
-/** Правка списка: переименование, переезд в архив и обратно, перестановка на доске. */
+/** Правка списка: переименование, выделение, переезд в архив и обратно, перестановка. */
 export const patchBody = z.union(
-  [titleBody, z.object({ archived: z.boolean() }), listMoveBody],
-  { error: 'ожидается {title}, {archived} или {prevListId}/{nextListId}' },
+  [
+    titleBody,
+    z.object({ highlighted: z.boolean() }),
+    z.object({ archived: z.boolean() }),
+    listMoveBody,
+  ],
+  { error: 'ожидается {title}, {highlighted}, {archived} или {prevListId}/{nextListId}' },
 )
 
 /**
@@ -112,10 +117,14 @@ const eventTimes = z.union(
   { error: 'ожидается {allDay, startDate, endDate} или {allDay, startsAt, endsAt}' },
 )
 
-/** Новое событие: календарь, название и время. Название сервис сам обрежет. */
+/**
+ * Новое событие: календарь, название и время. Название сервис сам обрежет, описание
+ * переведёт в разметку. Без описания поле не передаётся вовсе.
+ */
 export const eventBody = z.object({
   calendarId: z.uuid(),
   title: z.string(),
+  description: z.string().nullable().optional(),
   times: eventTimes,
 })
 
@@ -151,10 +160,11 @@ export const timeBlockPatchBody = z.union(
   { error: 'ожидается {startsAt, endsAt} или {calendarId}' },
 )
 
-/** Новая задача: список, название и срок датой. Форму срока сверяет сервис. */
+/** Новая задача: список, название, заметки и срок датой. Форму срока сверяет сервис. */
 export const taskBody = z.object({
   taskListId: z.uuid(),
   title: z.string(),
+  notes: z.string().nullable().optional(),
   due: z.string().nullable().optional(),
 })
 
@@ -177,3 +187,45 @@ export const taskPatchBody = z
       body.completed !== undefined,
     { error: 'ожидается {title}, {notes}, {due}, {completed} или всё сразу' },
   )
+
+/** Новая заметка: вид, директория и содержимое — всё необязательно, пустая тоже заметка. */
+export const noteBody = z.object({
+  folderId: z.uuid().nullable().optional(),
+  kind: z.enum(['text', 'list']).optional(),
+  title: z.string().nullable().optional(),
+  body: z.string().nullable().optional(),
+})
+
+/** Содержимое и место заметки: поля по отдельности или вместе. */
+const noteFieldsBody = z
+  .object({
+    title: z.string().nullable().optional(),
+    body: z.string().nullable().optional(),
+    folderId: z.uuid().nullable().optional(),
+  })
+  .refine(
+    (body) =>
+      body.title !== undefined || body.body !== undefined || body.folderId !== undefined,
+    { error: 'ожидается {title}, {body}, {folderId} или всё сразу' },
+  )
+
+/** Правка заметки: содержимое либо переезд в архив и обратно. */
+export const notePatchBody = z.union([noteFieldsBody, z.object({ archived: z.boolean() })], {
+  error: 'ожидается {title}, {body}, {folderId} или {archived}',
+})
+
+/** Правка пункта списка дел: заголовок, отметка или оба сразу. */
+export const noteItemPatchBody = z.union([titleBody, z.object({ done: z.boolean() })], {
+  error: 'ожидается {title} или {done}',
+})
+
+/**
+ * Заметка в карточку: колонка-приёмник и то, что человек поправил в окне переноса.
+ * Пункты списка дел здесь не передаются — их сервис берёт из самой заметки.
+ */
+export const noteToCardBody = z.object({
+  listId: z.uuid(),
+  title: z.string(),
+  description: z.string().nullable().optional(),
+  archive: z.boolean().optional(),
+})

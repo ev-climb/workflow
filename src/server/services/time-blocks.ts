@@ -19,6 +19,8 @@ export type TimeBlock = {
   boardTitle: string
   startsAt: Date
   endsAt: Date
+  /** Отметка «выполнено» карточки: на сетке блок гасится и перечёркивается вместе с ней. */
+  cardDone: boolean
   /** Календарь, в котором висит зеркало, или `null`: блок живёт только у нас. */
   calendarId: string | null
 }
@@ -33,6 +35,7 @@ const LISTED = {
   boardTitle: boards.title,
   startsAt: timeBlocks.startsAt,
   endsAt: timeBlocks.endsAt,
+  cardDone: cards.dueDone,
   calendarId: timeBlocks.calendarId,
 }
 

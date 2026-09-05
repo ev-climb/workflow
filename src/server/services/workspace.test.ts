@@ -90,8 +90,8 @@ describe('доля высоты под верхнюю доску', () => {
 })
 
 describe('вид календаря', () => {
-  it('по умолчанию недельный', async () => {
-    expect((await getWorkspaceState()).calendarMode).toBe('week')
+  it('по умолчанию дневной: стол открывается с досками', async () => {
+    expect((await getWorkspaceState()).calendarMode).toBe('day')
   })
 
   it('переключается и сохраняется', async () => {

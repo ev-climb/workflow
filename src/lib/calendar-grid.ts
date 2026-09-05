@@ -96,3 +96,8 @@ export function nowOffset(days: string[], now: Date = new Date()): { date: strin
 export function isCalendarMode(value: string): value is CalendarMode {
   return (CALENDAR_MODES as readonly string[]).includes(value)
 }
+
+/** Недельная сетка занимает окно целиком: семь колонок в боковую колонку не влезают. */
+export function isFullScreen(mode: CalendarMode): boolean {
+  return mode === 'week'
+}

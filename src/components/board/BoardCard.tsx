@@ -44,7 +44,8 @@ export function CardFace({ card, title }: { card: CardView; title: ReactNode }) 
         </div>
       ) : null}
 
-      {title}
+      {/* выполненная карточка гаснет и перечёркивается прямо в колонке, как и на сетке */}
+      {card.dueDone ? <div className="line-through opacity-55">{title}</div> : title}
 
       {card.hasDescription || card.checklistTotal > 0 || card.dueAt ? (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-fog-faint">
@@ -130,6 +131,9 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
    * не долетает — dnd-kit гасит клик, как только сработал порог указателя.
    */
   function open(event: MouseEvent<HTMLElement>) {
+    // клик по накладке диалога всплывает по дереву React, хотя в DOM он вне карточки
+    if (!event.currentTarget.contains(event.target as Node)) return
+
     clearTimeout(timer.current)
     if (renaming || event.detail > 1) return
     if ((event.target as HTMLElement).closest('button, input')) return

@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CardDragArea } from '@/components/board/CardDragArea'
+import { NotesDrawer } from '@/components/notes/NotesDrawer'
 import { sendJson } from '@/lib/api-client'
 import type { BoardView } from '@/lib/board-view'
-import type { CalendarMode } from '@/lib/calendar-grid'
+import { isFullScreen, type CalendarMode } from '@/lib/calendar-grid'
 import { clampRatio } from '@/lib/split-ratio'
 import type { BoardSummary } from '@/server/services/boards'
 import type { Slot } from '@/server/services/workspace'
@@ -23,6 +24,8 @@ type Props = {
   bottomBoardId: string | null
   topBoardRatio: number
   calendarMode: CalendarMode
+  notesOpen: boolean
+  noteDropArchives: boolean
   today: string
 }
 
@@ -33,6 +36,8 @@ export function Workspace({
   bottomBoardId,
   topBoardRatio,
   calendarMode,
+  notesOpen,
+  noteDropArchives,
   today,
 }: Props) {
   const [slots, setSlots] = useState<Record<Slot, string | null>>({
@@ -41,6 +46,8 @@ export function Workspace({
   })
   const [ratio, setRatio] = useState(topBoardRatio)
   const [mode, setMode] = useState(calendarMode)
+  const [notes, setNotes] = useState(notesOpen)
+  const [archives, setArchives] = useState(noteDropArchives)
   const [failure, setFailure] = useState<string | null>(null)
   const area = useRef<HTMLDivElement>(null)
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -105,11 +112,34 @@ export function Workspace({
     [mode, save],
   )
 
+  const showNotes = useCallback(
+    async (open: boolean) => {
+      setNotes(open)
+      if (!(await save({ notesOpen: open }))) setNotes(!open)
+    },
+    [save],
+  )
+
+  const rememberArchives = useCallback(
+    async (value: boolean) => {
+      setArchives(value)
+      if (!(await save({ noteDropArchives: value }))) setArchives(!value)
+    },
+    [save],
+  )
+
+  const full = isFullScreen(mode)
+
   return (
-    <CardDragArea>
+    <CardDragArea
+      noteDropArchives={archives}
+      onNoteDropArchivesChange={(value) => void rememberArchives(value)}
+    >
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <CalendarColumn mode={mode} today={today} onModeChange={(next) => void chooseMode(next)} />
-        <div className="relative flex min-w-0 flex-1 flex-col">
+        {/* доски держат свою ширину и уезжают за край окна: иначе их колонки
+            пересчитывались бы на каждом кадре раскрытия календаря */}
+        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <CalendarColumn mode={mode} today={today} onModeChange={(next) => void chooseMode(next)} />
           {failure ? (
             <p
               role="status"
@@ -118,32 +148,35 @@ export function Workspace({
               Не сохранилось: {failure}
             </p>
           ) : null}
-          <div
-            ref={area}
-            className="grid min-h-0 min-w-0 flex-1"
-            style={{ gridTemplateRows: `${ratio}fr ${SPLITTER_PX}px ${1 - ratio}fr` }}
-          >
-            <BoardSlot
-              slot="top"
-              boards={boards}
-              boardId={slots.top}
-              initial={slots.top ? initialBoards[slots.top] : undefined}
-              onChoose={(boardId) => void chooseBoard('top', boardId)}
-            />
-            <Splitter
-              ratio={ratio}
-              onDragTo={dragTo}
-              onStep={(delta) => changeRatio(ratio + delta)}
-            />
-            <BoardSlot
-              slot="bottom"
-              boards={boards}
-              boardId={slots.bottom}
-              initial={slots.bottom ? initialBoards[slots.bottom] : undefined}
-              onChoose={(boardId) => void chooseBoard('bottom', boardId)}
-            />
+          <div className="flex min-h-0 w-[calc(100%-19rem)] shrink-0 flex-col" inert={full}>
+            <div
+              ref={area}
+              className="grid min-h-0 min-w-0 flex-1"
+              style={{ gridTemplateRows: `${ratio}fr ${SPLITTER_PX}px ${1 - ratio}fr` }}
+            >
+              <BoardSlot
+                slot="top"
+                boards={boards}
+                boardId={slots.top}
+                initial={slots.top ? initialBoards[slots.top] : undefined}
+                onChoose={(boardId) => void chooseBoard('top', boardId)}
+              />
+              <Splitter
+                ratio={ratio}
+                onDragTo={dragTo}
+                onStep={(delta) => changeRatio(ratio + delta)}
+              />
+              <BoardSlot
+                slot="bottom"
+                boards={boards}
+                boardId={slots.bottom}
+                initial={slots.bottom ? initialBoards[slots.bottom] : undefined}
+                onChoose={(boardId) => void chooseBoard('bottom', boardId)}
+              />
+            </div>
           </div>
         </div>
+        <NotesDrawer open={notes} onOpenChange={(open) => void showNotes(open)} />
       </div>
     </CardDragArea>
   )

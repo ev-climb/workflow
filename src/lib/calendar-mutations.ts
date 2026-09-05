@@ -22,7 +22,12 @@ function useCalendarChange<TInput, TResult>(request: (input: TInput) => Promise<
   })
 }
 
-export type NewEvent = { calendarId: string; title: string; times: EventTimesInput }
+export type NewEvent = {
+  calendarId: string
+  title: string
+  description?: string
+  times: EventTimesInput
+}
 
 export const useCreateEvent = () =>
   useCalendarChange((draft: NewEvent) => sendJson('POST', '/api/calendar/events', draft))
@@ -70,7 +75,7 @@ export const useRemoveEvent = () =>
   useCalendarChange((id: string) => sendJson('DELETE', `/api/calendar/events/${id}`))
 
 /** Новая задача: список, название и срок днём выделения. Времени у срока нет. */
-export type NewTask = { taskListId: string; title: string; due: string }
+export type NewTask = { taskListId: string; title: string; notes?: string; due: string }
 
 export const useCreateTask = () =>
   useCalendarChange((draft: NewTask) => sendJson('POST', '/api/calendar/tasks', draft))
@@ -86,6 +91,12 @@ export type TaskEdit = {
 export const useEditTask = (id: string) =>
   useCalendarChange((changes: TaskEdit) =>
     sendJson<TaskWriteResult>('PATCH', `/api/calendar/tasks/${id}`, changes),
+  )
+
+/** Перенос задачи по сетке: у задачи только день, времени в её сроке нет — инвариант 3. */
+export const useSetTaskDue = () =>
+  useCalendarChange(({ id, due }: { id: string; due: string }) =>
+    sendJson<TaskWriteResult>('PATCH', `/api/calendar/tasks/${id}`, { due }),
   )
 
 /**

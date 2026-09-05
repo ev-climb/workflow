@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useSetCardDue, useSetCardDueDone } from '@/lib/board-mutations'
+import { useSetCardDue } from '@/lib/board-mutations'
 import { formatDue, isOverdue, moscowParts } from '@/lib/dates'
 import { Failure } from './Failure'
 
@@ -23,13 +23,13 @@ function draftOf(dueAt: string | null, hasTime: boolean): Draft {
 }
 
 /**
- * Срок карточки: дата, необязательное время и отметка «выполнено». Момент из даты и
- * времени собирает сервис — здесь только поля.
+ * Срок карточки: дата и необязательное время. Момент из даты и времени собирает сервис —
+ * здесь только поля. Отметку «выполнено» ставит кнопка в шапке панели, поэтому срок её
+ * только показывает: два переключателя одного флага в одном окне сбивают с толку.
  */
 export function CardDue({ boardId, cardId, dueAt, dueHasTime, dueDone }: Props) {
   const [draft, setDraft] = useState<Draft | null>(null)
   const setDue = useSetCardDue(boardId, cardId)
-  const setDone = useSetCardDueDone(boardId, cardId)
   const overdue = dueAt !== null && isOverdue(dueAt, dueDone, dueHasTime)
 
   function save() {
@@ -102,31 +102,18 @@ export function CardDue({ boardId, cardId, dueAt, dueHasTime, dueDone }: Props) 
           </div>
         </>
       ) : dueAt ? (
-        <label className="flex w-fit cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            checked={dueDone}
-            disabled={setDone.isPending}
-            onChange={(event) => setDone.mutate(event.target.checked)}
-            className="size-3.5 accent-[oklch(0.72_0.14_168)]"
-          />
-          <span
-            className={`rounded px-1.5 py-0.5 text-sm tabular-nums ${
-              overdue
-                ? 'bg-alarm-wash text-alarm'
-                : dueDone
-                  ? 'text-done line-through'
-                  : 'text-fog'
-            }`}
-          >
-            {formatDue(dueAt, dueHasTime)}
-          </span>
-        </label>
+        <span
+          className={`inline-block rounded px-1.5 py-0.5 text-sm tabular-nums ${
+            overdue ? 'bg-alarm-wash text-alarm' : dueDone ? 'text-done line-through' : 'text-fog'
+          }`}
+        >
+          {formatDue(dueAt, dueHasTime)}
+        </span>
       ) : (
         <p className="text-sm text-fog-faint">нет</p>
       )}
 
-      <Failure error={setDue.error ?? setDone.error} className="pt-1" />
+      <Failure error={setDue.error} className="pt-1" />
     </section>
   )
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_state" ALTER COLUMN "calendar_mode" SET DEFAULT 'day';

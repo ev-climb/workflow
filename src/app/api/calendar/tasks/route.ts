@@ -18,7 +18,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await jsonBody(request, taskBody)
-    const created = await createTask(body.taskListId, { title: body.title, due: body.due })
+    const created = await createTask(body.taskListId, {
+      title: body.title,
+      notes: body.notes,
+      due: body.due,
+    })
     return NextResponse.json(created, { status: 201 })
   } catch (error) {
     return errorResponse(error)

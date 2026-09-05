@@ -9,8 +9,10 @@ const { db } = await import('./src/server/db/client.ts')
 const { sql } = await import('drizzle-orm')
 
 beforeEach(async () => {
-  // каскад доберёт списки, карточки, метки, чек-листы и связи
+  // каскад доберёт списки, карточки, метки, чек-листы и связи; заметки живут сами по
+  // себе и ни с одной доской не связаны — их приходится называть явно
   await db.execute(
-    sql`truncate boards, google_accounts, workspace_state restart identity cascade`,
+    sql`truncate boards, google_accounts, workspace_state, notes, note_folders
+        restart identity cascade`,
   )
 })

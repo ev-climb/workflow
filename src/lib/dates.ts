@@ -39,6 +39,15 @@ export function formatDue(iso: string, hasTime: boolean, now = new Date()): stri
   return yearIn(date) === yearIn(now) ? SAME_YEAR_DAY.format(date) : OTHER_YEAR.format(date)
 }
 
+const STAMP = new Intl.DateTimeFormat('ru-RU', { timeZone: ZONE, day: '2-digit', month: '2-digit' })
+
+/** Короткая отметка «02.09» для угла заметки. За пределами года — с годом. */
+export function formatStamp(iso: string, now = new Date()): string {
+  const date = new Date(iso)
+  const year = yearIn(date)
+  return year === yearIn(now) ? STAMP.format(date) : `${STAMP.format(date)}.${year.slice(2)}`
+}
+
 // `en-CA` даёт дату как ГГГГ-ММ-ДД, `h23` — полночь как 00, а не как 24
 const PARTS = new Intl.DateTimeFormat('en-CA', {
   timeZone: ZONE,

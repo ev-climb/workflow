@@ -1,17 +1,17 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { sendJson } from '@/lib/api-client'
 import type { GoogleCalendarSummary } from '@/server/services/google-calendars'
 import { ColorChoice } from './ColorChoice'
+import { useSettingsRefresh } from './settings-refresh'
 
 type Patch = { color?: string | null; visible?: boolean }
 
 /**
  * Календари одного аккаунта: что показывать в колонке и каким цветом. Список приезжает
- * со страницы уже прочитанным, поэтому после правки страница перечитывается целиком —
- * своего кэша здесь нет, TanStack Query живёт на рабочем столе, а не в настройках.
+ * из панели уже прочитанным, поэтому после правки перечитывает его она же — вместе
+ * с сеткой, которая красит события цветом календаря.
  */
 export function AccountCalendars({ calendars }: { calendars: GoogleCalendarSummary[] }) {
   if (calendars.length === 0) {
@@ -28,15 +28,17 @@ export function AccountCalendars({ calendars }: { calendars: GoogleCalendarSumma
 }
 
 function CalendarRow({ calendar }: { calendar: GoogleCalendarSummary }) {
-  const router = useRouter()
+  const refresh = useSettingsRefresh()
   const [error, setError] = useState<string | null>(null)
-  const [pending, startTransition] = useTransition()
+  const [pending, setPending] = useState(false)
 
   const save = (patch: Patch) => {
     setError(null)
+    setPending(true)
     sendJson('PATCH', `/api/google/calendars/${calendar.id}`, patch)
-      .then(() => startTransition(() => router.refresh()))
+      .then(refresh)
       .catch((failure: Error) => setError(failure.message))
+      .finally(() => setPending(false))
   }
 
   return (

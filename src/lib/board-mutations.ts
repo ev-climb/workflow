@@ -1,11 +1,11 @@
 'use client'
 
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { sendJson } from './api-client'
 import { archiveKey } from './archive-query'
 import { applyListMove, applyMove, type ListMovePlan, type MovePlan } from './board-move'
 import { boardKey } from './board-query'
-import { duesKey } from './calendar-query'
+import { calendarKey, duesKey } from './calendar-query'
 import type { BoardView } from './board-view'
 import { cardsKey } from './card-query'
 
@@ -14,20 +14,26 @@ import { cardsKey } from './card-query'
  * перетаскивание: там задержка видна глазом, а здесь поле и так закрывается сразу.
  * Архив перечитывается вместе с доской: любая правка перекладывает элемент между ними.
  * Открытая панель гасится вся, корнем ключа, — тем же приёмом, что и в `useBoardEvents`.
- * Сроки на календарной сетке тоже: правка доски двигает и их.
+ * Сроки на календарной сетке тоже: правка доски двигает и их. Сетку целиком — потому что
+ * тайм-блок показывает карточку: её заголовок и отметку «выполнено».
  */
 function useBoardChange<T = void>(boardId: string, request: (input: T) => Promise<unknown>) {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: request,
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: boardKey(boardId) })
-      void client.invalidateQueries({ queryKey: archiveKey(boardId) })
-      void client.invalidateQueries({ queryKey: cardsKey })
-      void client.invalidateQueries({ queryKey: duesKey })
-    },
+    onSuccess: () => void refreshBoard(client, boardId),
   })
+}
+
+function refreshBoard(client: QueryClient, boardId: string): Promise<unknown> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: boardKey(boardId) }),
+    client.invalidateQueries({ queryKey: archiveKey(boardId) }),
+    client.invalidateQueries({ queryKey: cardsKey }),
+    client.invalidateQueries({ queryKey: duesKey }),
+    client.invalidateQueries({ queryKey: calendarKey }),
+  ])
 }
 
 export const useCreateList = (boardId: string) =>
@@ -37,6 +43,11 @@ export const useCreateList = (boardId: string) =>
 
 export const useRenameList = (boardId: string, listId: string) =>
   useBoardChange(boardId, (title: string) => sendJson('PATCH', `/api/lists/${listId}`, { title }))
+
+export const useHighlightList = (boardId: string, listId: string) =>
+  useBoardChange(boardId, (highlighted: boolean) =>
+    sendJson('PATCH', `/api/lists/${listId}`, { highlighted }),
+  )
 
 export const useCreateCard = (boardId: string, listId: string) =>
   useBoardChange(boardId, (title: string) =>
@@ -60,6 +71,22 @@ export const useSetCardDueDone = (boardId: string, cardId: string) =>
   useBoardChange(boardId, (dueDone: boolean) =>
     sendJson('PATCH', `/api/cards/${cardId}`, { dueDone }),
   )
+
+/**
+ * Перенос срока по календарной сетке. Доска и карточка приходят с самим переносом, а не
+ * зашиты в хук: тащат ту полосу, за которую взялись. Перечитывание возвращается наружу,
+ * как в календарных мутациях, — тогда `onSettled` наступает после него, и полоса не
+ * прыгает назад на время запроса.
+ */
+export function useMoveCardDue() {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ cardId, due }: { boardId: string; cardId: string; due: DueDraft }) =>
+      sendJson('PATCH', `/api/cards/${cardId}`, { due }),
+    onSuccess: (_result, { boardId }) => refreshBoard(client, boardId),
+  })
+}
 
 const setArchived = (url: string, archived: boolean) => () => sendJson('PATCH', url, { archived })
 

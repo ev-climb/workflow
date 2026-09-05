@@ -26,6 +26,7 @@ const list = (id: string, cards: string[]): ListView => ({
   title: id,
   rank: id,
   wipLimit: null,
+  highlighted: false,
   cards: cards.map(card),
 })
 

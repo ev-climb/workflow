@@ -22,6 +22,9 @@ import { CALENDAR_DROP, isCalendarDrop } from '@/lib/calendar-drag'
 import { planListMove, planMove, type DragData } from '@/lib/board-move'
 import { boardKey } from '@/lib/board-query'
 import type { BoardView } from '@/lib/board-view'
+import { isNoteDrag, NoteDropProvider, type NoteDragData, type NoteDropTarget } from '@/lib/note-drop'
+import { noteHeading } from '@/lib/notes'
+import { NoteDropDialog } from '@/components/notes/NoteDropDialog'
 import { CARD_FRAME, CardFace } from './BoardCard'
 
 const ACROSS_BOARDS =
@@ -44,7 +47,8 @@ const dragData = (data: unknown): DragData | undefined => data as DragData | und
  * а списку на сетке делать нечего: тайм-блок заводится только карточкой.
  */
 const collide: CollisionDetection = (args) => {
-  if (dragData(args.active.data.current)?.type !== 'card') return closestCorners(args)
+  const type = (args.active.data.current as { type?: unknown } | undefined)?.type
+  if (type !== 'card' && type !== 'note') return closestCorners(args)
 
   const calendar = pointerWithin(args).find((one) => one.id === CALENDAR_DROP)
   return calendar ? [calendar] : closestCorners(args)
@@ -55,11 +59,19 @@ const collide: CollisionDetection = (args) => {
  * одному на доску: только так видно попытку перетащить через границу — её отменяем
  * с подсказкой, а не молча (ADR-005).
  */
-export function CardDragArea({ children }: { children: ReactNode }) {
+type Props = {
+  children: ReactNode
+  /** Отметка «убрать заметку в архив» в окне переноса: помнится столом, а не окном. */
+  noteDropArchives: boolean
+  onNoteDropArchivesChange: (value: boolean) => void
+}
+
+export function CardDragArea({ children, noteDropArchives, onNoteDropArchivesChange }: Props) {
   const client = useQueryClient()
   const move = useMoveCard()
   const moveList = useMoveList()
-  const [dragged, setDragged] = useState<DragData | null>(null)
+  const [dragged, setDragged] = useState<DragData | NoteDragData | null>(null)
+  const [drop, setDrop] = useState<NoteDropTarget | null>(null)
   const [hint, setHint] = useState<string | null>(null)
 
   const failed = move.error ?? moveList.error
@@ -84,7 +96,8 @@ export function CardDragArea({ children }: { children: ReactNode }) {
 
   function start({ active }: DragStartEvent) {
     setHint(null)
-    setDragged(dragData(active.data.current) ?? null)
+    const data = active.data.current
+    setDragged(isNoteDrag(data) ? data : (dragData(data) ?? null))
   }
 
   /** Подсказка появляется, пока карточку ещё держат: отказ на отпускании — уже поздно. */
@@ -94,6 +107,9 @@ export function CardDragArea({ children }: { children: ReactNode }) {
       setHint(null)
       return
     }
+
+    // заметке подсказка про границу между досками не нужна: она не принадлежит ни одной
+    if (isNoteDrag(active.data.current)) return
 
     const from = dragData(active.data.current)
     const to = over ? dragData(over.data.current) : undefined
@@ -105,6 +121,12 @@ export function CardDragArea({ children }: { children: ReactNode }) {
   function end({ active, over }: DragEndEvent) {
     setDragged(null)
     if (isCalendarDrop(over?.data.current)) return
+
+    if (isNoteDrag(active.data.current)) {
+      const to = over ? dragData(over.data.current) : undefined
+      if (to) dropNote(active.data.current.note, to)
+      return
+    }
 
     const from = dragData(active.data.current)
     const to = over ? dragData(over.data.current) : undefined
@@ -129,6 +151,25 @@ export function CardDragArea({ children }: { children: ReactNode }) {
     if (plan) move.mutate({ boardId: from.boardId, cardId: from.card.id, ...plan })
   }
 
+  /**
+   * Брошенная в доску заметка карточкой не становится молча: колонка известна из цели,
+   * а заголовок с описанием человек подтверждает в окне. Название колонки берётся из
+   * прочитанной доски — оно нужно окну только чтобы показать, куда всё поедет.
+   */
+  function dropNote(note: NoteDragData['note'], to: DragData) {
+    const board = client.getQueryData<BoardView>(boardKey(to.boardId))
+    const list = board?.lists.find((one) => one.id === to.listId)
+    if (!list) return
+
+    setDrop({
+      kind: 'board',
+      note,
+      boardId: to.boardId,
+      listId: list.id,
+      listTitle: list.title,
+    })
+  }
+
   const notice = hint ?? (failed ? `Не сохранилось: ${failed.message}` : null)
 
   return (
@@ -143,7 +184,7 @@ export function CardDragArea({ children }: { children: ReactNode }) {
       onDragEnd={end}
       onDragCancel={() => setDragged(null)}
     >
-      {children}
+      <NoteDropProvider onDrop={setDrop}>{children}</NoteDropProvider>
 
       {/* накладка живёт вне слотов: иначе её обрезала бы прокручиваемая область доски */}
       {/*
@@ -160,6 +201,14 @@ export function CardDragArea({ children }: { children: ReactNode }) {
               card={dragged.card}
               title={<p className="text-[13.5px] leading-[1.42] font-medium text-fog">{dragged.card.title}</p>}
             />
+          </div>
+        ) : null}
+
+        {dragged?.type === 'note' ? (
+          <div className={`${CARD_FRAME} rotate-1 border-hair-lit p-3 shadow-2xl shadow-black/60`}>
+            <p className="text-[13.5px] leading-snug font-medium text-fog">
+              {noteHeading(dragged.note) || 'Пустая заметка'}
+            </p>
           </div>
         ) : null}
 
@@ -187,6 +236,15 @@ export function CardDragArea({ children }: { children: ReactNode }) {
         >
           {notice}
         </p>
+      ) : null}
+
+      {drop ? (
+        <NoteDropDialog
+          target={drop}
+          archives={noteDropArchives}
+          onArchivesChange={onNoteDropArchivesChange}
+          onClose={() => setDrop(null)}
+        />
       ) : null}
     </DndContext>
   )

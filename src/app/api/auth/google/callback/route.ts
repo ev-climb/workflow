@@ -6,14 +6,14 @@ import { connectGoogleAccount } from '@/server/services/google-accounts'
 import { syncNow } from '@/server/services/sync-scheduler'
 
 /**
- * Возврат из Google. Разбирает вход, зовёт сервис, уводит обратно в настройки —
- * итог показывается там, а не голым JSON: сюда приходит браузер, а не код.
+ * Возврат из Google. Разбирает вход, зовёт сервис, уводит обратно на стол — итог
+ * показывает панель настроек, а не голый JSON: сюда приходит браузер, а не код.
  */
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams
 
   const settled = (query: [string, string]) => {
-    const response = seeOther(`/settings?${new URLSearchParams([query])}`)
+    const response = seeOther(`/?${new URLSearchParams([query])}`)
     // заявка отыграна: второй раз тот же `state` не подойдёт
     response.cookies.delete({ name: OAUTH_STATE_COOKIE, path: '/api/auth/google' })
     return response

@@ -117,7 +117,7 @@ describe('форма ответа', () => {
 
     const detail = (await call('get_card', { cardId: card.id })) as Json
     expect(detail.due).toBe('2026-09-02 10:00')
-    expect(detail.dueDone).toBe(false)
+    expect('done' in detail).toBe(false)
   })
 
   it('срок без времени отдаётся одной датой', async () => {
@@ -134,7 +134,15 @@ describe('форма ответа', () => {
 
     const detail = (await call('get_card', { cardId: card.id })) as Json
     expect('due' in detail).toBe(false)
-    expect('dueDone' in detail).toBe(false)
+    expect('done' in detail).toBe(false)
+  })
+
+  it('карточка без срока отмечается выполненной через update_card', async () => {
+    const { listId } = await board()
+    const card = await createCard({ listId, title: 'Без срока' })
+
+    const detail = (await call('update_card', { cardId: card.id, done: true })) as Json
+    expect(detail.done).toBe(true)
   })
 
   it('перенос карточки не отдаёт ранг наружу', async () => {

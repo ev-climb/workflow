@@ -15,6 +15,7 @@ import {
   renameCard,
   searchCards,
   setCardDue,
+  setCardDueDone,
 } from '../services/cards.ts'
 import { addChecklistItem, listChecklists, updateChecklistItem } from '../services/checklists.ts'
 import { InvalidInputError, ServiceError } from '../services/errors.ts'
@@ -37,11 +38,15 @@ import type { TimeBlock } from '../services/time-blocks.ts'
 function dueOut(
   dueAt: Date | null,
   hasTime: boolean,
-  done: boolean,
-): { due: string; dueDone: boolean } | Record<string, never> {
+): { due: string } | Record<string, never> {
   if (dueAt === null) return {}
   const { date, time } = moscowParts(dueAt.toISOString())
-  return { due: hasTime ? `${date} ${time}` : date, dueDone: done }
+  return { due: hasTime ? `${date} ${time}` : date }
+}
+
+/** Отметка «выполнено» едет наружу только поднятой: невыполненных карточек большинство. */
+function doneOut(done: boolean): { done: true } | Record<string, never> {
+  return done ? { done: true } : {}
 }
 
 /**
@@ -56,7 +61,8 @@ function cardOut(card: BoardCard): Record<string, unknown> {
   return {
     id: card.id,
     title: card.title,
-    ...dueOut(card.dueAt, card.dueHasTime, card.dueDone),
+    ...dueOut(card.dueAt, card.dueHasTime),
+    ...doneOut(card.dueDone),
     ...(card.labels.length ? { labels: card.labels.map(labelName) } : {}),
     ...(card.checklistTotal ? { checklist: `${card.checklistDone}/${card.checklistTotal}` } : {}),
   }
@@ -72,6 +78,7 @@ function boardOut(board: BoardWithLists): Record<string, unknown> {
       id: list.id,
       title: list.title,
       ...(list.wipLimit === null ? {} : { wipLimit: list.wipLimit }),
+      ...(list.highlighted ? { highlighted: true } : {}),
       cards: list.cards.map(cardOut),
     })),
   }
@@ -83,7 +90,8 @@ function hitOut(hit: CardHit): Record<string, unknown> {
     title: hit.title,
     board: hit.boardTitle,
     list: hit.listTitle,
-    ...dueOut(hit.dueAt, hit.dueHasTime, hit.dueDone),
+    ...dueOut(hit.dueAt, hit.dueHasTime),
+    ...doneOut(hit.dueDone),
   }
 }
 
@@ -97,7 +105,8 @@ async function detailOut(cardId: string): Promise<Record<string, unknown>> {
     board: card.boardTitle,
     list: card.listTitle,
     listId: card.listId,
-    ...dueOut(card.dueAt, card.dueHasTime, card.dueDone),
+    ...dueOut(card.dueAt, card.dueHasTime),
+    ...doneOut(card.dueDone),
     ...(card.description === null ? {} : { description: card.description }),
     ...(card.labels.length
       ? { labels: card.labels.map((label) => ({ id: label.id, name: labelName(label) })) }
@@ -162,7 +171,8 @@ function dueCardOut(card: CardDue): Record<string, unknown> {
     id: card.id,
     title: card.title,
     board: card.boardTitle,
-    ...dueOut(card.dueAt, card.dueHasTime, card.dueDone),
+    ...dueOut(card.dueAt, card.dueHasTime),
+    ...doneOut(card.dueDone),
   }
 }
 
@@ -289,14 +299,17 @@ export const TOOLS: ToolDef[] = [
     {
       title: 'Правка карточки',
       description:
-        'Заголовок, описание, срок и метки карточки. Срок — московские дата и время, ' +
-        '`null` снимает его. Метки навешиваются и снимаются по идентификаторам с доски.',
+        'Заголовок, описание, срок, отметка «выполнено» и метки карточки. Срок — ' +
+        'московские дата и время, `null` снимает его; отметка от срока не зависит и ' +
+        'стоит на карточках без него. Метки навешиваются и снимаются по идентификаторам ' +
+        'с доски.',
       input: z
         .object({
           cardId,
           title: z.string().optional(),
           description: z.string().nullable().optional(),
           due: dueInput.optional(),
+          done: z.boolean().optional(),
           addLabelIds: z.array(z.uuid()).optional(),
           removeLabelIds: z.array(z.uuid()).optional(),
         })
@@ -305,15 +318,17 @@ export const TOOLS: ToolDef[] = [
             input.title !== undefined ||
             input.description !== undefined ||
             input.due !== undefined ||
+            input.done !== undefined ||
             input.addLabelIds !== undefined ||
             input.removeLabelIds !== undefined,
-          { error: 'править нечего: ожидается title, description, due или метки' },
+          { error: 'править нечего: ожидается title, description, due, done или метки' },
         ),
     },
     async (input) => {
       if (input.title !== undefined) await renameCard(input.cardId, input.title)
       if (input.description !== undefined) await describeCard(input.cardId, input.description)
       if (input.due !== undefined) await setCardDue(input.cardId, input.due)
+      if (input.done !== undefined) await setCardDueDone(input.cardId, input.done)
       for (const labelId of input.addLabelIds ?? []) await attachLabel(input.cardId, labelId)
       for (const labelId of input.removeLabelIds ?? []) await detachLabel(input.cardId, labelId)
 

@@ -14,6 +14,8 @@ export type WorkspaceState = {
   bottomBoardId: string | null
   topBoardRatio: number
   calendarMode: CalendarMode
+  notesOpen: boolean
+  noteDropArchives: boolean
 }
 
 const SELECT = {
@@ -21,6 +23,8 @@ const SELECT = {
   bottomBoardId: workspaceState.bottomBoardId,
   topBoardRatio: workspaceState.topBoardRatio,
   calendarMode: workspaceState.calendarMode,
+  notesOpen: workspaceState.notesOpen,
+  noteDropArchives: workspaceState.noteDropArchives,
 }
 
 /**
@@ -116,6 +120,32 @@ export async function setCalendarMode(mode: string): Promise<WorkspaceState> {
   const [state] = await db
     .update(workspaceState)
     .set({ calendarMode: mode, updatedAt: new Date() })
+    .where(eq(workspaceState.id, SINGLE_ROW))
+    .returning(SELECT)
+
+  return state
+}
+
+/** Шторка заметок: открыта или свёрнута в полоску у края. */
+export async function setNotesOpen(open: boolean): Promise<WorkspaceState> {
+  await getWorkspaceState()
+
+  const [state] = await db
+    .update(workspaceState)
+    .set({ notesOpen: open, updatedAt: new Date() })
+    .where(eq(workspaceState.id, SINGLE_ROW))
+    .returning(SELECT)
+
+  return state
+}
+
+/** Значение отметки «убрать заметку в архив» в окне переноса на следующий раз. */
+export async function setNoteDropArchives(archives: boolean): Promise<WorkspaceState> {
+  await getWorkspaceState()
+
+  const [state] = await db
+    .update(workspaceState)
+    .set({ noteDropArchives: archives, updatedAt: new Date() })
     .where(eq(workspaceState.id, SINGLE_ROW))
     .returning(SELECT)
 

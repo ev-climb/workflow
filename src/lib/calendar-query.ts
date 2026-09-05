@@ -9,6 +9,7 @@ import type {
   CalendarEventDetailsView,
   CalendarEventView,
   CardDueView,
+  GoogleAccountView,
   TimeBlockView,
 } from './calendar-view'
 
@@ -94,6 +95,15 @@ export const calendarsQuery = {
   queryKey: calendarsKey,
   queryFn: (): Promise<GoogleCalendarSummary[]> =>
     getJson<GoogleCalendarSummary[]>('/api/google/calendars'),
+}
+
+/** Подключённые аккаунты Google. Читаются, когда открывают настройки. */
+export const accountsKey = ['google-accounts'] as const
+
+export const accountsQuery = {
+  queryKey: accountsKey,
+  queryFn: (): Promise<GoogleAccountView[]> =>
+    getJson<GoogleAccountView[]>('/api/google/accounts'),
 }
 
 /** Списки задач для выбора при создании задачи. Читаются, когда диалог открывают. */

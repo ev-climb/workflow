@@ -57,6 +57,8 @@ export default async function WorkspacePage({ searchParams }: Props) {
         bottomBoardId={state.bottomBoardId}
         topBoardRatio={state.topBoardRatio}
         calendarMode={state.calendarMode}
+        notesOpen={state.notesOpen}
+        noteDropArchives={state.noteDropArchives}
         today={moscowToday()}
       />
     </div>

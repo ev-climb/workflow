@@ -147,3 +147,33 @@ test('переставить список мышью и найти его на �
 
   expect(await columnTitles(page)).toEqual([DOING, TODO])
 })
+
+const NOTE = 'Купить билеты'
+
+test('завести заметку в шторке и перетащить её в колонку доски', async ({ page }) => {
+  await signIn(page)
+
+  await page.getByRole('button', { name: 'Заметки', exact: true }).click()
+  const drawer = page.getByRole('complementary', { name: 'Заметки' })
+
+  await drawer.getByRole('button', { name: '+ Заметка' }).click()
+  await drawer.getByLabel('Заголовок заметки').fill(NOTE)
+  await drawer.getByLabel('Текст заметки').fill('туда и обратно')
+  await drawer.getByRole('button', { name: 'Готово' }).click()
+
+  const note = drawer.locator('li').filter({ hasText: NOTE })
+  await expect(note).toHaveCount(1)
+
+  await drag(page, note, cards(page, TODO).first())
+
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByLabel('Заголовок')).toHaveValue(NOTE)
+  await dialog.getByRole('button', { name: 'Создать' }).click()
+
+  // заметка уехала в архив: по умолчанию отметка в окне стоит
+  await expect(drawer.locator('li').filter({ hasText: NOTE })).toHaveCount(0)
+  await expect(cards(page, TODO)).toHaveCount(TODO_CARDS.length + 1)
+
+  await opened(page, () => page.reload())
+  await expect(cards(page, TODO).filter({ hasText: NOTE })).toHaveCount(1)
+})

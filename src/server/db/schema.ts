@@ -15,6 +15,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core'
 import type { CalendarMode } from '../../lib/calendar-grid.ts'
+import type { NoteKind } from '../../lib/notes.ts'
 
 // ранги сравниваются побайтно: локаль базы (en_US.utf8 и любая другая на glibc) ставит
 // 'a0' раньше 'A1', а fractional-indexing строит ключи в расчёте на порядок байтов.
@@ -56,6 +57,8 @@ export const lists = pgTable(
     title: text().notNull(),
     rank: rankText().notNull(),
     wipLimit: integer(),
+    // выделенный список рисуется иначе: это тот, в котором работа идёт прямо сейчас
+    highlighted: boolean().notNull().default(false),
     archivedAt: tstz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -80,6 +83,7 @@ export const cards = pgTable(
     dueAt: tstz(),
     // осмысленно только при заполненном dueAt: срок бывает и одной датой, без времени
     dueHasTime: boolean().notNull().default(true),
+    // отметка «выполнено» самой карточки: имя осталось с тех пор, когда она жила при сроке
     dueDone: boolean().notNull().default(false),
     archivedAt: tstz(),
     createdAt: createdAt(),
@@ -361,6 +365,61 @@ export const timeBlocks = pgTable(
   ],
 )
 
+export const noteFolders = pgTable(
+  'note_folders',
+  {
+    id: pk(),
+    title: text().notNull(),
+    rank: rankText().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('note_folders_rank_key').on(t.rank)],
+)
+
+export const notes = pgTable(
+  'notes',
+  {
+    id: pk(),
+    // директория необязательна и не владеет заметкой: удалённая отпускает своё содержимое
+    // в общий список, а не уносит его с собой
+    folderId: uuid().references(() => noteFolders.id, { onDelete: 'set null' }),
+    kind: text().$type<NoteKind>().notNull().default('text'),
+    // заголовок необязателен: при пустом его роль играет первая строка текста
+    title: text(),
+    body: text(),
+    rank: rankText().notNull(),
+    archivedAt: tstz(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    // порядок общий на все заметки, а не свой в каждой директории: переезд между
+    // директориями тогда не трогает ранг, а список директории — просто подмножество.
+    // Уникальность по паре с директорией и не вышла бы: null в индексе дублей не ловит
+    uniqueIndex('notes_rank_key').on(t.rank),
+    index('notes_folder_id_idx').on(t.folderId),
+    check('notes_kind', sql`${t.kind} in ('text', 'list')`),
+    check('notes_list_has_no_body', sql`${t.kind} = 'text' or ${t.body} is null`),
+  ],
+)
+
+export const noteItems = pgTable(
+  'note_items',
+  {
+    id: pk(),
+    noteId: uuid()
+      .notNull()
+      .references(() => notes.id, { onDelete: 'cascade' }),
+    title: text().notNull(),
+    done: boolean().notNull().default(false),
+    rank: rankText().notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('note_items_note_id_rank_key').on(t.noteId, t.rank)],
+)
+
 export const workspaceState = pgTable(
   'workspace_state',
   {
@@ -368,7 +427,12 @@ export const workspaceState = pgTable(
     topBoardId: uuid().references(() => boards.id, { onDelete: 'set null' }),
     bottomBoardId: uuid().references(() => boards.id, { onDelete: 'set null' }),
     topBoardRatio: real().notNull().default(0.5),
-    calendarMode: text().$type<CalendarMode>().notNull().default('week'),
+    // неделя раскрывается на всё окно, поэтому стол открывается днём: доски видно сразу
+    calendarMode: text().$type<CalendarMode>().notNull().default('day'),
+    // шторка заметок: закрыта до первого открытия, чтобы стол не сужался сам собой
+    notesOpen: boolean().notNull().default(false),
+    // отметка «убрать заметку в архив» в окне переноса: помнится между переносами
+    noteDropArchives: boolean().notNull().default(true),
     updatedAt: updatedAt(),
   },
   (t) => [

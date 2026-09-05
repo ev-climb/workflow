@@ -7,11 +7,12 @@ type Props = {
   action: string
   label: string
   hint?: string
+  className?: string
   onAdd: (title: string) => void
 }
 
 /** Кнопка, разворачивающаяся в поле заголовка. */
-export function Composer({ action, label, hint, onAdd }: Props) {
+export function Composer({ action, label, hint, className = '', onAdd }: Props) {
   const [open, setOpen] = useState(false)
 
   if (!open) {
@@ -19,7 +20,7 @@ export function Composer({ action, label, hint, onAdd }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="ghost-add w-full px-2.5 py-2 text-left text-[12.5px] focus-visible:ring-1 focus-visible:ring-accent-line"
+        className={`ghost-add w-full px-2.5 py-2 text-left text-[12.5px] focus-visible:ring-1 focus-visible:ring-accent-line ${className}`}
       >
         + {action}
       </button>

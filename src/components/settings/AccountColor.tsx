@@ -1,26 +1,25 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useState } from 'react'
 import { sendJson } from '@/lib/api-client'
-import type { GoogleAccountSummary } from '@/server/services/google-accounts'
+import type { GoogleAccountView } from '@/lib/calendar-view'
 import { ColorChoice } from './ColorChoice'
+import { useSettingsRefresh } from './settings-refresh'
 
 /**
  * Цвет аккаунта: им красятся все его события, поэтому рабочие и личные различимы на
  * сетке с одного взгляда. Смена цвета снимает выбор с календарей аккаунта — это делает
- * сервис, поэтому страница после правки перечитывается целиком.
+ * сервис, поэтому после правки перечитываются оба списка.
  */
-export function AccountColor({ account }: { account: GoogleAccountSummary }) {
-  const router = useRouter()
+export function AccountColor({ account }: { account: GoogleAccountView }) {
+  const refresh = useSettingsRefresh()
   const [error, setError] = useState<string | null>(null)
-  const [, startTransition] = useTransition()
 
   const save = (color: string | null) => {
     if (color === null) return
     setError(null)
     sendJson('PATCH', `/api/google/accounts/${account.id}`, { color })
-      .then(() => startTransition(() => router.refresh()))
+      .then(refresh)
       .catch((failure: Error) => setError(failure.message))
   }
 

@@ -1,5 +1,6 @@
 import type { EventTimes } from '@/server/google/events'
 import type { CardDue } from '@/server/services/cards'
+import type { GoogleAccountSummary } from '@/server/services/google-accounts'
 import type { CalendarEvent, CalendarEventDetails } from '@/server/services/google-events'
 import type { TimeBlock } from '@/server/services/time-blocks'
 
@@ -66,4 +67,13 @@ export function toEventTimes(input: EventTimesInput): EventTimes {
     startDate: null,
     endDate: null,
   }
+}
+
+export type GoogleAccountView = Omit<GoogleAccountSummary, 'connectedAt'> & {
+  connectedAt: string
+}
+
+/** Вид аккаунта для клиента: момент подключения становится строкой, как и всюду после JSON. */
+export function toAccountView(account: GoogleAccountSummary): GoogleAccountView {
+  return { ...account, connectedAt: account.connectedAt.toISOString() }
 }

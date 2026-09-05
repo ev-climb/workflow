@@ -251,7 +251,7 @@ function normalize(changes: EventChanges): EventPatch {
  */
 export async function createEvent(
   calendarId: string,
-  draft: EventDraft,
+  draft: { title: string | null; description?: string | null; times: EventTimes },
 ): Promise<{ eventId: string }> {
   checkTimes(draft.times)
 
@@ -272,6 +272,9 @@ export async function createEvent(
   const event = await insertEvent(accessToken, calendar.googleCalendarId, {
     title: draft.title?.trim() || null,
     times: draft.times,
+    ...(draft.description === undefined
+      ? {}
+      : { descriptionHtml: descriptionHtml(draft.description ?? '') }),
   })
   await applyEvents(calendarId, [event])
 

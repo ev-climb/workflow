@@ -54,6 +54,7 @@ export type BoardList = {
   title: string
   rank: string
   wipLimit: number | null
+  highlighted: boolean
   cards: BoardCard[]
 }
 
@@ -91,7 +92,13 @@ export async function getBoard(boardId: string): Promise<BoardWithLists> {
     .orderBy(asc(labels.name), asc(labels.color))
 
   const boardLists = await db
-    .select({ id: lists.id, title: lists.title, rank: lists.rank, wipLimit: lists.wipLimit })
+    .select({
+      id: lists.id,
+      title: lists.title,
+      rank: lists.rank,
+      wipLimit: lists.wipLimit,
+      highlighted: lists.highlighted,
+    })
     .from(lists)
     .where(and(eq(lists.boardId, boardId), isNull(lists.archivedAt)))
     .orderBy(asc(lists.rank))
@@ -211,13 +218,20 @@ export async function renameBoard(boardId: string, newTitle: string): Promise<Bo
   return updated
 }
 
-export type ListSummary = { id: string; title: string; rank: string; wipLimit: number | null }
+export type ListSummary = {
+  id: string
+  title: string
+  rank: string
+  wipLimit: number | null
+  highlighted: boolean
+}
 
 const LIST_SELECT = {
   id: lists.id,
   title: lists.title,
   rank: lists.rank,
   wipLimit: lists.wipLimit,
+  highlighted: lists.highlighted,
 }
 
 /** Новый список встаёт в конец доски. */
@@ -345,6 +359,21 @@ export async function renameList(listId: string, newTitle: string): Promise<List
   const [updated] = await db
     .update(lists)
     .set({ title: name, updatedAt: new Date() })
+    .where(and(eq(lists.id, listId), isNull(lists.archivedAt)))
+    .returning({ ...LIST_SELECT, boardId: lists.boardId })
+
+  if (!updated) throw new NotFoundError(`списка ${listId} нет или он в архиве`)
+
+  const { boardId, ...list } = updated
+  publishBoardChanged(boardId)
+  return list
+}
+
+/** Выделение списка: доска показывает его иначе. Ограничений на число выделенных нет. */
+export async function highlightList(listId: string, highlighted: boolean): Promise<ListSummary> {
+  const [updated] = await db
+    .update(lists)
+    .set({ highlighted, updatedAt: new Date() })
     .where(and(eq(lists.id, listId), isNull(lists.archivedAt)))
     .returning({ ...LIST_SELECT, boardId: lists.boardId })
 

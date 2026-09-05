@@ -1,16 +1,17 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import Link from 'next/link'
 import { useState } from 'react'
 import { CalendarGrid } from '@/components/calendar/CalendarGrid'
 import { CreateDialog } from '@/components/calendar/CreateDialog'
 import { EventPanel } from '@/components/calendar/EventPanel'
 import { TaskPanel } from '@/components/calendar/TaskPanel'
+import { SettingsButton } from '@/components/settings/SettingsButton'
 import type { Range } from '@/lib/calendar-drag'
 import { calendarQuery, duesQuery, tasksQuery, timeBlocksQuery } from '@/lib/calendar-query'
 import {
   daysOf,
+  isFullScreen,
   moscowToday,
   rangeLabel,
   shiftAnchor,
@@ -37,42 +38,49 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
   const blocks = useQuery(timeBlocksQuery(days[0], days[days.length - 1]))
   const tasks = useQuery(tasksQuery(days[0], days[days.length - 1]))
 
-  return (
-    <aside className="surface-panel flex w-76 shrink-0 flex-col border-r border-hair">
-      <div className="flex items-baseline justify-between gap-3 px-5 pt-5">
-        <h2 className="text-base font-semibold tracking-[-0.01em] text-fog">
-          {rangeLabel(mode, days)}
-        </h2>
-        <Link
-          href="/settings"
-          className="shrink-0 text-[12.5px] text-fog-dim transition-colors hover:text-fog"
-        >
-          Настройки
-        </Link>
-      </div>
+  // неделя раскрывается на всё окно: семь колонок в боковую колонку не влезают
+  const full = isFullScreen(mode)
 
-      <div className="flex items-center gap-1 px-5 py-4">
-        <Step label="Назад" onClick={() => setAnchor(shiftAnchor(mode, anchor, -1))}>
-          ‹
-        </Step>
-        <Step label="Сегодня" onClick={() => setAnchor(moscowToday())}>
-          Сегодня
-        </Step>
-        <Step label="Вперёд" onClick={() => setAnchor(shiftAnchor(mode, anchor, 1))}>
-          ›
-        </Step>
-        <div className="segment ml-auto">
-          {(Object.keys(MODE_LABEL) as CalendarMode[]).map((value) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={mode === value}
-              onClick={() => onModeChange(value)}
-              className="segment-item px-3 py-1 text-xs font-medium"
-            >
-              {MODE_LABEL[value]}
-            </button>
-          ))}
+  return (
+    <aside
+      className={`surface-panel calendar-shell flex min-h-0 shrink-0 flex-col border-r border-hair motion-reduce:transition-none ${
+        full ? 'w-full' : 'w-76'
+      }`}
+    >
+      {/* шапка одинакова в обоих видах: переключатель не должен уезжать при смене вида */}
+      <div className="flex flex-col px-5 pt-5">
+        <div className="flex min-w-0 items-baseline justify-between gap-3">
+          <h2 className="truncate text-base font-semibold tracking-[-0.01em] text-fog">
+            {rangeLabel(mode, days)}
+          </h2>
+          <SettingsButton />
+        </div>
+
+        <div className="flex items-center gap-2 py-4">
+          <div className="segment shrink-0">
+            {(Object.keys(MODE_LABEL) as CalendarMode[]).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={mode === value}
+                onClick={() => onModeChange(value)}
+                className="segment-item px-2.5 py-1 text-xs font-medium"
+              >
+                {MODE_LABEL[value]}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1">
+            <Step label="Назад" onClick={() => setAnchor(shiftAnchor(mode, anchor, -1))}>
+              ‹
+            </Step>
+            <Step label="Сегодня" onClick={() => setAnchor(moscowToday())}>
+              Сегодня
+            </Step>
+            <Step label="Вперёд" onClick={() => setAnchor(shiftAnchor(mode, anchor, 1))}>
+              ›
+            </Step>
+          </div>
         </div>
       </div>
 
