@@ -23,6 +23,10 @@ export function proxy(request: NextRequest) {
   return NextResponse.redirect(login)
 }
 
+// фирменные картинки и иконки вкладки открыты: их запрашивает и страница входа, где
+// сессии ещё нет, а редирект на /login вернул бы вместо картинки HTML
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    '/((?!_next/static|_next/image|brand/|favicon\\.ico|icon\\.png|icon1\\.png|apple-icon\\.png|manifest\\.webmanifest).*)',
+  ],
 }

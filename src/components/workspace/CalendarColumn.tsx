@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Mark } from '@/components/brand/Logo'
 import { CalendarGrid } from '@/components/calendar/CalendarGrid'
 import { CreateDialog } from '@/components/calendar/CreateDialog'
 import { EventPanel } from '@/components/calendar/EventPanel'
@@ -48,15 +49,37 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
       }`}
     >
       {/* шапка одинакова в обоих видах: переключатель не должен уезжать при смене вида */}
-      <div className="flex flex-col px-5 pt-5">
-        <div className="flex min-w-0 items-baseline justify-between gap-3">
-          <h2 className="truncate text-base font-semibold tracking-[-0.01em] text-fog">
-            {rangeLabel(mode, days)}
-          </h2>
-          <SettingsButton />
-        </div>
+      <div className="flex h-[54px] shrink-0 items-center justify-between gap-3 border-b border-hair pr-4 pl-[18px]">
+        <span className="flex items-center gap-2.5">
+          <Mark size={32} className="[filter:drop-shadow(0_2px_10px_oklch(0.6_0.13_280/0.45))]" />
+          <span className="text-[14.5px] leading-none font-bold tracking-[-0.015em]">
+            Work<span className="font-semibold text-fog-muted">Flow</span>
+          </span>
+        </span>
+        <SettingsButton />
+      </div>
 
-        <div className="flex items-center gap-2 py-4">
+      <div className="flex flex-col gap-3.5 px-[18px] pt-[18px] pb-3.5">
+        <h2 className="truncate text-[17px] font-semibold tracking-[-0.015em] text-fog">
+          {rangeLabel(mode, days)}
+        </h2>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Step label="Назад" onClick={() => setAnchor(shiftAnchor(mode, anchor, -1))}>
+              ‹
+            </Step>
+            <button
+              type="button"
+              onClick={() => setAnchor(moscowToday())}
+              className="rounded-[10px] border border-hair bg-white/5 px-2.5 py-1 text-[12.5px] font-medium text-fog-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-1 focus-visible:ring-accent-line focus-visible:outline-none"
+            >
+              Сегодня
+            </button>
+            <Step label="Вперёд" onClick={() => setAnchor(shiftAnchor(mode, anchor, 1))}>
+              ›
+            </Step>
+          </div>
           <div className="segment shrink-0">
             {(Object.keys(MODE_LABEL) as CalendarMode[]).map((value) => (
               <button
@@ -64,22 +87,11 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
                 type="button"
                 aria-pressed={mode === value}
                 onClick={() => onModeChange(value)}
-                className="segment-item px-2.5 py-1 text-xs font-medium"
+                className="segment-item px-3 py-1 text-xs font-medium"
               >
                 {MODE_LABEL[value]}
               </button>
             ))}
-          </div>
-          <div className="flex items-center gap-1">
-            <Step label="Назад" onClick={() => setAnchor(shiftAnchor(mode, anchor, -1))}>
-              ‹
-            </Step>
-            <Step label="Сегодня" onClick={() => setAnchor(moscowToday())}>
-              Сегодня
-            </Step>
-            <Step label="Вперёд" onClick={() => setAnchor(shiftAnchor(mode, anchor, 1))}>
-              ›
-            </Step>
           </div>
         </div>
       </div>
@@ -135,7 +147,7 @@ function Step({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="btn-quiet px-2.5 py-1 text-[12.5px] focus-visible:ring-1 focus-visible:ring-accent-line"
+      className="grid size-[26px] place-items-center rounded-[9px] text-[14px] text-fog-muted transition-colors hover:bg-white/8 hover:text-white focus-visible:ring-1 focus-visible:ring-accent-line focus-visible:outline-none"
     >
       {children}
     </button>

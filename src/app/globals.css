@@ -91,7 +91,8 @@
   @media (prefers-reduced-motion: reduce) {
     body::before,
     .beacon,
-    .pulse {
+    .pulse,
+    .brand-breathe {
       animation: none;
     }
   }
@@ -104,6 +105,18 @@
   }
   50% {
     transform: translate3d(2%, -3%, 0) scale(1.08);
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
   }
 }
 
@@ -550,6 +563,12 @@
   /* та же пульсация помедленнее: выделенный список и свёрнутая шторка заметок */
   .pulse {
     animation: beacon 3s ease-in-out infinite;
+  }
+
+  /* знак в ожидании страницы */
+  .brand-breathe {
+    animation: breathe 2.4s ease-in-out infinite;
+    filter: drop-shadow(0 10px 26px oklch(0.6 0.12 290 / 0.45));
   }
 }
 

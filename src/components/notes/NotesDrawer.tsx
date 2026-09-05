@@ -12,6 +12,7 @@ import { NoteCard } from './NoteCard'
 const ALL = 'all'
 const LOOSE = 'none'
 const ARCHIVE = 'archive'
+const MANAGE = 'manage'
 
 /** Значение выбора вида в запрос к серверу. Идентификатор директории — сам себе значение. */
 function viewOf(value: string): NotesView {
@@ -44,6 +45,17 @@ export function NotesDrawer({ open, onOpenChange }: Props) {
   // читаем и свёрнутой: на полоске стоит счётчик, и раскрывается она уже с заметками
   const notes = useQuery(notesQuery(viewOf(view)))
   const create = useCreateNote()
+
+  // отметка о свежей заметке живёт до первой смены вида: иначе заметка открывалась бы
+  // в правке каждый раз, когда возвращаешься в директорию, где она лежит
+  function show(next: string) {
+    if (next === MANAGE) {
+      setManaging(true)
+      return
+    }
+    setFresh(null)
+    setView(next)
+  }
 
   function add(kind: 'text' | 'list') {
     create.mutate(
@@ -89,7 +101,7 @@ export function NotesDrawer({ open, onOpenChange }: Props) {
         }`}
       >
         <div className="flex items-center gap-2 border-b border-hair px-[18px] py-3.5">
-          <Select.Root value={view} onValueChange={setView}>
+          <Select.Root value={view} onValueChange={show}>
             <Select.Trigger
               aria-label="Что показывать"
               className="flex min-w-0 items-center gap-2 rounded-[13px] border border-white/10 bg-[linear-gradient(150deg,rgb(255_255_255/0.09),rgb(255_255_255/0.03))] px-3 py-[7px] text-[13px] font-medium transition-all duration-300 outline-none hover:border-accent-line hover:bg-accent-wash focus-visible:border-accent-line"
@@ -126,6 +138,14 @@ export function NotesDrawer({ open, onOpenChange }: Props) {
                   <Select.Item value={ARCHIVE} className="menu-item px-2 py-1 text-sm">
                     <Select.ItemText>Архив</Select.ItemText>
                   </Select.Item>
+                  <Select.Separator className="my-1 h-px bg-hair" />
+                  <Select.Item
+                    value={MANAGE}
+                    aria-label="Директории"
+                    className="menu-item px-2 py-1 text-sm text-fog-dim"
+                  >
+                    <Select.ItemText>+</Select.ItemText>
+                  </Select.Item>
                 </Select.Viewport>
               </Select.Content>
             </Select.Portal>
@@ -133,15 +153,6 @@ export function NotesDrawer({ open, onOpenChange }: Props) {
 
           <span className="flex-1" />
 
-          <button
-            type="button"
-            onClick={() => setManaging(true)}
-            title="Директории"
-            aria-label="Директории"
-            className="btn-quiet px-2 py-1 text-xs"
-          >
-            Директории
-          </button>
           <button
             type="button"
             onClick={() => onOpenChange(false)}

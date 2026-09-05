@@ -1,3 +1,5 @@
+import { Logo } from '@/components/brand/Logo'
+
 export default async function LoginPage({
   searchParams,
 }: {
@@ -6,13 +8,15 @@ export default async function LoginPage({
   const { error, next } = await searchParams
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-8 p-6">
+      <h1>
+        <Logo width={200} />
+      </h1>
       <form
         method="post"
         action="/api/auth/login"
         className="surface-sheet w-full max-w-xs space-y-4 rounded-2xl p-6"
       >
-        <h1 className="text-lg font-semibold tracking-[-0.01em]">WorkFlow</h1>
         <input type="hidden" name="next" value={next ?? '/'} />
         <input
           type="password"

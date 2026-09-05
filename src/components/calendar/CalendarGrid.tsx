@@ -625,6 +625,9 @@ export function CalendarGrid({
         }}
         className="min-h-0 flex-1 overflow-y-auto px-3"
       >
+        <div aria-hidden className="sticky top-0 z-10 h-0">
+          <div className="h-[26px] bg-linear-to-b from-ink/95 to-transparent" />
+        </div>
         <div className="flex" style={{ height: DAY_PX }}>
           <div className={`relative ${RAIL}`}>
             {HOURS.slice(1).map((hour) => (
@@ -1086,7 +1089,7 @@ function EventBlock({ placed, day, onGrab, onOpen }: BlockProps) {
       type="button"
       onPointerDown={base ? (pointer) => onGrab(pointer, 'move', base, target) : undefined}
       onClick={open}
-      className={`absolute overflow-hidden rounded-[11px] px-1.5 py-0.5 text-left text-[10px] leading-tight text-fog shadow-[0_6px_18px_rgb(0_0_0/0.3)] outline-none transition-[filter] hover:brightness-110 focus-visible:ring-1 focus-visible:ring-accent-line ${
+      className={`absolute overflow-hidden rounded-[11px] px-[9px] py-[3px] text-left text-[10px] leading-tight text-fog shadow-[0_6px_18px_rgb(0_0_0/0.3)] outline-none transition-[transform,box-shadow,filter] duration-300 ease-[var(--ease-glide)] hover:translate-x-[3px] hover:brightness-110 hover:shadow-[0_10px_26px_rgb(0_0_0/0.45)] focus-visible:ring-1 focus-visible:ring-accent-line motion-reduce:transition-none ${
         base ? 'cursor-grab active:cursor-grabbing' : ''
       }`}
       style={{
