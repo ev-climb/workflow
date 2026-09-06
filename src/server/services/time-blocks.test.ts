@@ -1,6 +1,7 @@
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/client.ts'
-import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts'
+import { calendarEvents, cards, googleAccounts, googleCalendars } from '../db/schema.ts'
 import type { GoogleEvent } from '../google/events.ts'
 import { archiveList, createBoard, createList } from './boards.ts'
 import { archiveCard, createCard } from './cards.ts'
@@ -72,6 +73,17 @@ async function calendar(title = 'Личный', googleCalendarId = 'me@gmail.com
 }
 
 const at = (iso: string) => new Date(iso)
+
+/** Синхронизация приносит зеркало обратно обычным событием календаря. */
+async function mirroredEvent(calendarId: string) {
+  await db.insert(calendarEvents).values({
+    calendarId,
+    googleEventId: 'mirror-1',
+    title: 'Починить пуши',
+    startsAt: at('2026-09-02T09:00:00Z'),
+    endsAt: at('2026-09-02T10:00:00Z'),
+  })
+}
 
 async function block(startsAt: string, endsAt: string, card = cardId) {
   return await createTimeBlock({ cardId: card, startsAt: at(startsAt), endsAt: at(endsAt) })
@@ -316,16 +328,48 @@ describe('зеркало тайм-блока в Google', () => {
     const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
     await mirrorTimeBlock(created.id, calendarId)
 
-    // синхронизация приносит зеркало обратно обычным событием
-    await db.insert(calendarEvents).values({
-      calendarId,
-      googleEventId: 'mirror-1',
-      title: 'Починить пуши',
-      startsAt: at('2026-09-02T09:00:00Z'),
-      endsAt: at('2026-09-02T10:00:00Z'),
-    })
+    await mirroredEvent(calendarId)
 
     expect(await listEvents('2026-09-02', '2026-09-02')).toEqual([])
+  })
+
+  it('архивация карточки снимает зеркало и отпускает событие в календарь', async () => {
+    const calendarId = await calendar()
+    const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+    await mirrorTimeBlock(created.id, calendarId)
+    await mirroredEvent(calendarId)
+
+    await archiveCard(cardId)
+
+    expect(deleteEvent).toHaveBeenCalledWith('ya29.access', 'me@gmail.com', 'mirror-1')
+    expect(await listTimeBlocks('2026-09-02', '2026-09-02')).toEqual([])
+    expect((await listEvents('2026-09-02', '2026-09-02')).map((e) => e.title)).toEqual([
+      'Починить пуши',
+    ])
+  })
+
+  it('архивация списка снимает зеркала карточек внутри', async () => {
+    const calendarId = await calendar()
+    const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+    await mirrorTimeBlock(created.id, calendarId)
+
+    await archiveList(listId)
+
+    expect(deleteEvent).toHaveBeenCalledWith('ya29.access', 'me@gmail.com', 'mirror-1')
+    expect(await listTimeBlocks('2026-09-02', '2026-09-02')).toEqual([])
+  })
+
+  it('уцелевшее зеркало архивной карточки события не прячет', async () => {
+    const calendarId = await calendar()
+    const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+    await mirrorTimeBlock(created.id, calendarId)
+    await mirroredEvent(calendarId)
+    // карточка ушла в архив, а зеркало осталось: так выглядят блоки, заведённые до правки
+    await db.update(cards).set({ archivedAt: new Date() }).where(eq(cards.id, cardId))
+
+    expect((await listEvents('2026-09-02', '2026-09-02')).map((e) => e.title)).toEqual([
+      'Починить пуши',
+    ])
   })
 
   it('блока нет — зеркалом заниматься нечем', async () => {

@@ -5,10 +5,13 @@ import { momentInMoscow } from '../../lib/dates.ts'
 import { descriptionHtml, descriptionText } from '../../lib/event-description.ts'
 import { db } from '../db/client.ts'
 import {
+  boards,
   calendarEvents,
+  cards,
   googleAccounts,
   googleCalendars,
   googleTasks,
+  lists,
   timeBlocks,
 } from '../db/schema.ts'
 import {
@@ -156,15 +159,22 @@ export async function listEvents(from: string, to: string): Promise<CalendarEven
         isNull(calendarEvents.deletedAt),
         ne(calendarEvents.status, 'cancelled'),
         // зеркало тайм-блока на сетке уже нарисовано самим блоком: показать его ещё и
-        // событием значило бы удвоить одно намерение
+        // событием значило бы удвоить одно намерение. Условия на архив те же, что в
+        // listTimeBlocks: разойдись они — событие пропало бы из обеих выдач разом
         notExists(
           db
             .select({ mirror: sql`1` })
             .from(timeBlocks)
+            .innerJoin(cards, eq(timeBlocks.cardId, cards.id))
+            .innerJoin(lists, eq(cards.listId, lists.id))
+            .innerJoin(boards, eq(lists.boardId, boards.id))
             .where(
               and(
                 eq(timeBlocks.calendarId, calendarEvents.calendarId),
                 eq(timeBlocks.googleEventId, calendarEvents.googleEventId),
+                isNull(cards.archivedAt),
+                isNull(lists.archivedAt),
+                isNull(boards.archivedAt),
               ),
             ),
         ),

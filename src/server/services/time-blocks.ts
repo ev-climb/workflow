@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, lt } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt } from 'drizzle-orm'
 import { addDays } from '../../lib/calendar-grid.ts'
 import { momentInMoscow } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
@@ -181,6 +181,39 @@ export async function unmirrorTimeBlock(id: string): Promise<{ id: string }> {
 
   publishCalendarChanged()
   return { id }
+}
+
+/**
+ * Снять зеркала блоков перечисленных карточек. Время, отведённое под карточку, которой
+ * больше нет на доске, не должно занимать место и в календаре Google. Сами блоки
+ * остаются: карточку могут вернуть из архива, и тогда они вернутся на сетку без зеркал.
+ */
+export async function unmirrorCardBlocks(cardIds: string[]): Promise<void> {
+  if (cardIds.length === 0) return
+
+  const mirrored = await db
+    .select({
+      id: timeBlocks.id,
+      calendarId: timeBlocks.calendarId,
+      googleEventId: timeBlocks.googleEventId,
+    })
+    .from(timeBlocks)
+    .where(and(inArray(timeBlocks.cardId, cardIds), isNotNull(timeBlocks.googleEventId)))
+  if (mirrored.length === 0) return
+
+  for (const block of mirrored) await dropMirror(block)
+
+  await db
+    .update(timeBlocks)
+    .set({ calendarId: null, googleEventId: null, updatedAt: new Date() })
+    .where(
+      inArray(
+        timeBlocks.id,
+        mirrored.map((block) => block.id),
+      ),
+    )
+
+  publishCalendarChanged()
 }
 
 /**

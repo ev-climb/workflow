@@ -12,6 +12,7 @@ import {
 import { publishBoardChanged } from './board-events.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
+import { unmirrorCardBlocks } from './time-blocks.ts'
 
 const TITLE_MAX = 512
 
@@ -386,6 +387,9 @@ export async function highlightList(listId: string, highlighted: boolean): Promi
 
 /** Список уезжает в архив вместе с содержимым: карточки внутри остаются как были. */
 export async function archiveList(listId: string): Promise<{ id: string }> {
+  const inside = await db.select({ id: cards.id }).from(cards).where(eq(cards.listId, listId))
+  await unmirrorCardBlocks(inside.map((card) => card.id))
+
   const now = new Date()
 
   const [archived] = await db

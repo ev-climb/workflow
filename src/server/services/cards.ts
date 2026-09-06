@@ -7,6 +7,7 @@ import { publishBoardChanged } from './board-events.ts'
 import { parseCardInput } from './card-input.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
+import { unmirrorCardBlocks } from './time-blocks.ts'
 
 const TITLE_MAX = 512
 
@@ -651,6 +652,9 @@ export async function moveCardToBoard(input: {
 }
 
 export async function archiveCard(cardId: string): Promise<{ id: string }> {
+  // Google первым: не снялось зеркало — карточка осталась на доске и попытку можно повторить
+  await unmirrorCardBlocks([cardId])
+
   const now = new Date()
 
   const [archived] = await db
