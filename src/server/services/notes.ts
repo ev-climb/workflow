@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
 import type { NoteKind } from '../../lib/notes.ts'
 import { db } from '../db/client.ts'
-import { checklistItems, checklists, noteFolders, noteItems, notes } from '../db/schema.ts'
+import { cards, checklistItems, checklists, noteFolders, noteItems, notes } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
-import { createCard, describeCard, findCardBoard } from './cards.ts'
+import { cardDescription, locateList } from './cards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, rankBefore, rankSequence, withRankRetry } from './rank.ts'
 
@@ -415,6 +415,9 @@ export async function deleteNoteItem(itemId: string): Promise<{ id: string }> {
  * Заметка в карточку доски. Пункты списка дел переезжают чек-листом с сохранёнными
  * отметками: вставляются разом, а не по одному через сервис чек-листов — иначе на список
  * из десяти пунктов вышло бы двадцать запросов и столько же событий доски.
+ *
+ * Всё одной транзакцией: перенос затрагивает две сущности сразу, и падение на середине
+ * оставило бы карточку без чек-листа при уже заархивированной заметке или наоборот.
  */
 export async function noteToCard(input: {
   noteId: string
@@ -424,39 +427,67 @@ export async function noteToCard(input: {
   archive?: boolean
 }): Promise<{ id: string; listId: string; rank: string }> {
   const note = await getNote(input.noteId)
+  const name = title(input.title, 'карточка')
+  const description = cardDescription(body(input.description ?? null))
 
-  const card = await createCard({ listId: input.listId, title: input.title })
+  const target = await locateList(input.listId)
 
-  const text = body(input.description ?? null)
-  if (text !== null) await describeCard(card.id, text)
+  const card = await withRankRetry(() =>
+    db.transaction(async (tx) => {
+      const [last] = await tx
+        .select({ rank: cards.rank })
+        .from(cards)
+        .where(eq(cards.listId, input.listId))
+        .orderBy(desc(cards.rank))
+        .limit(1)
 
-  if (note.items.length) {
-    const [checklist] = await db
-      .insert(checklists)
-      .values({
-        cardId: card.id,
-        title: note.title?.trim() || 'Список',
-        rank: rankBefore(null),
-      })
-      .returning({ id: checklists.id })
+      const [created] = await tx
+        .insert(cards)
+        .values({
+          listId: input.listId,
+          title: name,
+          description,
+          rank: rankAfter(last?.rank ?? null),
+        })
+        .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
 
-    const ranks = rankSequence(note.items.length)
-    await db.insert(checklistItems).values(
-      note.items.map((item, at) => ({
-        checklistId: checklist.id,
-        title: item.title,
-        done: item.done,
-        rank: ranks[at],
-      })),
-    )
+      if (note.items.length) {
+        const [checklist] = await tx
+          .insert(checklists)
+          .values({
+            cardId: created.id,
+            title: note.title?.trim() || 'Список',
+            rank: rankBefore(null),
+          })
+          .returning({ id: checklists.id })
 
-    // прогресс чек-листа виден на карточке в колонке: без этого доска показывала бы
-    // карточку без него до следующего перечитывания
-    const boardId = await findCardBoard(card.id)
-    if (boardId) publishBoardChanged(boardId)
-  }
+        const ranks = rankSequence(note.items.length)
+        await tx.insert(checklistItems).values(
+          note.items.map((item, at) => ({
+            checklistId: checklist.id,
+            title: item.title,
+            done: item.done,
+            rank: ranks[at],
+          })),
+        )
+      }
 
-  if (input.archive) await archiveNote(input.noteId)
+      if (input.archive) {
+        const [archived] = await tx
+          .update(notes)
+          .set({ archivedAt: new Date(), updatedAt: new Date() })
+          .where(and(eq(notes.id, input.noteId), isNull(notes.archivedAt)))
+          .returning({ id: notes.id })
 
+        if (!archived) {
+          throw new NotFoundError(`заметки ${input.noteId} нет или она уже в архиве`)
+        }
+      }
+
+      return created
+    }),
+  )
+
+  publishBoardChanged(target.boardId)
   return card
 }

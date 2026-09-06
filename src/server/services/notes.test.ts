@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { db } from '../db/client.ts'
-import { checklistItems, checklists, notes } from '../db/schema.ts'
+import { cards, checklistItems, checklists, notes } from '../db/schema.ts'
 import { createBoard, createList } from './boards.ts'
 import { getCard } from './cards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
@@ -226,5 +226,18 @@ describe('заметка в карточку', () => {
 
     expect((await listNotes({})).map((one) => one.id)).toEqual([kept.id])
     expect((await listNotes({ archived: true })).map((one) => one.id)).toEqual([gone.id])
+  })
+
+  it('падение на архивации не оставляет карточку', async () => {
+    const listId = await list()
+    const note = await createNote({ kind: 'list', title: 'Сборы' })
+    await addNoteItem({ noteId: note.id, title: 'паспорт' })
+    await archiveNote(note.id)
+
+    await expect(
+      noteToCard({ noteId: note.id, listId, title: 'Сборы', archive: true }),
+    ).rejects.toBeInstanceOf(NotFoundError)
+
+    expect(await db.select().from(cards).where(eq(cards.listId, listId))).toEqual([])
   })
 })

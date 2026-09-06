@@ -40,7 +40,7 @@ async function locateCard(
   return found
 }
 
-async function locateList(listId: string): Promise<{ id: string; boardId: string }> {
+export async function locateList(listId: string): Promise<{ id: string; boardId: string }> {
   const [found] = await db
     .select({ id: lists.id, boardId: lists.boardId })
     .from(lists)
@@ -264,20 +264,25 @@ export async function renameCard(cardId: string, newTitle: string): Promise<Card
 }
 
 /**
- * Описание карточки. Пустой текст ложится в базу как `null`, а не пустая строка: в доске
- * значок «есть описание» смотрит именно на `null`, и пробел иначе зажигал бы его впустую.
+ * Описание в том виде, в каком оно ложится в базу. Пустой текст становится `null`, а не
+ * пустой строкой: в доске значок «есть описание» смотрит именно на `null`, и пробел
+ * иначе зажигал бы его впустую.
  */
-export async function describeCard(cardId: string, raw: string | null): Promise<{ id: string }> {
+export function cardDescription(raw: string | null): string | null {
   const value = raw?.trim() ?? ''
   if (value.length > DESCRIPTION_MAX) {
     throw new InvalidInputError(`карточка: описание длиннее ${DESCRIPTION_MAX} символов`)
   }
+  return value || null
+}
 
+export async function describeCard(cardId: string, raw: string | null): Promise<{ id: string }> {
+  const description = cardDescription(raw)
   const card = await locateCard(cardId)
 
   const [updated] = await db
     .update(cards)
-    .set({ description: value || null, updatedAt: new Date() })
+    .set({ description, updatedAt: new Date() })
     .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
     .returning({ id: cards.id })
 
