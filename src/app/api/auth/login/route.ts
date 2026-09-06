@@ -6,7 +6,15 @@ import { UnauthorizedError } from '@/server/services/errors'
 
 /** Разбирает форму, зовёт сервис, ставит куку. Логики здесь нет — инвариант 2. */
 export async function POST(request: NextRequest) {
-  const form = await request.formData()
+  let form: FormData
+  try {
+    form = await request.formData()
+  } catch {
+    // тело не разобралось как форма: это тот же негодный вход, что и неверный пароль,
+    // и отвечать на него пятисоткой со стеком незачем
+    return seeOther('/login?error=1')
+  }
+
   const password = String(form.get('password') ?? '')
   const next = safeNext(String(form.get('next') ?? '/'))
 
