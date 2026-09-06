@@ -2,9 +2,9 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/client.ts'
 import { calendarEvents, cards, googleAccounts, googleCalendars } from '../db/schema.ts'
-import type { GoogleEvent } from '../google/events.ts'
+import { GoogleApiError, type GoogleEvent } from '../google/events.ts'
 import { archiveList, createBoard, createList } from './boards.ts'
-import { archiveCard, createCard, renameCard } from './cards.ts'
+import { archiveCard, createCard, updateCard } from './cards.ts'
 import { ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { listEvents } from './google-events.ts'
 import {
@@ -323,12 +323,73 @@ describe('зеркало тайм-блока в Google', () => {
     )
   })
 
+  it('стёртое в Google зеркало не запирает перенос блока', async () => {
+    const calendarId = await calendar()
+    const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+    await mirrorTimeBlock(created.id, calendarId)
+    patchEvent.mockRejectedValue(new GoogleApiError('Not Found', 404))
+
+    await moveTimeBlock(created.id, {
+      startsAt: at('2026-09-02T12:00:00Z'),
+      endsAt: at('2026-09-02T13:00:00Z'),
+    })
+
+    const [moved] = await listTimeBlocks('2026-09-02', '2026-09-02')
+    expect(moved.startsAt).toEqual(at('2026-09-02T12:00:00Z'))
+    expect(moved.calendarId).toBeNull()
+  })
+
+  it('прочий отказ Google перенос не пропускает', async () => {
+    const calendarId = await calendar()
+    const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+    await mirrorTimeBlock(created.id, calendarId)
+    patchEvent.mockRejectedValue(new GoogleApiError('сервер Google не в духе', 500))
+
+    await expect(
+      moveTimeBlock(created.id, {
+        startsAt: at('2026-09-02T12:00:00Z'),
+        endsAt: at('2026-09-02T13:00:00Z'),
+      }),
+    ).rejects.toBeInstanceOf(GoogleApiError)
+
+    const [kept] = await listTimeBlocks('2026-09-02', '2026-09-02')
+    expect(kept.startsAt).toEqual(at('2026-09-02T09:00:00Z'))
+    expect(kept.calendarId).toBe(calendarId)
+  })
+
+  it('упавшая вставка нового зеркала не стирает старое', async () => {
+    const first = await calendar()
+    const second = await calendar('Рабочий', 'work@gmail.com')
+    const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+    await mirrorTimeBlock(created.id, first)
+    insertEvent.mockRejectedValue(new GoogleApiError('сервер Google не в духе', 500))
+
+    await expect(mirrorTimeBlock(created.id, second)).rejects.toBeInstanceOf(GoogleApiError)
+
+    expect(deleteEvent).not.toHaveBeenCalled()
+    const [kept] = await listTimeBlocks('2026-09-02', '2026-09-02')
+    expect(kept.calendarId).toBe(first)
+  })
+
+  it('стёртое в Google зеркало не запирает переименование карточки', async () => {
+    const calendarId = await calendar()
+    const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+    await mirrorTimeBlock(created.id, calendarId)
+    patchEvent.mockRejectedValue(new GoogleApiError('событие уже стёрли', 410))
+
+    await updateCard(cardId, { title: 'Починить пуши на айфоне' })
+
+    const [kept] = await listTimeBlocks('2026-09-02', '2026-09-02')
+    expect(kept.cardTitle).toBe('Починить пуши на айфоне')
+    expect(kept.calendarId).toBeNull()
+  })
+
   it('переименование карточки доезжает до зеркала', async () => {
     const calendarId = await calendar()
     const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
     await mirrorTimeBlock(created.id, calendarId)
 
-    await renameCard(cardId, 'Починить пуши на айфоне')
+    await updateCard(cardId, { title: 'Починить пуши на айфоне' })
 
     expect(patchEvent).toHaveBeenCalledWith(
       'ya29.access',
@@ -342,7 +403,7 @@ describe('зеркало тайм-блока в Google', () => {
   it('карточка без зеркал переименовывается, не ходя в Google', async () => {
     await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
 
-    await renameCard(cardId, 'Починить пуши на айфоне')
+    await updateCard(cardId, { title: 'Починить пуши на айфоне' })
 
     expect(patchEvent).not.toHaveBeenCalled()
   })

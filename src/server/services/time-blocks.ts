@@ -3,7 +3,7 @@ import { addDays } from '../../lib/calendar-grid.ts'
 import { momentInMoscow } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
 import { boards, cards, googleCalendars, lists, timeBlocks } from '../db/schema.ts'
-import { deleteEvent, insertEvent, patchEvent } from '../google/events.ts'
+import { GoogleApiError, deleteEvent, insertEvent, patchEvent } from '../google/events.ts'
 import { publishCalendarChanged } from './board-events.ts'
 import { ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
@@ -142,6 +142,14 @@ async function dropMirror(block: Block): Promise<void> {
 }
 
 /**
+ * `404` и `410` на записи в зеркало: событие стёрли в Google руками. Править нечего, но и
+ * застревать блоку не из-за чего — указатель на событие забывается, наша правка доезжает.
+ */
+function mirrorGone(error: unknown): boolean {
+  return error instanceof GoogleApiError && (error.status === 404 || error.status === 410)
+}
+
+/**
  * Показать блок в Google: зеркальное событие с названием карточки в выбранном календаре.
  * Второй вызов с другим календарём переносит зеркало, а не заводит второе: блок один, и
  * событие у него одно — это же закреплено ограничением в схеме.
@@ -153,12 +161,14 @@ export async function mirrorTimeBlock(id: string, calendarId: string): Promise<{
     throw new ForbiddenError('в этот календарь Google писать нельзя: он открыт только на чтение')
   }
 
-  await dropMirror(block)
   const accessToken = await accessTokenFor(calendar.accountId)
+  // старое зеркало снимаем только после удачной вставки: упавшая вставка иначе оставила бы
+  // в базе указатель на уже стёртое событие
   const event = await insertEvent(accessToken, calendar.googleCalendarId, {
     title: block.cardTitle,
     times: spanTimes(block),
   })
+  await dropMirror(block)
 
   await db
     .update(timeBlocks)
@@ -224,6 +234,7 @@ export async function unmirrorCardBlocks(cardIds: string[]): Promise<void> {
 export async function retitleCardBlocks(cardId: string, title: string): Promise<void> {
   const mirrored = await db
     .select({
+      id: timeBlocks.id,
       calendarId: timeBlocks.calendarId,
       googleEventId: timeBlocks.googleEventId,
     })
@@ -231,13 +242,26 @@ export async function retitleCardBlocks(cardId: string, title: string): Promise<
     .where(and(eq(timeBlocks.cardId, cardId), isNotNull(timeBlocks.googleEventId)))
   if (mirrored.length === 0) return
 
+  const lost: string[] = []
   for (const block of mirrored) {
     if (!block.calendarId || !block.googleEventId) continue
 
     const calendar = await calendarOf(block.calendarId)
     const accessToken = await accessTokenFor(calendar.accountId)
-    // `If-Match` не шлём по той же причине, что и в moveTimeBlock: своего etag у зеркала нет
-    await patchEvent(accessToken, calendar.googleCalendarId, block.googleEventId, { title }, null)
+    try {
+      // `If-Match` не шлём по той же причине, что и в moveTimeBlock: своего etag у зеркала нет
+      await patchEvent(accessToken, calendar.googleCalendarId, block.googleEventId, { title }, null)
+    } catch (error) {
+      if (!mirrorGone(error)) throw error
+      lost.push(block.id)
+    }
+  }
+
+  if (lost.length > 0) {
+    await db
+      .update(timeBlocks)
+      .set({ calendarId: null, googleEventId: null, updatedAt: new Date() })
+      .where(inArray(timeBlocks.id, lost))
   }
 
   publishCalendarChanged()
@@ -288,22 +312,33 @@ export async function moveTimeBlock(id: string, span: TimeBlockSpan): Promise<{ 
   const block = await locate(id)
 
   // Google первым: блок, уехавший в базе, но не в зеркале, врал бы молча
+  let lost = false
   if (block.calendarId && block.googleEventId) {
     const calendar = await calendarOf(block.calendarId)
     const accessToken = await accessTokenFor(calendar.accountId)
-    // `If-Match` не шлём: своего etag у зеркала нет, а спорить за него не с кем
-    await patchEvent(
-      accessToken,
-      calendar.googleCalendarId,
-      block.googleEventId,
-      { times: spanTimes(span) },
-      null,
-    )
+    try {
+      // `If-Match` не шлём: своего etag у зеркала нет, а спорить за него не с кем
+      await patchEvent(
+        accessToken,
+        calendar.googleCalendarId,
+        block.googleEventId,
+        { times: spanTimes(span) },
+        null,
+      )
+    } catch (error) {
+      if (!mirrorGone(error)) throw error
+      lost = true
+    }
   }
 
   const [updated] = await db
     .update(timeBlocks)
-    .set({ startsAt: span.startsAt, endsAt: span.endsAt, updatedAt: new Date() })
+    .set({
+      startsAt: span.startsAt,
+      endsAt: span.endsAt,
+      ...(lost ? { calendarId: null, googleEventId: null } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(timeBlocks.id, id))
     .returning({ id: timeBlocks.id })
   if (!updated) throw new NotFoundError(`тайм-блока ${id} нет`)
