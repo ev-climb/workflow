@@ -97,6 +97,17 @@ export const calendarsQuery = {
     getJson<GoogleCalendarSummary[]>('/api/google/calendars'),
 }
 
+/**
+ * Куда вообще можно писать: только показанный и открытый на запись календарь. Зеркало в
+ * спрятанном пропало бы с глаз сразу после включения, а в подписной вроде «Праздников
+ * России» Google не даст завести событие.
+ */
+export function writableCalendars(
+  calendars: GoogleCalendarSummary[] | undefined,
+): GoogleCalendarSummary[] {
+  return (calendars ?? []).filter((calendar) => calendar.visible && calendar.writable)
+}
+
 /** Подключённые аккаунты Google. Читаются, когда открывают настройки. */
 export const accountsKey = ['google-accounts'] as const
 

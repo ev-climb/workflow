@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { DropdownMenu } from 'radix-ui'
 import { useMirrorTimeBlock, useRemoveTimeBlock } from '@/lib/calendar-mutations'
-import { calendarsQuery } from '@/lib/calendar-query'
+import { calendarsQuery, writableCalendars } from '@/lib/calendar-query'
 
 const ITEM = 'menu-item flex items-center px-2 py-1 text-sm'
 
@@ -14,17 +14,14 @@ type Props = { blockId: string; cardTitle: string; calendarId: string | null }
 
 /**
  * Меню тайм-блока: где показывать его в Google и как снять с сетки. Календари те же, что
- * при создании события: показанные и открытые на запись. Зеркало в спрятанном календаре
- * пропало бы с глаз сразу после включения, а в чужой подписной Google его и не заведёт.
+ * при создании события.
  */
 export function TimeBlockMenu({ blockId, cardTitle, calendarId }: Props) {
   const calendars = useQuery(calendarsQuery)
   const mirror = useMirrorTimeBlock(blockId)
   const remove = useRemoveTimeBlock()
 
-  const options = (calendars.data ?? []).filter(
-    (calendar) => calendar.visible && calendar.writable,
-  )
+  const options = writableCalendars(calendars.data)
 
   return (
     <DropdownMenu.Root>

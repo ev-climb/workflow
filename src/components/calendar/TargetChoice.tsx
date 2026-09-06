@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Select } from 'radix-ui'
 import { Failure } from '@/components/board/Failure'
 import { paintOf } from '@/lib/calendar-colors'
-import { calendarsQuery, taskListsQuery } from '@/lib/calendar-query'
+import { calendarsQuery, taskListsQuery, writableCalendars } from '@/lib/calendar-query'
 
 const TRIGGER =
   'field flex w-full items-center justify-between gap-2 px-2 py-1.5 text-sm disabled:text-fog-dim'
@@ -27,11 +27,7 @@ export function CalendarChoice({
 }) {
   const calendars = useQuery({ ...calendarsQuery, enabled })
 
-  // только показанные и только те, куда пускают писать: в подписной вроде «Праздников
-  // России» Google не даст завести событие
-  const options = (calendars.data ?? []).filter(
-    (calendar) => calendar.visible && calendar.writable,
-  )
+  const options = writableCalendars(calendars.data)
 
   return (
     <div>
@@ -125,9 +121,7 @@ export function TaskListChoice({
 /** Первый пригодный вариант, пока человек не выбрал свой. */
 export function useCalendarTarget(chosen: string | null, enabled: boolean): string | null {
   const calendars = useQuery({ ...calendarsQuery, enabled })
-  const options = (calendars.data ?? []).filter(
-    (calendar) => calendar.visible && calendar.writable,
-  )
+  const options = writableCalendars(calendars.data)
   return chosen ?? options[0]?.id ?? null
 }
 
