@@ -171,14 +171,16 @@ export async function syncTaskList(id: string, now: Date = new Date()): Promise<
       accountId: googleTaskLists.accountId,
       googleTaskListId: googleTaskLists.googleTaskListId,
       updatedMin: googleTaskLists.updatedMin,
-      syncedAt: googleTaskLists.syncedAt,
+      fullSyncedAt: googleTaskLists.fullSyncedAt,
     })
     .from(googleTaskLists)
     .where(eq(googleTaskLists.id, id))
   if (!list) throw new NotFoundError(`списка задач ${id} нет`)
 
-  const stale = !list.syncedAt || now.getTime() - list.syncedAt.getTime() > FULL_RESYNC_INTERVAL_MS
+  const stale =
+    !list.fullSyncedAt || now.getTime() - list.fullSyncedAt.getTime() > FULL_RESYNC_INTERVAL_MS
   const updatedMin = stale ? null : list.updatedMin
+  const full = !updatedMin
 
   const accessToken = await accessTokenFor(list.accountId)
   const page = await fetchTasks(accessToken, list.googleTaskListId, updatedMin)
@@ -193,11 +195,12 @@ export async function syncTaskList(id: string, now: Date = new Date()): Promise<
         ? new Date(page.latestUpdatedAt.getTime() + 1)
         : list.updatedMin,
       syncedAt: now,
+      ...(full ? { fullSyncedAt: now } : {}),
       updatedAt: new Date(),
     })
     .where(eq(googleTaskLists.id, id))
 
-  return { taskListId: id, mode: updatedMin ? 'incremental' : 'full', ...counts }
+  return { taskListId: id, mode: full ? 'full' : 'incremental', ...counts }
 }
 
 /**

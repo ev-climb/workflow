@@ -31,7 +31,7 @@ async function account(email = `${crypto.randomUUID()}@gmail.com`) {
   return row.id
 }
 
-async function taskList(patch: { updatedMin?: Date; syncedAt?: Date } = {}) {
+async function taskList(patch: { updatedMin?: Date; fullSyncedAt?: Date } = {}) {
   const accountId = await account()
   const [row] = await db
     .insert(googleTaskLists)
@@ -40,7 +40,7 @@ async function taskList(patch: { updatedMin?: Date; syncedAt?: Date } = {}) {
       googleTaskListId: 'MTIz',
       title: 'Мои задачи',
       updatedMin: patch.updatedMin ?? null,
-      syncedAt: patch.syncedAt ?? null,
+      fullSyncedAt: patch.fullSyncedAt ?? null,
     })
     .returning({ id: googleTaskLists.id })
   return { accountId, taskListId: row.id }
@@ -86,13 +86,18 @@ describe('синхронизация списка задач', () => {
     expect(fetchTasks.mock.calls[0][2]).toBeNull()
 
     const [list] = await db
-      .select({ updatedMin: googleTaskLists.updatedMin, syncedAt: googleTaskLists.syncedAt })
+      .select({
+        updatedMin: googleTaskLists.updatedMin,
+        syncedAt: googleTaskLists.syncedAt,
+        fullSyncedAt: googleTaskLists.fullSyncedAt,
+      })
       .from(googleTaskLists)
       .where(eq(googleTaskLists.id, taskListId))
     // на миллисекунду позже самого позднего updated: включающая граница вернула бы
     // последнюю задачу заново каждым проходом
     expect(list.updatedMin).toEqual(new Date('2026-09-03T08:00:00.001Z'))
     expect(list.syncedAt).toEqual(new Date('2026-09-03T12:00:00.000Z'))
+    expect(list.fullSyncedAt).toEqual(new Date('2026-09-03T12:00:00.000Z'))
 
     const [saved] = await tasksOf(accountId)
     expect(saved).toMatchObject({ googleTaskId: 't1', due: '2026-10-01', status: 'needsAction' })
@@ -101,7 +106,7 @@ describe('синхронизация списка задач', () => {
   it('с меткой идёт дельтой', async () => {
     const { taskListId } = await taskList({
       updatedMin: new Date('2026-09-03T08:00:00.001Z'),
-      syncedAt: new Date('2026-09-03T11:00:00.000Z'),
+      fullSyncedAt: new Date('2026-09-03T11:00:00.000Z'),
     })
     fetchTasks.mockResolvedValue(page([]))
 
@@ -111,22 +116,31 @@ describe('синхронизация списка задач', () => {
     expect(fetchTasks.mock.calls[0][2]).toEqual(new Date('2026-09-03T08:00:00.001Z'))
   })
 
-  it('метка старше месяца не используется: разъехавшийся updatedMin теряет правки молча', async () => {
-    const { taskListId } = await taskList({
-      updatedMin: new Date('2026-07-01T08:00:00.000Z'),
-      syncedAt: new Date('2026-07-01T12:00:00.000Z'),
-    })
-    fetchTasks.mockResolvedValue(page([]))
+  it('цепочка дельт не откладывает полный проход: разъехавшийся updatedMin теряет правки молча', async () => {
+    const { taskListId } = await taskList()
 
-    const result = await syncTaskList(taskListId, new Date('2026-09-03T12:00:00.000Z'))
+    const day = 24 * 60 * 60 * 1000
+    const start = new Date('2026-07-01T12:00:00.000Z').getTime()
+    const modes: string[] = []
+    for (const offset of [0, 1, 10, 20, 29, 31]) {
+      const at = new Date(start + offset * day)
+      fetchTasks.mockResolvedValue(page([task({ googleUpdatedAt: at })]))
+      modes.push((await syncTaskList(taskListId, at)).mode)
+    }
 
-    expect(result.mode).toBe('full')
-    expect(fetchTasks.mock.calls[0][2]).toBeNull()
+    expect(modes).toEqual([
+      'full',
+      'incremental',
+      'incremental',
+      'incremental',
+      'incremental',
+      'full',
+    ])
   })
 
   it('пустая дельта метку не двигает', async () => {
     const mark = new Date('2026-09-03T08:00:00.001Z')
-    const { taskListId } = await taskList({ updatedMin: mark, syncedAt: new Date('2026-09-03T11:00:00.000Z') })
+    const { taskListId } = await taskList({ updatedMin: mark, fullSyncedAt: new Date('2026-09-03T11:00:00.000Z') })
     fetchTasks.mockResolvedValue(page([]))
 
     await syncTaskList(taskListId, new Date('2026-09-03T12:00:00.000Z'))

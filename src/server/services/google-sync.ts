@@ -36,7 +36,7 @@ const CALENDAR = {
   accountId: googleCalendars.accountId,
   googleCalendarId: googleCalendars.googleCalendarId,
   syncToken: googleCalendars.syncToken,
-  syncedAt: googleCalendars.syncedAt,
+  fullSyncedAt: googleCalendars.fullSyncedAt,
 }
 
 function chunks<T>(items: T[], size: number): T[][] {
@@ -155,7 +155,8 @@ export async function syncCalendar(id: string, now: Date = new Date()): Promise<
   if (!calendar) throw new NotFoundError(`календаря ${id} нет`)
 
   const stale =
-    !calendar.syncedAt || now.getTime() - calendar.syncedAt.getTime() > FULL_RESYNC_INTERVAL_MS
+    !calendar.fullSyncedAt ||
+    now.getTime() - calendar.fullSyncedAt.getTime() > FULL_RESYNC_INTERVAL_MS
   let syncToken = stale ? null : calendar.syncToken
   const accessToken = await accessTokenFor(calendar.accountId)
 
@@ -184,13 +185,19 @@ export async function syncCalendar(id: string, now: Date = new Date()): Promise<
   }
 
   const counts = await applyEvents(id, page.events)
+  const full = !syncToken
 
   await db
     .update(googleCalendars)
-    .set({ syncToken: page.nextSyncToken, syncedAt: now, updatedAt: new Date() })
+    .set({
+      syncToken: page.nextSyncToken,
+      syncedAt: now,
+      ...(full ? { fullSyncedAt: now } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(googleCalendars.id, id))
 
-  return { calendarId: id, mode: syncToken ? 'incremental' : 'full', ...counts }
+  return { calendarId: id, mode: full ? 'full' : 'incremental', ...counts }
 }
 
 export type SyncRun = {

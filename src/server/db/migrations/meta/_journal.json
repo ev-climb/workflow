@@ -78,6 +78,13 @@
       "when": 1788607459627,
       "tag": "0010_public_grandmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788676972403,
+      "tag": "0011_wakeful_red_wolf",
+      "breakpoints": true
     }
   ]
 }

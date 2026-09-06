@@ -23,7 +23,7 @@ beforeEach(() => {
   accessTokenFor.mockResolvedValue('ya29.access')
 })
 
-async function calendar(patch: { syncToken?: string; syncedAt?: Date; email?: string } = {}) {
+async function calendar(patch: { syncToken?: string; fullSyncedAt?: Date; email?: string } = {}) {
   const [account] = await db
     .insert(googleAccounts)
     .values({ email: patch.email ?? 'me@gmail.com', refreshTokenEncrypted: 'шифротекст' })
@@ -36,7 +36,7 @@ async function calendar(patch: { syncToken?: string; syncedAt?: Date; email?: st
       googleCalendarId: 'me@gmail.com',
       title: 'Личный',
       syncToken: patch.syncToken ?? null,
-      syncedAt: patch.syncedAt ?? null,
+      fullSyncedAt: patch.fullSyncedAt ?? null,
     })
     .returning({ id: googleCalendars.id })
 
@@ -99,15 +99,20 @@ describe('синхронизация календаря', () => {
     expect(fetchEvents.mock.calls[0][2]).toBeNull()
 
     const [saved] = await db
-      .select({ syncToken: googleCalendars.syncToken, syncedAt: googleCalendars.syncedAt })
+      .select({
+        syncToken: googleCalendars.syncToken,
+        syncedAt: googleCalendars.syncedAt,
+        fullSyncedAt: googleCalendars.fullSyncedAt,
+      })
       .from(googleCalendars)
       .where(eq(googleCalendars.id, calendarId))
     expect(saved.syncToken).toBe('CAES')
     expect(saved.syncedAt).toEqual(new Date('2026-09-02T12:00:00Z'))
+    expect(saved.fullSyncedAt).toEqual(new Date('2026-09-02T12:00:00Z'))
   })
 
   it('с токеном идёт инкрементальной', async () => {
-    const { calendarId } = await calendar({ syncToken: 'CAES', syncedAt: new Date('2026-09-02T11:00:00Z') })
+    const { calendarId } = await calendar({ syncToken: 'CAES', fullSyncedAt: new Date('2026-09-02T11:00:00Z') })
     fetchEvents.mockResolvedValue(page([], 'CAES2'))
 
     const result = await syncCalendar(calendarId, new Date('2026-09-02T12:00:00Z'))
@@ -116,14 +121,25 @@ describe('синхронизация календаря', () => {
     expect(fetchEvents.mock.calls[0][2]).toBe('CAES')
   })
 
-  it('токен старше месяца не используется: окно ADR-008 само вперёд не едет', async () => {
-    const { calendarId } = await calendar({ syncToken: 'CAES', syncedAt: new Date('2026-07-01T12:00:00Z') })
+  it('цепочка инкрементальных проходов не откладывает полный: окно ADR-008 катится', async () => {
+    const { calendarId } = await calendar()
     fetchEvents.mockResolvedValue(page([]))
 
-    const result = await syncCalendar(calendarId, new Date('2026-09-02T12:00:00Z'))
+    const day = 24 * 60 * 60 * 1000
+    const start = new Date('2026-07-01T12:00:00Z').getTime()
+    const modes: string[] = []
+    for (const offset of [0, 1, 10, 20, 29, 31]) {
+      modes.push((await syncCalendar(calendarId, new Date(start + offset * day))).mode)
+    }
 
-    expect(result.mode).toBe('full')
-    expect(fetchEvents.mock.calls[0][2]).toBeNull()
+    expect(modes).toEqual([
+      'full',
+      'incremental',
+      'incremental',
+      'incremental',
+      'incremental',
+      'full',
+    ])
   })
 
   it('повторный проход правит событие, а не заводит второе', async () => {
@@ -197,7 +213,7 @@ describe('синхронизация календаря', () => {
   })
 
   it('событие за горизонтом принимается как есть: дельта окно не соблюдает', async () => {
-    const { calendarId } = await calendar({ syncToken: 'CAES', syncedAt: new Date('2026-09-02T11:00:00Z') })
+    const { calendarId } = await calendar({ syncToken: 'CAES', fullSyncedAt: new Date('2026-09-02T11:00:00Z') })
     const faraway = timed({
       googleEventId: 'далёкое',
       times: {
@@ -216,7 +232,7 @@ describe('синхронизация календаря', () => {
   })
 
   it('протухший токен обнуляется, и проход повторяется полным', async () => {
-    const { calendarId } = await calendar({ syncToken: 'CAES', syncedAt: new Date('2026-09-02T11:00:00Z') })
+    const { calendarId } = await calendar({ syncToken: 'CAES', fullSyncedAt: new Date('2026-09-02T11:00:00Z') })
     fetchEvents
       .mockRejectedValueOnce(new SyncTokenExpiredError('токен протух', 410))
       .mockResolvedValueOnce(page([timed()], 'CAES2'))
@@ -233,7 +249,7 @@ describe('синхронизация календаря', () => {
   })
 
   it('непризнанный токен восстанавливается так же, но говорит об этом отдельно', async () => {
-    const { calendarId } = await calendar({ syncToken: 'мусор', syncedAt: new Date('2026-09-02T11:00:00Z') })
+    const { calendarId } = await calendar({ syncToken: 'мусор', fullSyncedAt: new Date('2026-09-02T11:00:00Z') })
     fetchEvents
       .mockRejectedValueOnce(new SyncTokenRejectedError('Invalid sync token value.', 400))
       .mockResolvedValueOnce(page([]))
@@ -247,7 +263,7 @@ describe('синхронизация календаря', () => {
   })
 
   it('прочий отказ не превращается в полную синхронизацию', async () => {
-    const { calendarId } = await calendar({ syncToken: 'CAES', syncedAt: new Date('2026-09-02T11:00:00Z') })
+    const { calendarId } = await calendar({ syncToken: 'CAES', fullSyncedAt: new Date('2026-09-02T11:00:00Z') })
     fetchEvents.mockRejectedValue(new Error('сеть отвалилась'))
 
     await expect(syncCalendar(calendarId, new Date('2026-09-02T12:00:00Z'))).rejects.toThrow(

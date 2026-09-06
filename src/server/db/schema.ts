@@ -209,6 +209,9 @@ export const googleCalendars = pgTable(
     visible: boolean().notNull().default(true),
     syncToken: text(),
     syncedAt: tstz(),
+    // отметка последнего полного прохода: по ней катится окно ADR-008. Отдельно от
+    // syncedAt, который переписывается любым проходом и потому никогда не протухает
+    fullSyncedAt: tstz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -291,6 +294,7 @@ export const googleTaskLists = pgTable(
     // серверного `updated` последней виденной задачи, а не по нашим часам
     updatedMin: tstz(),
     syncedAt: tstz(),
+    fullSyncedAt: tstz(),
     deletedAt: tstz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
