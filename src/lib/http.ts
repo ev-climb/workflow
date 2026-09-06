@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { GoogleApiError } from '@/server/google/events'
+import { TasksApiError } from '@/server/google/tasks'
 import {
   ConflictError,
   ForbiddenError,
   InvalidInputError,
   NotFoundError,
+  ReauthRequiredError,
   UnauthorizedError,
 } from '@/server/services/errors'
 
@@ -15,6 +17,9 @@ const CODES: [abstract new (...args: never[]) => Error, number][] = [
   [ForbiddenError, 403],
   [NotFoundError, 404],
   [ConflictError, 409],
+  // не 401: этим кодом отвечает негодная сессия приложения, а тут переподключить нужно
+  // аккаунт Google — на форму входа такой ответ уводить не должен
+  [ReauthRequiredError, 403],
 ]
 
 /**
@@ -31,6 +36,12 @@ export function errorResponse(error: unknown): NextResponse {
   // и пятисотка с английским текстом от Google объясняет хуже, чем одна русская строка
   if (error instanceof GoogleApiError && error.status === 403) {
     return NextResponse.json({ error: 'в этот календарь Google писать нельзя' }, { status: 403 })
+  }
+
+  // задачам своя ветка: доступ к Tasks отзывают отдельно от календаря, а `401` тут значит
+  // не сессию, а токен без области `tasks`. Текст ошибки уже говорит, что чинить руками
+  if (error instanceof TasksApiError && (error.status === 401 || error.status === 403)) {
+    return NextResponse.json({ error: error.message }, { status: 403 })
   }
 
   throw error
