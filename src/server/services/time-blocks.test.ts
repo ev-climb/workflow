@@ -273,6 +273,16 @@ describe('зеркало тайм-блока в Google', () => {
     expect(moved.calendarId).toBe(second)
   })
 
+  it('на одно событие Google второго блока не заводит', async () => {
+    const calendarId = await calendar()
+    const first = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+    const second = await block('2026-09-02T11:00:00Z', '2026-09-02T12:00:00Z')
+
+    await mirrorTimeBlock(first.id, calendarId)
+    // Google выдаёт новый идентификатор на каждое событие, так что запрет держит база
+    await expect(mirrorTimeBlock(second.id, calendarId)).rejects.toThrow()
+  })
+
   it('снятое зеркало уходит из Google, а блок остаётся на сетке', async () => {
     const calendarId = await calendar()
     const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')

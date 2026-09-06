@@ -366,6 +366,10 @@ export const timeBlocks = pgTable(
       'time_blocks_mirror_complete',
       sql`(${t.calendarId} is null) = (${t.googleEventId} is null)`,
     ),
+    // одно событие Google — не более одного блока: иначе выдача событий прячет чужое зеркало
+    uniqueIndex('time_blocks_calendar_id_google_event_id_key')
+      .on(t.calendarId, t.googleEventId)
+      .where(sql`${t.googleEventId} is not null`),
   ],
 )
 

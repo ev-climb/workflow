@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "time_blocks_calendar_id_google_event_id_key" ON "time_blocks" USING btree ("calendar_id","google_event_id") WHERE "time_blocks"."google_event_id" is not null;
