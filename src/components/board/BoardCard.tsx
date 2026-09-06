@@ -82,11 +82,13 @@ type Props = {
   boards: BoardSummary[]
   boardId: string
   slot: string
+  /** Отрабатывает ли этот экземпляр адрес: одна доска в обоих слотах даёт две копии карточки. */
+  linkable: boolean
   listId: string
   card: CardView
 }
 
-export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
+export function BoardCard({ boards, boardId, slot, linkable, listId, card }: Props) {
   const [renaming, setRenaming] = useState(false)
   const [opened, setOpened] = useState(false)
   const [transferring, setTransferring] = useState(false)
@@ -107,8 +109,8 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
 
   // адрес с идентификатором карточки открывает её сам: доску под неё подставила страница
   useEffect(() => {
-    if (linked === card.id) setOpened(true)
-  }, [linked, card.id])
+    if (linkable && linked === card.id) setOpened(true)
+  }, [linkable, linked, card.id])
 
   /** Буфер обмена бывает недоступен — без разрешения или вне защищённого адреса. */
   async function copyLink() {

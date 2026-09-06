@@ -131,6 +131,10 @@ export function Workspace({
     [save],
   )
 
+  // одна доска в обоих слотах отрисовывает карточку дважды: ссылку на неё отрабатывает
+  // только верхний экземпляр, иначе поверх стола открылись бы два одинаковых диалога
+  const doubled = slots.top !== null && slots.top === slots.bottom
+
   const full = isFullScreen(mode)
 
   return (
@@ -161,6 +165,7 @@ export function Workspace({
                 slot="top"
                 boards={boards}
                 boardId={slots.top}
+                linkable
                 initial={slots.top ? initialBoards[slots.top] : undefined}
                 initialAt={initialBoardsAt}
                 onChoose={(boardId) => void chooseBoard('top', boardId)}
@@ -174,6 +179,7 @@ export function Workspace({
                 slot="bottom"
                 boards={boards}
                 boardId={slots.bottom}
+                linkable={!doubled}
                 initial={slots.bottom ? initialBoards[slots.bottom] : undefined}
                 initialAt={initialBoardsAt}
                 onChoose={(boardId) => void chooseBoard('bottom', boardId)}

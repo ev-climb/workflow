@@ -17,12 +17,13 @@ type Props = {
   boards: BoardSummary[]
   boardId: string
   slot: string
+  linkable: boolean
   initial?: BoardView
   /** Когда доску прочитали на сервере: иначе запрос считает её свежей с гидратации. */
   initialAt?: number
 }
 
-export function Board({ boards, boardId, slot, initial, initialAt }: Props) {
+export function Board({ boards, boardId, slot, linkable, initial, initialAt }: Props) {
   const { data, error, isPending } = useQuery({
     ...boardQuery(boardId),
     initialData: initial,
@@ -40,7 +41,14 @@ export function Board({ boards, boardId, slot, initial, initialAt }: Props) {
         strategy={horizontalListSortingStrategy}
       >
         {data.lists.map((list) => (
-          <BoardColumn key={list.id} boards={boards} boardId={boardId} slot={slot} list={list} />
+          <BoardColumn
+            key={list.id}
+            boards={boards}
+            boardId={boardId}
+            slot={slot}
+            linkable={linkable}
+            list={list}
+          />
         ))}
       </SortableContext>
       <div className="w-44 shrink-0">

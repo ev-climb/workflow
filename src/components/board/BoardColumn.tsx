@@ -18,9 +18,15 @@ import { Failure } from './Failure'
 import { ListMenu } from './ListMenu'
 import { TitleField } from './TitleField'
 
-type Props = { boards: BoardSummary[]; boardId: string; slot: string; list: ListView }
+type Props = {
+  boards: BoardSummary[]
+  boardId: string
+  slot: string
+  linkable: boolean
+  list: ListView
+}
 
-export function BoardColumn({ boards, boardId, slot, list }: Props) {
+export function BoardColumn({ boards, boardId, slot, linkable, list }: Props) {
   const [renaming, setRenaming] = useState(false)
   const rename = useRenameList(boardId, list.id)
   const create = useCreateCard(boardId, list.id)
@@ -109,6 +115,7 @@ export function BoardColumn({ boards, boardId, slot, list }: Props) {
               boards={boards}
               boardId={boardId}
               slot={slot}
+              linkable={linkable}
               listId={list.id}
               card={card}
             />

@@ -14,12 +14,21 @@ type Props = {
   slot: Slot
   boards: BoardSummary[]
   boardId: string | null
+  linkable: boolean
   initial?: BoardView
   initialAt?: number
   onChoose: (boardId: string | null) => void
 }
 
-export function BoardSlot({ slot, boards, boardId, initial, initialAt, onChoose }: Props) {
+export function BoardSlot({
+  slot,
+  boards,
+  boardId,
+  linkable,
+  initial,
+  initialAt,
+  onChoose,
+}: Props) {
   return (
     <section data-slot={slot} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
       <header className="flex shrink-0 items-center gap-4 px-6 pt-4 pb-3.5">
@@ -45,6 +54,7 @@ export function BoardSlot({ slot, boards, boardId, initial, initialAt, onChoose 
             boards={boards}
             boardId={boardId}
             slot={slot}
+            linkable={linkable}
             initial={initial}
             initialAt={initialAt}
           />
