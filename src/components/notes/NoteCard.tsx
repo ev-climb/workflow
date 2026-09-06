@@ -5,7 +5,7 @@ import { DropdownMenu } from 'radix-ui'
 import { useState } from 'react'
 import { Failure } from '@/components/board/Failure'
 import { formatStamp } from '@/lib/dates'
-import { noteHeading } from '@/lib/notes'
+import { splitHeading } from '@/lib/notes'
 import { useArchiveNote, useDeleteNote, useMoveNote } from '@/lib/notes-mutations'
 import type { FolderView, NoteView } from '@/server/services/notes'
 import { NoteEditor } from './NoteEditor'
@@ -33,10 +33,7 @@ export function NoteCard({ note, folders, autoEdit = false }: Props) {
     disabled: editing,
   })
 
-  const heading = noteHeading(note)
-  const body = note.kind === 'text' ? (note.body ?? '') : ''
-  // заголовок собран из первой строки — показывать её же второй раз незачем
-  const rest = note.title?.trim() ? body : body.slice(heading.length).trim()
+  const { heading, rest } = splitHeading(note.title, note.body)
 
   const done = note.items.filter((item) => item.done).length
   const list = note.kind === 'list'
