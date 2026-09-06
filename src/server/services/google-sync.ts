@@ -73,6 +73,17 @@ async function markCancelled(calendarId: string, events: GoogleEvent[]): Promise
   return cancelled
 }
 
+/**
+ * Пагинация у Google не снимок: событие, изменённое между запросами соседних страниц,
+ * приезжает в пачке дважды. Повтор ключа внутри одного `INSERT ... ON CONFLICT` Постгрес
+ * не берёт — оставляем последнюю версию, она же самая свежая.
+ */
+function lastPerKey<T>(items: T[], key: (item: T) => string): T[] {
+  const byKey = new Map<string, T>()
+  for (const item of items) byKey.set(key(item), item)
+  return [...byKey.values()]
+}
+
 type TimedEvent = GoogleEvent & { times: EventTimes }
 
 async function saveEvents(calendarId: string, events: TimedEvent[]): Promise<void> {
@@ -130,7 +141,7 @@ export async function applyEvents(
   const gone: GoogleEvent[] = []
   let skipped = 0
 
-  for (const event of events) {
+  for (const event of lastPerKey(events, (event) => event.googleEventId)) {
     if (event.status === 'cancelled') gone.push(event)
     else if (event.times) live.push({ ...event, times: event.times })
     else skipped += 1

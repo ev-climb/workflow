@@ -187,6 +187,34 @@ describe('синхронизация календаря', () => {
     expect(row.startsAt).not.toBeNull()
   })
 
+  it('повтор события в одной пачке не роняет проход: остаётся последняя версия', async () => {
+    const { calendarId } = await calendar()
+    fetchEvents.mockResolvedValue(
+      page([timed({ title: 'Со страницы 1' }), timed({ title: 'Со страницы 2' })]),
+    )
+
+    const result = await syncCalendar(calendarId, new Date('2026-09-02T12:00:00Z'))
+
+    expect(result).toMatchObject({ saved: 1, cancelled: 0, skipped: 0 })
+    const rows = await eventsOf(calendarId)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].title).toBe('Со страницы 2')
+  })
+
+  it('событие, отменённое между страницами, приходит отменённым', async () => {
+    const { calendarId } = await calendar()
+    fetchEvents.mockResolvedValue(page([timed()]))
+    await syncCalendar(calendarId, new Date('2026-09-02T12:00:00Z'))
+
+    fetchEvents.mockResolvedValue(page([timed(), timed({ status: 'cancelled', times: null })]))
+    const result = await syncCalendar(calendarId, new Date('2026-09-02T12:01:00Z'))
+
+    expect(result).toMatchObject({ saved: 0, cancelled: 1 })
+    const [row] = await eventsOf(calendarId)
+    expect(row.status).toBe('cancelled')
+    expect(row.deletedAt).not.toBeNull()
+  })
+
   it('отмена события, которого у нас нет, не ошибка', async () => {
     const { calendarId } = await calendar()
     fetchEvents.mockResolvedValue(page([timed({ googleEventId: 'чужое', status: 'cancelled', times: null })]))

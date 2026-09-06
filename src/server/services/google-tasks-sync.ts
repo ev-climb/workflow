@@ -35,6 +35,17 @@ function chunks<T>(items: T[], size: number): T[][] {
 }
 
 /**
+ * Пагинация у Google не снимок: запись, изменённая между запросами соседних страниц,
+ * приезжает в пачке дважды. Повтор ключа внутри одного `INSERT ... ON CONFLICT` Постгрес
+ * не берёт — оставляем последнюю версию, она же самая свежая.
+ */
+function lastPerKey<T>(items: T[], key: (item: T) => string): T[] {
+  const byKey = new Map<string, T>()
+  for (const item of items) byKey.set(key(item), item)
+  return [...byKey.values()]
+}
+
+/**
  * Списки аккаунта из Google к нам. Пропавший список гасится мягко (инвариант 5): его
  * задачи лежат у нас, а решать за пользователя, что их пора стереть, мы не будем.
  */
@@ -43,11 +54,12 @@ async function saveTaskLists(
   lists: { googleTaskListId: string; title: string }[],
 ): Promise<void> {
   const now = new Date()
+  const unique = lastPerKey(lists, (list) => list.googleTaskListId)
 
-  if (lists.length > 0) {
+  if (unique.length > 0) {
     await db
       .insert(googleTaskLists)
-      .values(lists.map((list) => ({ accountId, ...list })))
+      .values(unique.map((list) => ({ accountId, ...list })))
       .onConflictDoUpdate({
         target: [googleTaskLists.accountId, googleTaskLists.googleTaskListId],
         set: { title: sql`excluded.title`, deletedAt: null, updatedAt: now },
@@ -57,10 +69,10 @@ async function saveTaskLists(
   const gone = and(
     eq(googleTaskLists.accountId, accountId),
     isNull(googleTaskLists.deletedAt),
-    lists.length > 0
+    unique.length > 0
       ? notInArray(
           googleTaskLists.googleTaskListId,
-          lists.map((list) => list.googleTaskListId),
+          unique.map((list) => list.googleTaskListId),
         )
       : undefined,
   )
@@ -145,8 +157,9 @@ export async function applyTasks(
   taskListId: string,
   tasks: GoogleTask[],
 ): Promise<{ saved: number; deleted: number }> {
-  const live = tasks.filter((task) => !task.deleted)
-  const gone = tasks.filter((task) => task.deleted)
+  const unique = lastPerKey(tasks, (task) => task.googleTaskId)
+  const live = unique.filter((task) => !task.deleted)
+  const gone = unique.filter((task) => task.deleted)
 
   await saveTasks(accountId, taskListId, live)
   const deleted = await markDeleted(accountId, gone)

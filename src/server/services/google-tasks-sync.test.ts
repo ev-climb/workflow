@@ -177,6 +177,20 @@ describe('синхронизация списка задач', () => {
     })
   })
 
+  it('повтор задачи в одной пачке не роняет проход: остаётся последняя версия', async () => {
+    const { accountId, taskListId } = await taskList()
+    fetchTasks.mockResolvedValue(
+      page([task({ title: 'Со страницы 1' }), task({ title: 'Со страницы 2' })]),
+    )
+
+    const result = await syncTaskList(taskListId, new Date('2026-09-03T09:00:00.000Z'))
+
+    expect(result).toMatchObject({ saved: 1, deleted: 0 })
+    const rows = await tasksOf(accountId)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].title).toBe('Со страницы 2')
+  })
+
   it('стёртая в Google задача гасится мягко', async () => {
     const { accountId, taskListId } = await taskList()
     fetchTasks.mockResolvedValue(page([task()]))
