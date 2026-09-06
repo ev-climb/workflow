@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useSetCardDueDone } from '@/lib/board-mutations'
 import { placedRange, placedTime, type Range, type Target } from '@/lib/calendar-drag'
 import { MINUTES_IN_DAY } from '@/lib/calendar-grid'
@@ -55,6 +56,7 @@ export function TimeBlockChip({
   onGrab: GrabHandler
 }) {
   const block = placed.event
+  const router = useRouter()
   const setDone = useSetCardDueDone(block.boardId, block.cardId)
   const height = heightOf(placed)
   const time = placedTime(placed)
@@ -87,8 +89,10 @@ export function TimeBlockChip({
         draggable={false}
         onPointerDown={base ? (pointer) => onGrab(pointer, 'move', base, target) : undefined}
         onClick={(pointer) => {
-          // мышь ведёт `finish`: он один отличает щелчок от переноса. Клавиатуре ссылка остаётся
-          if (base && pointer.detail !== 0) pointer.preventDefault()
+          // мышь на подвижном блоке ведёт `finish`: он один отличает щелчок от переноса
+          pointer.preventDefault()
+          if (base && pointer.detail !== 0) return
+          router.push(cardHref(block.cardId))
         }}
         title={`Время под карточку ${time}${block.calendarId ? ', видно в Google' : ''}: ${block.cardTitle} — ${block.boardTitle}`}
         className={`block h-full min-w-0 flex-1 overflow-hidden text-left text-[10px] leading-tight text-fog-muted outline-none focus-visible:ring-1 focus-visible:ring-accent-line ${

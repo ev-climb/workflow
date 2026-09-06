@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useMemo, useRef, useState } from 'react'
 import {
   moved,
@@ -86,6 +87,7 @@ export function useGridDrag(input: {
   const stamp = useRef(0)
   const setTimes = useSetEventTimes()
   const moveBlock = useMoveTimeBlock()
+  const router = useRouter()
 
   const grab: GrabHandler = (event, kind, base, dragging) => {
     if (event.button !== 0) return
@@ -140,7 +142,7 @@ export function useGridDrag(input: {
         return
       }
       const clicked = blocks.find((one) => one.id === moving.id)
-      if (clicked) window.location.href = cardHref(clicked.cardId)
+      if (clicked) router.push(cardHref(clicked.cardId))
       return
     }
 

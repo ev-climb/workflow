@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useMemo, useRef, useState } from 'react'
 import { useMoveCardDue } from '@/lib/board-mutations'
 import { addDays } from '@/lib/calendar-grid'
@@ -51,6 +52,7 @@ export function useStripeDrag(input: {
   const setTimes = useSetEventTimes()
   const setTaskDue = useSetTaskDue()
   const moveDue = useMoveCardDue()
+  const router = useRouter()
 
   function grab(event: React.PointerEvent, target: StripeTarget) {
     if (event.button !== 0) return
@@ -84,7 +86,7 @@ export function useStripeDrag(input: {
   function open(target: StripeTarget) {
     if (target.kind === 'allday') onOpen(target.event)
     else if (target.kind === 'task') onOpenTask(target.task)
-    else window.location.href = cardHref(target.due.id)
+    else router.push(cardHref(target.due.id))
   }
 
   function move(held: StripeDrag) {

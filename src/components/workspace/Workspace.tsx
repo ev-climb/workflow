@@ -47,6 +47,15 @@ export function Workspace({
     top: topBoardId,
     bottom: bottomBoardId,
   })
+  /**
+   * Слоты идут за пропсом: по ссылке на карточку страница подставляет её доску наверх, и
+   * без этого мягкий переход оставил бы стол с доской, прочитанной при монтировании.
+   */
+  const given = useRef({ top: topBoardId, bottom: bottomBoardId })
+  if (given.current.top !== topBoardId || given.current.bottom !== bottomBoardId) {
+    given.current = { top: topBoardId, bottom: bottomBoardId }
+    setSlots({ top: topBoardId, bottom: bottomBoardId })
+  }
   const [ratio, setRatio] = useState(topBoardRatio)
   const [mode, setMode] = useState(calendarMode)
   const [notes, setNotes] = useState(notesOpen)

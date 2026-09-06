@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import type { PlacedAllDay } from '@/lib/calendar-layout'
 import { useSetTaskDone } from '@/lib/calendar-mutations'
 import type { AllDayView, StripePlace, StripeTarget } from '@/lib/calendar-scene'
@@ -144,9 +145,8 @@ function AllDayStripe({
  * Срок карточки. Событие — заливка цветом календаря, срок — пунктирный контур без
  * заливки: с одного взгляда видно, что это не встреча, а граница работы.
  *
- * Ссылка обычная, не `next/link`: карточку открывает страница стола, подставляя её доску
- * в слот, и делает это на серверной отрисовке. Мягкий переход состояние стола не
- * пересобирает, и карточка чужой доски осталась бы неоткрытой.
+ * Адрес карточки стоит настоящим `href` ради средней кнопки, но щелчок ведём сами: доску
+ * под карточку подставляет серверная отрисовка стола, и мягкого перехода для этого хватает.
  */
 function DueStripe({
   placed,
@@ -159,6 +159,7 @@ function DueStripe({
   now: Date | null
   grip: Grip
 }) {
+  const router = useRouter()
   const overdue = now !== null && isOverdue(due.dueAt, due.dueDone, due.dueHasTime, now.getTime())
   const time = due.dueHasTime ? moscowParts(due.dueAt).time : null
 
@@ -168,8 +169,9 @@ function DueStripe({
       draggable={false}
       {...grip}
       onClick={(pointer) => {
-        // мышь ведёт жест полос: он один отличает щелчок от переноса. Клавиатуре ссылка остаётся
-        if (pointer.detail !== 0) pointer.preventDefault()
+        // мышь ведёт жест полос: он один отличает щелчок от переноса
+        pointer.preventDefault()
+        if (pointer.detail === 0) router.push(cardHref(due.id))
       }}
       title={`Срок${time ? ` ${time}` : ''}: ${due.title} — ${due.boardTitle}`}
       className={`flex cursor-grab items-center gap-1 overflow-hidden rounded-lg border border-dashed px-1.5 text-[10px] leading-[12px] outline-none transition-colors focus-visible:ring-1 focus-visible:ring-accent-line active:cursor-grabbing ${
