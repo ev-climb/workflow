@@ -1,11 +1,18 @@
 import { existsSync } from 'node:fs'
 
+let computed: string | undefined
+
 /**
  * Адрес тестовой базы. По умолчанию — та же машина и та же строка подключения, но база
  * с суффиксом `_test`: тесты чистят таблицы целиком, и промах по адресу стоил бы рабочих
  * данных. Совпадение с `DATABASE_URL` считается ошибкой, а не «и так сойдёт».
+ *
+ * Вызывающие подменяют `DATABASE_URL` этим же адресом, поэтому результат считается один
+ * раз на процесс: иначе второй вызов взял бы за исходный уже подменённый адрес.
  */
 export function testDatabaseUrl(): string {
+  if (computed) return computed
+
   if (existsSync('.env')) process.loadEnvFile('.env')
 
   const source = process.env.DATABASE_URL
@@ -24,7 +31,8 @@ export function testDatabaseUrl(): string {
     )
   }
 
-  return url.href
+  computed = url.href
+  return computed
 }
 
 /** Служебная база того же кластера — в ней создаётся тестовая. */
