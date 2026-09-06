@@ -49,11 +49,7 @@ function DrawnMark({ width }: { width: number }) {
  */
 export function FullLoader({ label }: { label: string }) {
   return (
-    <main
-      data-slot="loader"
-      aria-busy
-      className="loader-screen grid h-screen place-items-center p-6"
-    >
+    <main data-slot="loader" className="loader-screen grid h-screen place-items-center p-6">
       <div className="relative flex flex-col items-center gap-9">
         <div className="brand-float relative grid h-[152px] w-[216px] place-items-center">
           <div className="brand-glow absolute h-[108px] w-[168px] rounded-full blur-[38px]" />
