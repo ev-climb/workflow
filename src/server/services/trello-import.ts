@@ -1,5 +1,6 @@
 import { desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
+import { toLabelColor } from '../../lib/label-colors.ts'
 import { db } from '../db/client.ts'
 import {
   boards,
@@ -140,8 +141,25 @@ export async function importTrelloBoard(raw: unknown): Promise<ImportSummary> {
       })
       .returning({ id: boards.id })
 
-    // метка без цвета не отрисуется, а хранить её нечем: в модели цвет обязателен
-    const usableLabels = source.labels.filter((l) => l.color)
+    // метка без цвета не отрисуется, а хранить её нечем: в модели цвет обязателен.
+    // Цвет сводим к основному, и тогда green_dark и green сливаются в одну метку —
+    // иначе они разошлись бы по уникальности доски, названия и цвета
+    const usableLabels: { name: string; color: string; sources: string[] }[] = []
+    const byNameColor = new Map<string, (typeof usableLabels)[number]>()
+    for (const l of source.labels) {
+      const color = l.color ? toLabelColor(l.color) : null
+      if (!color) continue
+      const key = `${color}\u0000${l.name}`
+      const same = byNameColor.get(key)
+      if (same) {
+        same.sources.push(l.id)
+        continue
+      }
+      const label = { name: l.name, color, sources: [l.id] }
+      usableLabels.push(label)
+      byNameColor.set(key, label)
+    }
+
     const labelIds = new Map<string, string>()
     if (usableLabels.length) {
       const rows = await tx
@@ -150,11 +168,13 @@ export async function importTrelloBoard(raw: unknown): Promise<ImportSummary> {
           usableLabels.map((l) => ({
             boardId: board.id,
             name: l.name,
-            color: l.color as string,
+            color: l.color,
           })),
         )
         .returning({ id: labels.id })
-      usableLabels.forEach((l, i) => labelIds.set(l.id, rows[i].id))
+      usableLabels.forEach((l, i) => {
+        for (const trelloId of l.sources) labelIds.set(trelloId, rows[i].id)
+      })
     }
 
     const sourceLists = byPos(source.lists)
@@ -207,14 +227,11 @@ export async function importTrelloBoard(raw: unknown): Promise<ImportSummary> {
       inList.forEach((c, i) => cardIds.set(c.id, rows[i].id))
     }
 
-    const links = source.cards.flatMap((c) =>
-      c.idLabels
-        .filter((id) => labelIds.has(id))
-        .map((id) => ({
-          cardId: cardIds.get(c.id) as string,
-          labelId: labelIds.get(id) as string,
-        })),
-    )
+    const links = source.cards.flatMap((c) => {
+      // слитые метки дают одну и ту же связь дважды, а ключ таблицы её не повторит
+      const ids = new Set(c.idLabels.map((id) => labelIds.get(id)).filter((id) => id !== undefined))
+      return [...ids].map((labelId) => ({ cardId: cardIds.get(c.id) as string, labelId }))
+    })
     await insertAll(links, (chunk) => tx.insert(cardLabels).values(chunk))
 
     let itemCount = 0
@@ -268,7 +285,7 @@ export async function importTrelloBoard(raw: unknown): Promise<ImportSummary> {
       cardLabels: links.length,
       checklists: source.checklists.filter((cl) => cardIds.has(cl.idCard)).length,
       checklistItems: itemCount,
-      skippedLabels: source.labels.length - usableLabels.length,
+      skippedLabels: source.labels.length - labelIds.size,
     }
   })
 }

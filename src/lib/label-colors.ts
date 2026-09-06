@@ -19,6 +19,12 @@ export function labelColor(color: string): string {
   return PALETTE[base(color)]?.hex ?? '#6b7280'
 }
 
+/** Цвет из Trello к основному цвету набора; null — такого цвета в наборе нет. */
+export function toLabelColor(color: string): string | null {
+  const name = base(color)
+  return Object.hasOwn(PALETTE, name) ? name : null
+}
+
 /** Подпись цвета для выбора: без неё метка отличается от соседней только на глаз. */
 export function labelColorName(color: string): string {
   return PALETTE[base(color)]?.name ?? color
