@@ -1,15 +1,13 @@
 import { and, asc, eq, gt, inArray, isNotNull, isNull, lt } from 'drizzle-orm'
-import { addDays } from '../../lib/calendar-grid.ts'
 import { momentInMoscow } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
 import { boards, cards, googleCalendars, lists, timeBlocks } from '../db/schema.ts'
 import { GoogleApiError, deleteEvent, insertEvent, patchEvent } from '../google/events.ts'
 import { publishCalendarChanged } from './board-events.ts'
+import { parseDayWindow } from './day-window.ts'
 import { ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
 import { isWritable } from './google-calendars.ts'
-
-const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export type TimeBlock = {
   id: string
@@ -58,13 +56,7 @@ function checkSpan(span: TimeBlockSpan): void {
  * на доске, на сетке ничего не значит.
  */
 export async function listTimeBlocks(from: string, to: string): Promise<TimeBlock[]> {
-  if (!DATE.test(from) || !DATE.test(to)) {
-    throw new InvalidInputError('границы окна — даты вида 2026-09-02')
-  }
-  if (to < from) throw new InvalidInputError('окно кончается не раньше, чем начинается')
-
-  const windowStart = momentInMoscow(from, '00:00')
-  const windowEnd = momentInMoscow(addDays(to, 1), '00:00')
+  const { start: windowStart, end: windowEnd } = parseDayWindow(from, to)
 
   return await db
     .select(LISTED)

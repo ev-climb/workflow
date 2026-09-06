@@ -1,4 +1,5 @@
 import { addDays, moscowToday } from '../../lib/calendar-grid.ts'
+import { isDay } from '../../lib/dates.ts'
 import type { BoardCard } from './boards.ts'
 import { getBoard } from './boards.ts'
 import type { CardDue } from './cards.ts'
@@ -9,8 +10,6 @@ import { listEvents } from './google-events.ts'
 import type { TimeBlock } from './time-blocks.ts'
 import { listTimeBlocks } from './time-blocks.ts'
 import { getWorkspaceState } from './workspace.ts'
-
-const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export type PlanList = {
   id: string
@@ -74,7 +73,7 @@ async function planBoard(boardId: string): Promise<PlanBoard> {
  */
 export async function planDay(date?: string): Promise<DayPlan> {
   const day = date ?? moscowToday()
-  if (!DATE.test(day)) throw new InvalidInputError('день — дата вида 2026-09-02')
+  if (!isDay(day)) throw new InvalidInputError('день — дата вида 2026-09-02')
 
   const workspace = await getWorkspaceState()
   const slots = [workspace.topBoardId, workspace.bottomBoardId].filter(

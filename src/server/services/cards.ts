@@ -1,10 +1,10 @@
 import { and, asc, eq, gt, gte, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
-import { addDays } from '../../lib/calendar-grid.ts'
-import { momentInMoscow, moscowParts } from '../../lib/dates.ts'
+import { isDay, momentInMoscow, moscowParts } from '../../lib/dates.ts'
 import { type Db, db, type Tx } from '../db/client.ts'
 import { boards, cardLabels, cards, labels, lists } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
 import { parseCardInput } from './card-input.ts'
+import { parseDayWindow } from './day-window.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { moveWithinCollection, rankAfter, withRankRetry } from './rank.ts'
 import { retitleCardBlocks, unmirrorCardBlocks } from './time-blocks.ts'
@@ -251,7 +251,6 @@ export function cardDescription(raw: string | null): string | null {
   return value || null
 }
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/
 const TIME = /^\d{2}:\d{2}$/
 
 export type DueInput = { date: string; time?: string | null }
@@ -262,7 +261,7 @@ export type DueInput = { date: string; time?: string | null }
  */
 function dueMoment(input: DueInput): { at: Date; hasTime: boolean } {
   const time = input.time ?? null
-  if (!DATE.test(input.date)) {
+  if (!isDay(input.date)) {
     throw new InvalidInputError('карточка: дата срока не вида ГГГГ-ММ-ДД')
   }
   if (time !== null && !TIME.test(time)) {
@@ -393,13 +392,7 @@ export type CardDue = {
  * доски означал бы на сетке работу, которой уже нет.
  */
 export async function listDueCards(from: string, to: string): Promise<CardDue[]> {
-  if (!DATE.test(from) || !DATE.test(to)) {
-    throw new InvalidInputError('границы окна — даты вида 2026-09-02')
-  }
-  if (to < from) throw new InvalidInputError('окно кончается не раньше, чем начинается')
-
-  const windowStart = momentInMoscow(from, '00:00')
-  const windowEnd = momentInMoscow(addDays(to, 1), '00:00')
+  const { start: windowStart, end: windowEnd } = parseDayWindow(from, to)
 
   const rows = await db
     .select({
@@ -493,14 +486,9 @@ export async function searchCards(filter: CardSearch): Promise<CardHit[]> {
   if (filter.dueFrom !== undefined || filter.dueTo !== undefined) {
     const from = filter.dueFrom ?? filter.dueTo
     const to = filter.dueTo ?? filter.dueFrom
-    if (!DATE.test(from ?? '') || !DATE.test(to ?? '')) {
-      throw new InvalidInputError('границы срока — даты вида 2026-09-02')
-    }
-    if ((to as string) < (from as string)) {
-      throw new InvalidInputError('окно кончается не раньше, чем начинается')
-    }
-    where.push(gte(cards.dueAt, momentInMoscow(from as string, '00:00')))
-    where.push(lt(cards.dueAt, momentInMoscow(addDays(to as string, 1), '00:00')))
+    const window = parseDayWindow(from ?? '', to ?? '', 'срока')
+    where.push(gte(cards.dueAt, window.start))
+    where.push(lt(cards.dueAt, window.end))
   }
 
   const limit = Math.min(Math.max(Math.trunc(filter.limit ?? HITS_DEFAULT), 1), HITS_MAX)

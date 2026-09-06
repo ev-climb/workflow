@@ -1,7 +1,6 @@
 import { and, eq, gt, isNull, lt, ne, notExists, or, sql } from 'drizzle-orm'
 import { DEFAULT_CALENDAR_COLOR } from '../../lib/calendar-colors.ts'
-import { addDays } from '../../lib/calendar-grid.ts'
-import { momentInMoscow } from '../../lib/dates.ts'
+import { isDay } from '../../lib/dates.ts'
 import { descriptionHtml, descriptionText } from '../../lib/event-description.ts'
 import { db } from '../db/client.ts'
 import {
@@ -25,13 +24,12 @@ import {
   insertEvent,
   patchEvent,
 } from '../google/events.ts'
+import { parseDayWindow } from './day-window.ts'
 import { ConflictError, ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
 import { isWritable } from './google-calendars.ts'
 import { writeThroughEtag } from './google-shared.ts'
 import { applyEvents } from './google-sync.ts'
-
-const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export type CalendarEvent = {
   id: string
@@ -137,16 +135,9 @@ const DETAILED = {
  * через часовой пояс, уезжает на сутки.
  */
 export async function listEvents(from: string, to: string): Promise<CalendarEvent[]> {
-  if (!DATE.test(from) || !DATE.test(to)) {
-    throw new InvalidInputError('границы окна — даты вида 2026-09-02')
-  }
-  if (to < from) throw new InvalidInputError('окно кончается не раньше, чем начинается')
-
   // граница окна исключающая с обеих сторон: событие, кончающееся ровно в полночь, к
   // следующему дню уже не относится
-  const after = addDays(to, 1)
-  const windowStart = momentInMoscow(from, '00:00')
-  const windowEnd = momentInMoscow(after, '00:00')
+  const { after, start: windowStart, end: windowEnd } = parseDayWindow(from, to)
 
   const rows = await db
     .select(LISTED)
@@ -223,7 +214,7 @@ export async function getEvent(id: string): Promise<CalendarEventDetails> {
 
 function checkTimes(times: EventTimes): void {
   if (times.allDay) {
-    if (!DATE.test(times.startDate) || !DATE.test(times.endDate)) {
+    if (!isDay(times.startDate) || !isDay(times.endDate)) {
       throw new InvalidInputError('дата события на весь день — строка вида 2026-09-02')
     }
     // граница у Google исключающая: сутки на весь день это следующая дата, а не та же

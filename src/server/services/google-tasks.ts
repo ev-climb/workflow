@@ -1,5 +1,6 @@
 import { and, asc, eq, gte, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import { DEFAULT_CALENDAR_COLOR } from '../../lib/calendar-colors.ts'
+import { isDay } from '../../lib/dates.ts'
 import { db } from '../db/client.ts'
 import { googleAccounts, googleTaskLists, googleTasks } from '../db/schema.ts'
 import {
@@ -10,12 +11,11 @@ import {
   insertTask,
   patchTask,
 } from '../google/tasks.ts'
+import { parseDayWindow } from './day-window.ts'
 import { ConflictError, InvalidInputError, NotFoundError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
 import { writeThroughEtag } from './google-shared.ts'
 import { applyTasks } from './google-tasks-sync.ts'
-
-const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export type CalendarTask = {
   id: string
@@ -95,10 +95,7 @@ function summarize<T extends { color: string | null; status: string }>(row: T) {
  * пояс сдвинул бы его на сутки (инвариант 3).
  */
 export async function listTasks(from: string, to: string): Promise<CalendarTask[]> {
-  if (!DATE.test(from) || !DATE.test(to)) {
-    throw new InvalidInputError('границы окна — даты вида 2026-09-02')
-  }
-  if (to < from) throw new InvalidInputError('окно кончается не раньше, чем начинается')
+  const window = parseDayWindow(from, to)
 
   const rows = await db
     .select(LISTED)
@@ -109,8 +106,8 @@ export async function listTasks(from: string, to: string): Promise<CalendarTask[
       and(
         alive(),
         isNotNull(googleTasks.due),
-        gte(googleTasks.due, from),
-        lte(googleTasks.due, to),
+        gte(googleTasks.due, window.from),
+        lte(googleTasks.due, window.to),
       ),
     )
     .orderBy(asc(googleTasks.due), asc(googleTasks.title))
@@ -150,7 +147,7 @@ export async function listTaskLists(): Promise<TaskListSummary[]> {
 
 function dueOf(value: string | null | undefined): string | null {
   const due = value?.trim() || null
-  if (due !== null && !DATE.test(due)) {
+  if (due !== null && !isDay(due)) {
     throw new InvalidInputError('срок задачи — дата вида 2026-09-02')
   }
   return due

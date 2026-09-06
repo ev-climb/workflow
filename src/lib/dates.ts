@@ -2,6 +2,13 @@
 // иначе сервер и браузер отрисовали бы разное время и гидратация разошлась бы
 const ZONE = 'Europe/Moscow'
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/
+
+/** Дата вида `2026-09-02`: день задаётся строкой и через часовой пояс не идёт, инвариант 3. */
+export function isDay(value: string): boolean {
+  return DAY.test(value)
+}
+
 const SAME_YEAR = new Intl.DateTimeFormat('ru-RU', {
   timeZone: ZONE,
   day: 'numeric',
