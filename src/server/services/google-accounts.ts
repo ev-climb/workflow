@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
 import { isCalendarColor, nextAccountColor } from '../../lib/calendar-colors.ts'
 import { db } from '../db/client.ts'
-import { googleAccounts, googleCalendars } from '../db/schema.ts'
+import { googleAccounts, googleCalendars, timeBlocks } from '../db/schema.ts'
 import { type GoogleCalendarEntry, fetchCalendarList } from '../google/calendars.ts'
 import {
   type GoogleAccessToken,
@@ -12,6 +12,7 @@ import {
   exchangeCode,
   type GoogleTokens,
   refreshAccessToken,
+  revokeRefreshToken,
 } from '../google/oauth.ts'
 import { decryptToken, encryptToken } from '../google/token-crypto.ts'
 import { InvalidInputError, NotFoundError, ReauthRequiredError } from './errors.ts'
@@ -133,6 +134,49 @@ export async function updateGoogleAccount(
     .where(eq(googleCalendars.accountId, id))
 
   return account
+}
+
+/**
+ * Отключение аккаунта: строка уходит вместе с календарями, событиями, списками и
+ * задачами по каскаду, а грант отзывается в Google — стереть у себя refresh-токен,
+ * оставив его годным, значит закончить жизнь секрета только наполовину (инвариант 6).
+ *
+ * Зеркала тайм-блоков отвязываются заранее: удаление календаря обнулило бы у блока
+ * только `calendar_id`, а зеркало в схеме либо целиком, либо никак. Сами события
+ * остаются в Google — после отзыва доступа к ним у нас всё равно нет.
+ */
+export async function removeGoogleAccount(id: string): Promise<{ id: string }> {
+  const [account] = await db
+    .select({ refreshTokenEncrypted: googleAccounts.refreshTokenEncrypted })
+    .from(googleAccounts)
+    .where(eq(googleAccounts.id, id))
+
+  if (!account) throw new NotFoundError(`аккаунта ${id} нет`)
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(timeBlocks)
+      .set({ calendarId: null, googleEventId: null, updatedAt: new Date() })
+      .where(
+        inArray(
+          timeBlocks.calendarId,
+          tx
+            .select({ id: googleCalendars.id })
+            .from(googleCalendars)
+            .where(eq(googleCalendars.accountId, id)),
+        ),
+      )
+
+    await tx.delete(googleAccounts).where(eq(googleAccounts.id, id))
+  })
+
+  try {
+    await revokeRefreshToken(decryptToken(account.refreshTokenEncrypted))
+  } catch {
+    // отзыв — попытка: аккаунт у нас уже отключён, и отказавший Google этого не отменяет
+  }
+
+  return { id }
 }
 
 /** Отказ Google — ошибка входа: код возврата бывает чужим, просроченным и уже использованным. */

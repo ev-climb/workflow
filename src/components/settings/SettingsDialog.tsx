@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Dialog } from 'radix-ui'
 import { AccountCalendars } from '@/components/settings/AccountCalendars'
 import { AccountColor } from '@/components/settings/AccountColor'
+import { AccountDisconnect } from '@/components/settings/AccountDisconnect'
 import { accountsQuery, calendarsQuery } from '@/lib/calendar-query'
 import { formatMoment } from '@/lib/dates'
 import { connectUrl } from '@/lib/google-oauth'
@@ -73,18 +74,21 @@ export function SettingsDialog({ notice, onClose }: Props) {
                       <span className="truncate text-sm">{account.email}</span>
                       <AccountColor account={account} />
                     </div>
-                    {account.needsReauth ? (
-                      <a
-                        href={connectUrl(account.email)}
-                        className="rounded-lg border border-caution-line px-2.5 py-1 text-xs text-caution outline-none transition-colors hover:bg-caution-wash focus-visible:ring-1 focus-visible:ring-caution-line"
-                      >
-                        Доступ отозван — подключить заново
-                      </a>
-                    ) : (
-                      <span className="font-mono text-[11px] text-fog-faint">
-                        подключён {formatMoment(account.connectedAt)}
-                      </span>
-                    )}
+                    <div className="flex shrink-0 items-start gap-2">
+                      {account.needsReauth ? (
+                        <a
+                          href={connectUrl(account.email)}
+                          className="rounded-lg border border-caution-line px-2.5 py-1 text-xs text-caution outline-none transition-colors hover:bg-caution-wash focus-visible:ring-1 focus-visible:ring-caution-line"
+                        >
+                          Доступ отозван — подключить заново
+                        </a>
+                      ) : (
+                        <span className="mt-1 font-mono text-[11px] text-fog-faint">
+                          подключён {formatMoment(account.connectedAt)}
+                        </span>
+                      )}
+                      <AccountDisconnect account={account} />
+                    </div>
                   </div>
                   <AccountCalendars
                     calendars={(calendars.data ?? []).filter(

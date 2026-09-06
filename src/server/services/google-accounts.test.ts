@@ -1,16 +1,20 @@
+import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/client.ts'
-import { googleAccounts } from '../db/schema.ts'
+import { googleAccounts, timeBlocks } from '../db/schema.ts'
 import type { GoogleCalendarEntry } from '../google/calendars.ts'
 import { GoogleAuthError, GoogleGrantRevokedError, type GoogleTokens } from '../google/oauth.ts'
 import { decryptToken } from '../google/token-crypto.ts'
-import { InvalidInputError, ReauthRequiredError } from './errors.ts'
+import { createBoard, createList } from './boards.ts'
+import { createCard } from './cards.ts'
+import { InvalidInputError, NotFoundError, ReauthRequiredError } from './errors.ts'
 import {
   accessTokenFor,
   connectGoogleAccount,
   listAccountsNeedingReauth,
   listGoogleAccounts,
+  removeGoogleAccount,
   updateGoogleAccount,
 } from './google-accounts.ts'
 import {
@@ -21,11 +25,18 @@ import {
 
 vi.mock('../google/oauth.ts', async (importActual) => {
   const actual = await importActual<typeof import('../google/oauth.ts')>()
-  return { ...actual, exchangeCode: vi.fn(), refreshAccessToken: vi.fn() }
+  return {
+    ...actual,
+    exchangeCode: vi.fn(),
+    refreshAccessToken: vi.fn(),
+    revokeRefreshToken: vi.fn(),
+  }
 })
 vi.mock('../google/calendars.ts', () => ({ fetchCalendarList: vi.fn() }))
 
-const { exchangeCode, refreshAccessToken } = vi.mocked(await import('../google/oauth.ts'))
+const { exchangeCode, refreshAccessToken, revokeRefreshToken } = vi.mocked(
+  await import('../google/oauth.ts'),
+)
 const { fetchCalendarList } = vi.mocked(await import('../google/calendars.ts'))
 
 function entry(patch: Partial<GoogleCalendarEntry> = {}): GoogleCalendarEntry {
@@ -312,5 +323,54 @@ describe('access-токен аккаунта', () => {
     await connectGoogleAccount('code')
 
     expect(await listAccountsNeedingReauth()).toEqual([])
+  })
+})
+
+describe('отключение аккаунта Google', () => {
+  it('уносит аккаунт с его календарями и отзывает грант', async () => {
+    googleAnswers('me@gmail.com', {}, [entry()])
+    const account = await connectGoogleAccount('code')
+
+    await removeGoogleAccount(account.id)
+
+    expect(await listGoogleAccounts()).toEqual([])
+    expect(await listGoogleCalendars()).toEqual([])
+    expect(revokeRefreshToken).toHaveBeenCalledWith('1//0crefresh')
+  })
+
+  it('тайм-блок остаётся на сетке, потеряв зеркало', async () => {
+    googleAnswers('me@gmail.com', {}, [entry()])
+    const account = await connectGoogleAccount('code')
+    const calendarId = (await listGoogleCalendars())[0].id
+
+    const board = await createBoard({ title: 'Работа' })
+    const list = await createList({ boardId: board.id, title: 'Сегодня' })
+    const card = await createCard({ listId: list.id, title: 'Починить пуши' })
+    await db.insert(timeBlocks).values({
+      cardId: card.id,
+      startsAt: new Date('2026-09-02T09:00:00Z'),
+      endsAt: new Date('2026-09-02T10:00:00Z'),
+      calendarId,
+      googleEventId: 'mirror-1',
+    })
+
+    await removeGoogleAccount(account.id)
+
+    const [block] = await db.select().from(timeBlocks)
+    expect(block).toMatchObject({ cardId: card.id, calendarId: null, googleEventId: null })
+  })
+
+  it('отказ Google на отзыве не мешает отключить аккаунт', async () => {
+    googleAnswers('me@gmail.com')
+    const account = await connectGoogleAccount('code')
+    revokeRefreshToken.mockRejectedValue(new GoogleAuthError('Google отказал (отзыв доступа)'))
+
+    await removeGoogleAccount(account.id)
+
+    expect(await listGoogleAccounts()).toEqual([])
+  })
+
+  it('неизвестного аккаунта нет', async () => {
+    await expect(removeGoogleAccount(randomUUID())).rejects.toThrow(NotFoundError)
   })
 })

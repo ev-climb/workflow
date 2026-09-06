@@ -1,5 +1,6 @@
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
+const REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'
 
 /** Больше областей не запрашиваем: события, список календарей и задачи Google Tasks. */
 const SCOPES = [
@@ -146,4 +147,14 @@ export async function refreshAccessToken(refreshToken: string): Promise<GoogleAc
     accessToken: tokens.access_token,
     expiresAt: new Date(Date.now() + tokens.expires_in * 1000),
   }
+}
+
+/** Отзыв гранта: Google перестаёт принимать и refresh-токен, и выданные по нему access-токены. */
+export async function revokeRefreshToken(refreshToken: string): Promise<void> {
+  const response = await fetch(REVOKE_ENDPOINT, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token: refreshToken }),
+  })
+  if (!response.ok) throw refuse('отзыв доступа', response.status, await response.text())
 }

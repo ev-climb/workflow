@@ -31,6 +31,13 @@ export const useSetAccountColor = (accountId: string) =>
     sendJson('PATCH', `/api/google/accounts/${accountId}`, { color }),
   )
 
+/**
+ * Отключение аккаунта уносит его календари, события и задачи, а тайм-блоки теряют
+ * зеркала: перечитываются те же списки и сетка, что и после любой правки настроек.
+ */
+export const useDisconnectAccount = (accountId: string) =>
+  useSettingsChange(() => sendJson('DELETE', `/api/google/accounts/${accountId}`))
+
 export type CalendarPatch = { color?: string | null; visible?: boolean }
 
 export const useUpdateCalendar = (calendarId: string) =>
