@@ -247,24 +247,6 @@ export async function createCardFromText(input: {
   return created
 }
 
-export async function renameCard(cardId: string, newTitle: string): Promise<CardPosition> {
-  const name = title(newTitle)
-  const card = await locateCard(cardId)
-
-  const [updated] = await db
-    .update(cards)
-    .set({ title: name, updatedAt: new Date() })
-    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
-    .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
-
-  if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
-
-  await retitleCardBlocks(cardId, name)
-
-  publishBoardChanged(card.boardId)
-  return updated
-}
-
 /**
  * Описание в том виде, в каком оно ложится в базу. Пустой текст становится `null`, а не
  * пустой строкой: в доске значок «есть описание» смотрит именно на `null`, и пробел
@@ -276,22 +258,6 @@ export function cardDescription(raw: string | null): string | null {
     throw new InvalidInputError(`карточка: описание длиннее ${DESCRIPTION_MAX} символов`)
   }
   return value || null
-}
-
-export async function describeCard(cardId: string, raw: string | null): Promise<{ id: string }> {
-  const description = cardDescription(raw)
-  const card = await locateCard(cardId)
-
-  const [updated] = await db
-    .update(cards)
-    .set({ description, updatedAt: new Date() })
-    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
-    .returning({ id: cards.id })
-
-  if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
-
-  publishBoardChanged(card.boardId)
-  return updated
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -323,46 +289,95 @@ function dueMoment(input: DueInput): { at: Date; hasTime: boolean } {
 }
 
 /**
- * Срок карточки: дата и необязательное время. Момент из них собирает сервис, а не
- * клиент, — иначе у MCP из фазы 06 появится вторая реализация сведения с часовым поясом.
- * `null` снимает только срок: отметка «выполнено» — свойство карточки, а не её срока,
- * и переживает уборку даты.
+ * Метка принадлежит доске, и на другой доске та же по виду метка это другая строка
+ * (ADR-005). Чужая в правке — ошибка входа, а не молчаливый пропуск.
  */
-export async function setCardDue(cardId: string, input: DueInput | null): Promise<{ id: string }> {
-  const due = input === null ? null : dueMoment(input)
-  const card = await locateCard(cardId)
+async function checkBoardLabels(boardId: string, labelIds: string[]): Promise<void> {
+  const own = await db
+    .select({ id: labels.id })
+    .from(labels)
+    .where(and(eq(labels.boardId, boardId), inArray(labels.id, labelIds)))
 
-  const [updated] = await db
-    .update(cards)
-    .set({
-      dueAt: due?.at ?? null,
-      dueHasTime: due?.hasTime ?? true,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
-    .returning({ id: cards.id })
+  const known = new Set(own.map((label) => label.id))
+  const alien = labelIds.find((labelId) => !known.has(labelId))
+  if (alien) throw new InvalidInputError(`метки ${alien} нет на доске карточки`)
+}
 
-  if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
-
-  publishBoardChanged(card.boardId)
-  return updated
+/** Правка карточки: приехало поле — меняется, не приехало — остаётся как было. */
+export type CardChanges = {
+  title?: string
+  description?: string | null
+  due?: DueInput | null
+  done?: boolean
+  addLabelIds?: string[]
+  removeLabelIds?: string[]
 }
 
 /**
- * Отметка «выполнено». Стоит на карточке, а не на её сроке: закрывать приходится и то,
- * у чего срока нет вовсе. Хранит её поле `dueDone` — имя осталось с тех пор, когда
- * отметка жила при сроке.
+ * Заголовок, описание, срок, отметка «выполнено» и метки — одной транзакцией и одним
+ * событием на доску. Порознь правка на середине падала бы, оставив карточку в наполовину
+ * записанном виде, и рассылала бы во вкладки по перечитыванию доски на каждое поле.
+ *
+ * Момент срока собирает сервис, а не клиент: иначе у MCP появилась бы вторая реализация
+ * сведения с часовым поясом. `due: null` снимает только срок — отметка «выполнено» это
+ * свойство карточки, а не её срока, и переживает уборку даты. Имя поля `dueDone` осталось
+ * с тех пор, когда отметка жила при сроке.
  */
-export async function setCardDueDone(cardId: string, done: boolean): Promise<{ id: string }> {
+export async function updateCard(cardId: string, changes: CardChanges): Promise<CardPosition> {
+  const patch: {
+    title?: string
+    description?: string | null
+    dueAt?: Date | null
+    dueHasTime?: boolean
+    dueDone?: boolean
+  } = {}
+
+  if (changes.title !== undefined) patch.title = title(changes.title)
+  if (changes.description !== undefined) patch.description = cardDescription(changes.description)
+  if (changes.due !== undefined) {
+    const due = changes.due === null ? null : dueMoment(changes.due)
+    patch.dueAt = due?.at ?? null
+    patch.dueHasTime = due?.hasTime ?? true
+  }
+  if (changes.done !== undefined) patch.dueDone = changes.done
+
+  const attached = changes.addLabelIds ?? []
+  const detached = changes.removeLabelIds ?? []
+  const fields = Object.keys(patch).length > 0
+  if (!fields && !attached.length && !detached.length) {
+    throw new InvalidInputError('карточка: править нечего')
+  }
+
   const card = await locateCard(cardId)
+  if (attached.length) await checkBoardLabels(card.boardId, attached)
 
-  const [updated] = await db
-    .update(cards)
-    .set({ dueDone: done, updatedAt: new Date() })
-    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
-    .returning({ id: cards.id })
+  const updated = await db.transaction(async (tx) => {
+    const [row] = fields
+      ? await tx
+          .update(cards)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
+          .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
+      : [card]
+    if (!row) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
 
-  if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
+    // повторное навешивание проходит молча: переключатель не должен падать на гонке
+    if (attached.length) {
+      await tx
+        .insert(cardLabels)
+        .values(attached.map((labelId) => ({ cardId, labelId })))
+        .onConflictDoNothing()
+    }
+    if (detached.length) {
+      await tx
+        .delete(cardLabels)
+        .where(and(eq(cardLabels.cardId, cardId), inArray(cardLabels.labelId, detached)))
+    }
+
+    return { id: row.id, listId: row.listId, rank: row.rank }
+  })
+
+  if (patch.title !== undefined) await retitleCardBlocks(cardId, patch.title)
 
   publishBoardChanged(card.boardId)
   return updated
@@ -663,7 +678,7 @@ export async function moveCardToBoard(input: {
   return moved
 }
 
-export async function archiveCard(cardId: string): Promise<{ id: string }> {
+export async function archiveCard(cardId: string): Promise<{ id: string; title: string }> {
   // Google первым: не снялось зеркало — карточка осталась на доске и попытку можно повторить
   await unmirrorCardBlocks([cardId])
 
@@ -673,7 +688,7 @@ export async function archiveCard(cardId: string): Promise<{ id: string }> {
     .update(cards)
     .set({ archivedAt: now, updatedAt: now })
     .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
-    .returning({ id: cards.id })
+    .returning({ id: cards.id, title: cards.title })
 
   if (!archived) throw new NotFoundError(`карточки ${cardId} нет или она уже в архиве`)
 

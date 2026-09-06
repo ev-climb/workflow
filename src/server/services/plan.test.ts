@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { db } from '../db/client.ts'
 import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts'
 import { createBoard, createList } from './boards.ts'
-import { createCard, setCardDue } from './cards.ts'
+import { createCard, updateCard } from './cards.ts'
 import { InvalidInputError } from './errors.ts'
 import { planDay } from './plan.ts'
 import { createTimeBlock } from './time-blocks.ts'
@@ -115,9 +115,9 @@ describe('план дня', () => {
     const today = await createCard({ listId: board.lists[0].id, title: 'Сегодня' })
     const tomorrow = await createCard({ listId: board.lists[0].id, title: 'Завтра' })
     const later = await createCard({ listId: board.lists[0].id, title: 'Послезавтра' })
-    await setCardDue(today.id, { date: DAY, time: '12:00' })
-    await setCardDue(tomorrow.id, { date: '2026-09-03', time: '12:00' })
-    await setCardDue(later.id, { date: '2026-09-04', time: '12:00' })
+    await updateCard(today.id, { due: { date: DAY, time: '12:00' } })
+    await updateCard(tomorrow.id, { due: { date: '2026-09-03', time: '12:00' } })
+    await updateCard(later.id, { due: { date: '2026-09-04', time: '12:00' } })
 
     const plan = await planDay(DAY)
 

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { db } from '../db/client.ts'
 import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts'
 import { createBoard, createList } from '../services/boards.ts'
-import { createCard, describeCard, setCardDue } from '../services/cards.ts'
+import { createCard, updateCard } from '../services/cards.ts'
 import { createChecklist } from '../services/checklists.ts'
 import { InvalidInputError, NotFoundError } from '../services/errors.ts'
 import { createLabel } from '../services/labels.ts'
@@ -323,8 +323,8 @@ describe('plan_day', () => {
     const created = await createBoard({ title: 'BetaSet' })
     const list = await createList({ boardId: created.id, title: 'Сейчас (максимум 3)' })
     const card = await createCard({ listId: list.id, title: 'Починить пуши' })
-    await describeCard(card.id, 'длинное описание, которому здесь не место')
-    await setCardDue(card.id, { date: '2026-09-02', time: '12:00' })
+    await updateCard(card.id, { description: 'длинное описание, которому здесь не место' })
+    await updateCard(card.id, { due: { date: '2026-09-02', time: '12:00' } })
     await setBoardSlot('top', created.id)
     await setBoardSlot('bottom', null)
 

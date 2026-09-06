@@ -9,15 +9,12 @@ import type { CardDetail, CardDue, CardHit } from '../services/cards.ts'
 import {
   archiveCard,
   createCardFromText,
-  describeCard,
   getCard,
   moveCard,
-  renameCard,
   searchCards,
-  setCardDue,
-  setCardDueDone,
+  updateCard,
 } from '../services/cards.ts'
-import { addChecklistItem, listChecklists, updateChecklistItem } from '../services/checklists.ts'
+import { addChecklistItem, listChecklists } from '../services/checklists.ts'
 import { InvalidInputError, ServiceError } from '../services/errors.ts'
 import type {
   CalendarEvent,
@@ -25,7 +22,6 @@ import type {
   EventChanges,
 } from '../services/google-events.ts'
 import { createEvent, getEvent, listEvents, updateEvent } from '../services/google-events.ts'
-import { attachLabel, detachLabel } from '../services/labels.ts'
 import type { DayPlan } from '../services/plan.ts'
 import { planDay } from '../services/plan.ts'
 import type { TimeBlock } from '../services/time-blocks.ts'
@@ -303,36 +299,19 @@ export const TOOLS: ToolDef[] = [
         'московские дата и время, `null` снимает его; отметка от срока не зависит и ' +
         'стоит на карточках без него. Метки навешиваются и снимаются по идентификаторам ' +
         'с доски.',
-      input: z
-        .object({
-          cardId,
-          title: z.string().optional(),
-          description: z.string().nullable().optional(),
-          due: dueInput.optional(),
-          done: z.boolean().optional(),
-          addLabelIds: z.array(z.uuid()).optional(),
-          removeLabelIds: z.array(z.uuid()).optional(),
-        })
-        .refine(
-          (input) =>
-            input.title !== undefined ||
-            input.description !== undefined ||
-            input.due !== undefined ||
-            input.done !== undefined ||
-            input.addLabelIds !== undefined ||
-            input.removeLabelIds !== undefined,
-          { error: 'править нечего: ожидается title, description, due, done или метки' },
-        ),
+      input: z.object({
+        cardId,
+        title: z.string().optional(),
+        description: z.string().nullable().optional(),
+        due: dueInput.optional(),
+        done: z.boolean().optional(),
+        addLabelIds: z.array(z.uuid()).optional(),
+        removeLabelIds: z.array(z.uuid()).optional(),
+      }),
     },
-    async (input) => {
-      if (input.title !== undefined) await renameCard(input.cardId, input.title)
-      if (input.description !== undefined) await describeCard(input.cardId, input.description)
-      if (input.due !== undefined) await setCardDue(input.cardId, input.due)
-      if (input.done !== undefined) await setCardDueDone(input.cardId, input.done)
-      for (const labelId of input.addLabelIds ?? []) await attachLabel(input.cardId, labelId)
-      for (const labelId of input.removeLabelIds ?? []) await detachLabel(input.cardId, labelId)
-
-      return detailOut(input.cardId)
+    async ({ cardId: id, ...changes }) => {
+      await updateCard(id, changes)
+      return detailOut(id)
     },
   ),
 
@@ -361,9 +340,8 @@ export const TOOLS: ToolDef[] = [
       input: z.object({ cardId }),
     },
     async ({ cardId: id }) => {
-      const card = await getCard(id)
-      await archiveCard(id)
-      return { id, title: card.title, archived: true }
+      const archived = await archiveCard(id)
+      return { ...archived, archived: true }
     },
   ),
 
@@ -377,8 +355,7 @@ export const TOOLS: ToolDef[] = [
       input: z.object({ checklistId: z.uuid(), title: z.string(), done: z.boolean().optional() }),
     },
     async ({ checklistId, title, done }) => {
-      const created = await addChecklistItem({ checklistId, title })
-      const item = done ? await updateChecklistItem(created.id, { done }) : created
+      const item = await addChecklistItem({ checklistId, title, done })
       return { id: item.id, title: item.title, done: item.done }
     },
   ),

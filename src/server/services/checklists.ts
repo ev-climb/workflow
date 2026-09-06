@@ -224,10 +224,11 @@ export async function deleteChecklist(checklistId: string): Promise<{ id: string
   return removed
 }
 
-/** Новый пункт встаёт в конец чек-листа. */
+/** Новый пункт встаёт в конец чек-листа. Сразу выполненным он заводится из MCP. */
 export async function addChecklistItem(input: {
   checklistId: string
   title: string
+  done?: boolean
 }): Promise<ChecklistItemView> {
   const name = title(input.title, 'пункт')
   const checklist = await locateChecklist(input.checklistId)
@@ -238,6 +239,7 @@ export async function addChecklistItem(input: {
       .values({
         checklistId: input.checklistId,
         title: name,
+        done: input.done ?? false,
         rank: rankAfter(await lastItemRank(input.checklistId)),
       })
       .returning(ITEM_SELECT)

@@ -9,7 +9,6 @@ import {
   archiveCard,
   createCard,
   createCardFromText,
-  describeCard,
   findCardBoard,
   getCard,
   listDueCards,
@@ -17,8 +16,7 @@ import {
   moveCardToBoard,
   previewBoardMove,
   restoreCard,
-  setCardDue,
-  setCardDueDone,
+  updateCard,
 } from './cards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankBetween } from './rank.ts'
@@ -414,7 +412,7 @@ describe('описание карточки', () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
 
-    await describeCard(ids.a, '# План\n\n- раз\n- два')
+    await updateCard(ids.a, { description: '# План\n\n- раз\n- два' })
 
     expect((await getCard(ids.a)).description).toBe('# План\n\n- раз\n- два')
   })
@@ -422,9 +420,9 @@ describe('описание карточки', () => {
   it('пустой текст стирает описание в null, а не в пустую строку', async () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
-    await describeCard(ids.a, 'было')
+    await updateCard(ids.a, { description: 'было' })
 
-    await describeCard(ids.a, '   ')
+    await updateCard(ids.a, { description: '   ' })
 
     expect((await getCard(ids.a)).description).toBeNull()
   })
@@ -432,9 +430,9 @@ describe('описание карточки', () => {
   it('null стирает описание', async () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
-    await describeCard(ids.a, 'было')
+    await updateCard(ids.a, { description: 'было' })
 
-    await describeCard(ids.a, null)
+    await updateCard(ids.a, { description: null })
 
     expect((await getCard(ids.a)).description).toBeNull()
   })
@@ -443,10 +441,10 @@ describe('описание карточки', () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
 
-    await describeCard(ids.a, 'текст')
+    await updateCard(ids.a, { description: 'текст' })
     expect((await getBoard(b.id)).lists[0].cards[0].hasDescription).toBe(true)
 
-    await describeCard(ids.a, '')
+    await updateCard(ids.a, { description: '' })
     expect((await getBoard(b.id)).lists[0].cards[0].hasDescription).toBe(false)
   })
 
@@ -454,7 +452,9 @@ describe('описание карточки', () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
 
-    await expect(describeCard(ids.a, 'я'.repeat(16_385))).rejects.toThrow(InvalidInputError)
+    await expect(updateCard(ids.a, { description: 'я'.repeat(16_385) })).rejects.toThrow(
+      InvalidInputError,
+    )
   })
 
   it('архивной карточке описание не правится', async () => {
@@ -462,7 +462,64 @@ describe('описание карточки', () => {
     const ids = await fill(b.lists['Бэклог'], ['a'])
     await archiveCard(ids.a)
 
-    await expect(describeCard(ids.a, 'текст')).rejects.toThrow(NotFoundError)
+    await expect(updateCard(ids.a, { description: 'текст' })).rejects.toThrow(NotFoundError)
+  })
+})
+
+describe('составная правка карточки', () => {
+  it('заголовок, описание, срок, отметка и метки ложатся одним вызовом', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    const label = await createLabel({ boardId: b.id, name: 'баг', color: 'red' })
+
+    await updateCard(ids.a, {
+      title: 'Починить пуши',
+      description: 'из отчёта',
+      due: { date: '2026-10-01', time: '14:30' },
+      done: true,
+      addLabelIds: [label.id],
+    })
+
+    const card = await getCard(ids.a)
+    expect(card.title).toBe('Починить пуши')
+    expect(card.description).toBe('из отчёта')
+    expect(card.dueHasTime).toBe(true)
+    expect(card.dueDone).toBe(true)
+    expect(card.labels.map((one) => one.id)).toEqual([label.id])
+  })
+
+  it('снимает метки и переживает повторное навешивание', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    const label = await createLabel({ boardId: b.id, name: 'баг', color: 'red' })
+
+    await updateCard(ids.a, { addLabelIds: [label.id] })
+    await updateCard(ids.a, { addLabelIds: [label.id] })
+    expect((await getCard(ids.a)).labels).toHaveLength(1)
+
+    await updateCard(ids.a, { removeLabelIds: [label.id] })
+
+    expect((await getCard(ids.a)).labels).toEqual([])
+  })
+
+  it('метка с чужой доски — ошибка входа, и заголовок остаётся прежним', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const other = await board('Другая', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    const alien = await createLabel({ boardId: other.id, name: 'баг', color: 'red' })
+
+    await expect(
+      updateCard(ids.a, { title: 'Новый заголовок', addLabelIds: [alien.id] }),
+    ).rejects.toThrow(InvalidInputError)
+
+    expect((await getCard(ids.a)).title).toBe('a')
+  })
+
+  it('пустая правка до базы не доходит', async () => {
+    const b = await board('Доска', ['Бэклог'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+
+    await expect(updateCard(ids.a, {})).rejects.toThrow(InvalidInputError)
   })
 })
 
@@ -471,7 +528,7 @@ describe('срок карточки', () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
 
-    await setCardDue(ids.a, { date: '2026-10-01' })
+    await updateCard(ids.a, { due: { date: '2026-10-01' } })
 
     const card = await getCard(ids.a)
     expect(card.dueAt?.toISOString()).toBe('2026-09-30T21:00:00.000Z')
@@ -482,7 +539,7 @@ describe('срок карточки', () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
 
-    await setCardDue(ids.a, { date: '2026-10-01', time: '14:30' })
+    await updateCard(ids.a, { due: { date: '2026-10-01', time: '14:30' } })
 
     const card = await getCard(ids.a)
     expect(card.dueAt?.toISOString()).toBe('2026-10-01T11:30:00.000Z')
@@ -493,9 +550,13 @@ describe('срок карточки', () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
 
-    await expect(setCardDue(ids.a, { date: '2026-02-31' })).rejects.toThrow(InvalidInputError)
-    await expect(setCardDue(ids.a, { date: '01.10.2026' })).rejects.toThrow(InvalidInputError)
-    await expect(setCardDue(ids.a, { date: '2026-10-01', time: '25:70' })).rejects.toThrow(
+    await expect(updateCard(ids.a, { due: { date: '2026-02-31' } })).rejects.toThrow(
+      InvalidInputError,
+    )
+    await expect(updateCard(ids.a, { due: { date: '01.10.2026' } })).rejects.toThrow(
+      InvalidInputError,
+    )
+    await expect(updateCard(ids.a, { due: { date: '2026-10-01', time: '25:70' } })).rejects.toThrow(
       InvalidInputError,
     )
   })
@@ -503,10 +564,10 @@ describe('срок карточки', () => {
   it('снятый срок оставляет отметку «выполнено»: она про карточку, а не про срок', async () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
-    await setCardDue(ids.a, { date: '2026-10-01' })
-    await setCardDueDone(ids.a, true)
+    await updateCard(ids.a, { due: { date: '2026-10-01' } })
+    await updateCard(ids.a, { done: true })
 
-    await setCardDue(ids.a, null)
+    await updateCard(ids.a, { due: null })
 
     const card = await getCard(ids.a)
     expect(card.dueAt).toBeNull()
@@ -517,7 +578,7 @@ describe('срок карточки', () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
 
-    await setCardDueDone(ids.a, true)
+    await updateCard(ids.a, { done: true })
 
     expect((await getCard(ids.a)).dueDone).toBe(true)
   })
@@ -525,7 +586,7 @@ describe('срок карточки', () => {
   it('доска отдаёт срок карточки вместе с признаком времени', async () => {
     const b = await board('Доска', ['Бэклог'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
-    await setCardDue(ids.a, { date: '2026-10-01' })
+    await updateCard(ids.a, { due: { date: '2026-10-01' } })
 
     const full = await getBoard(b.id)
     const card = full.lists[0].cards.find((c) => c.id === ids.a)!
@@ -665,7 +726,7 @@ describe('доска карточки по ссылке', () => {
 describe('сроки для календарной сетки', () => {
   async function due(listId: string, title: string, date: string, time?: string) {
     const [id] = Object.values(await fill(listId, [title]))
-    await setCardDue(id, time === undefined ? { date } : { date, time })
+    await updateCard(id, { due: time === undefined ? { date } : { date, time } })
     return id
   }
 

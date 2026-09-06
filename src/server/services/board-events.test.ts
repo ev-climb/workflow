@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { publishBoardChanged, subscribeBoardChanged } from './board-events.ts'
 import { archiveList, createBoard, createList, renameList, restoreList } from './boards.ts'
-import { archiveCard, createCard, moveCard, renameCard, restoreCard } from './cards.ts'
+import { archiveCard, createCard, moveCard, restoreCard, updateCard } from './cards.ts'
+import { createLabel } from './labels.ts'
 
 /** Что вкладки увидели, пока шли мутации. */
 async function events(work: () => Promise<void>): Promise<string[]> {
@@ -73,7 +74,7 @@ describe('сервисы рассылают события', () => {
 
     const seen = await events(async () => {
       await renameList(list.id, 'Другой список')
-      await renameCard(card.id, 'Другая карточка')
+      await updateCard(card.id, { title: 'Другая карточка' })
       await moveCard({ cardId: card.id, listId: list.id })
       await archiveCard(card.id)
       await restoreCard(card.id)
@@ -82,6 +83,25 @@ describe('сервисы рассылают события', () => {
     })
 
     expect(seen).toEqual(Array<string>(7).fill(board.id))
+  })
+
+  it('составная правка карточки шлёт одно событие, а не по одному на поле', async () => {
+    const board = await createBoard({ title: 'Доска' })
+    const list = await createList({ boardId: board.id, title: 'Список' })
+    const card = await createCard({ listId: list.id, title: 'Карточка' })
+    const label = await createLabel({ boardId: board.id, name: 'баг', color: 'red' })
+
+    const seen = await events(async () => {
+      await updateCard(card.id, {
+        title: 'Другая карточка',
+        description: 'текст',
+        due: { date: '2026-10-01' },
+        done: true,
+        addLabelIds: [label.id],
+      })
+    })
+
+    expect(seen).toEqual([board.id])
   })
 
   it('заведение списка и карточки тоже слышно', async () => {

@@ -1,16 +1,7 @@
 import { NextResponse } from 'next/server'
 import { toCardView } from '@/lib/card-view'
 import { cardPatchBody, errorResponse, jsonBody, uuidParam } from '@/lib/http'
-import {
-  archiveCard,
-  describeCard,
-  getCard,
-  moveCard,
-  renameCard,
-  restoreCard,
-  setCardDue,
-  setCardDueDone,
-} from '@/server/services/cards'
+import { archiveCard, getCard, moveCard, restoreCard, updateCard } from '@/server/services/cards'
 
 type Params = { params: Promise<{ cardId: string }> }
 
@@ -33,10 +24,12 @@ export async function PATCH(request: Request, { params }: Params) {
     const body = await jsonBody(request, cardPatchBody)
     const id = uuidParam(cardId, 'карточки')
 
-    if ('title' in body) return NextResponse.json(await renameCard(id, body.title))
-    if ('description' in body) return NextResponse.json(await describeCard(id, body.description))
-    if ('due' in body) return NextResponse.json(await setCardDue(id, body.due))
-    if ('dueDone' in body) return NextResponse.json(await setCardDueDone(id, body.dueDone))
+    if ('title' in body) return NextResponse.json(await updateCard(id, { title: body.title }))
+    if ('description' in body) {
+      return NextResponse.json(await updateCard(id, { description: body.description }))
+    }
+    if ('due' in body) return NextResponse.json(await updateCard(id, { due: body.due }))
+    if ('dueDone' in body) return NextResponse.json(await updateCard(id, { done: body.dueDone }))
     if ('listId' in body) return NextResponse.json(await moveCard({ cardId: id, ...body }))
     return NextResponse.json(body.archived ? await archiveCard(id) : await restoreCard(id))
   } catch (error) {
