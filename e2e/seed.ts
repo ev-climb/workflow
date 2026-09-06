@@ -1,3 +1,4 @@
+import { truncateAll } from '../vitest.db.ts'
 import { testDatabaseUrl } from '../vitest.env.ts'
 import { BOARD, DOING, DOING_CARDS, EMPTY_BOARD, TODO, TODO_CARDS } from './fixture.ts'
 
@@ -10,16 +11,11 @@ export async function seed() {
   // клиент базы читает DATABASE_URL на старте модуля: сервисы импортируются после подмены
   process.env.DATABASE_URL = testDatabaseUrl()
 
-  const { sql } = await import('drizzle-orm')
-  const { db } = await import('../src/server/db/client.ts')
   const { createBoard, createList } = await import('../src/server/services/boards.ts')
   const { createCard } = await import('../src/server/services/cards.ts')
   const { setBoardSlot } = await import('../src/server/services/workspace.ts')
 
-  await db.execute(
-    sql`truncate boards, google_accounts, workspace_state, notes, note_folders
-        restart identity cascade`,
-  )
+  await truncateAll()
 
   const board = await createBoard({ title: BOARD })
   for (const [title, titles] of [
