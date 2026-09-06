@@ -92,7 +92,12 @@
     body::before,
     .beacon,
     .pulse,
-    .brand-breathe {
+    .brand-float,
+    .brand-glow,
+    .brand-draw,
+    .loader-bar,
+    .loader-screen,
+    .loader-rise {
       animation: none;
     }
   }
@@ -108,15 +113,63 @@
   }
 }
 
-@keyframes breathe {
+@keyframes mark-draw {
+  0% {
+    stroke-dashoffset: 104;
+  }
+  38%,
+  62% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -104;
+  }
+}
+
+@keyframes mark-glow {
   0%,
   100% {
-    opacity: 0.55;
-    transform: scale(1);
+    opacity: 0.28;
+    transform: scale(0.92);
+  }
+  45% {
+    opacity: 0.85;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
   }
   50% {
-    opacity: 1;
-    transform: scale(1.05);
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes loader-bar {
+  0% {
+    transform: translateX(-100%) scaleX(0.35);
+  }
+  50% {
+    transform: translateX(0) scaleX(0.72);
+  }
+  100% {
+    transform: translateX(100%) scaleX(0.35);
+  }
+}
+
+@keyframes loader-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes loader-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
 }
 
@@ -565,10 +618,39 @@
     animation: beacon 3s ease-in-out infinite;
   }
 
-  /* знак в ожидании страницы */
-  .brand-breathe {
-    animation: breathe 2.4s ease-in-out infinite;
-    filter: drop-shadow(0 10px 26px oklch(0.6 0.12 290 / 0.45));
+  /* знак в ожидании страницы: обводка, свечение под ней и лёгкое качание */
+  .brand-draw {
+    animation: mark-draw 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    filter: drop-shadow(0 6px 22px oklch(0.55 0.14 260 / 0.55));
+  }
+
+  .brand-glow {
+    background: linear-gradient(100deg, oklch(0.72 0.15 165), oklch(0.7 0.15 300));
+    animation: mark-glow 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .brand-float {
+    animation: float 4.6s ease-in-out infinite;
+  }
+
+  .loader-bar {
+    background: linear-gradient(
+      90deg,
+      oklch(0.78 0.14 165),
+      oklch(0.76 0.14 260),
+      oklch(0.74 0.15 305)
+    );
+    box-shadow: 0 0 14px oklch(0.7 0.14 260 / 0.8);
+    animation: loader-bar 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* заставка проявляется с задержкой: быстрая страница успевает прийти и не мелькает */
+  .loader-screen {
+    animation: loader-in 0.4s var(--ease-glide) 0.25s both;
+  }
+
+  .loader-rise {
+    animation: loader-rise 0.7s var(--ease-glide) 0.25s both;
   }
 }
 
