@@ -4,7 +4,7 @@ import { db } from '../db/client.ts'
 import { calendarEvents, cards, googleAccounts, googleCalendars } from '../db/schema.ts'
 import type { GoogleEvent } from '../google/events.ts'
 import { archiveList, createBoard, createList } from './boards.ts'
-import { archiveCard, createCard } from './cards.ts'
+import { archiveCard, createCard, renameCard } from './cards.ts'
 import { ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { listEvents } from './google-events.ts'
 import {
@@ -321,6 +321,30 @@ describe('зеркало тайм-блока в Google', () => {
       },
       null,
     )
+  })
+
+  it('переименование карточки доезжает до зеркала', async () => {
+    const calendarId = await calendar()
+    const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+    await mirrorTimeBlock(created.id, calendarId)
+
+    await renameCard(cardId, 'Починить пуши на айфоне')
+
+    expect(patchEvent).toHaveBeenCalledWith(
+      'ya29.access',
+      'me@gmail.com',
+      'mirror-1',
+      { title: 'Починить пуши на айфоне' },
+      null,
+    )
+  })
+
+  it('карточка без зеркал переименовывается, не ходя в Google', async () => {
+    await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+
+    await renameCard(cardId, 'Починить пуши на айфоне')
+
+    expect(patchEvent).not.toHaveBeenCalled()
   })
 
   it('зеркало не двоится на сетке: блок его уже рисует', async () => {

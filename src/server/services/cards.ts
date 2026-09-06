@@ -7,7 +7,7 @@ import { publishBoardChanged } from './board-events.ts'
 import { parseCardInput } from './card-input.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
-import { unmirrorCardBlocks } from './time-blocks.ts'
+import { retitleCardBlocks, unmirrorCardBlocks } from './time-blocks.ts'
 
 const TITLE_MAX = 512
 
@@ -258,6 +258,8 @@ export async function renameCard(cardId: string, newTitle: string): Promise<Card
     .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
 
   if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
+
+  await retitleCardBlocks(cardId, name)
 
   publishBoardChanged(card.boardId)
   return updated

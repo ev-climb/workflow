@@ -217,6 +217,33 @@ export async function unmirrorCardBlocks(cardIds: string[]): Promise<void> {
 }
 
 /**
+ * Название карточки на её зеркалах в Google. Зеркало показывает карточку под её именем,
+ * поэтому переименование обязано доехать и туда: иначе в календаре навсегда остаётся
+ * старое, и расхождение ничем не всплывает.
+ */
+export async function retitleCardBlocks(cardId: string, title: string): Promise<void> {
+  const mirrored = await db
+    .select({
+      calendarId: timeBlocks.calendarId,
+      googleEventId: timeBlocks.googleEventId,
+    })
+    .from(timeBlocks)
+    .where(and(eq(timeBlocks.cardId, cardId), isNotNull(timeBlocks.googleEventId)))
+  if (mirrored.length === 0) return
+
+  for (const block of mirrored) {
+    if (!block.calendarId || !block.googleEventId) continue
+
+    const calendar = await calendarOf(block.calendarId)
+    const accessToken = await accessTokenFor(calendar.accountId)
+    // `If-Match` не шлём по той же причине, что и в moveTimeBlock: своего etag у зеркала нет
+    await patchEvent(accessToken, calendar.googleCalendarId, block.googleEventId, { title }, null)
+  }
+
+  publishCalendarChanged()
+}
+
+/**
  * Время под карточку: блок заводится броском карточки на сетку. Своего названия у него
  * нет и не будет — он показывает карточку, а не отдельную запись, и переименовывать его
  * отдельно от неё значило бы развести их по смыслу.
