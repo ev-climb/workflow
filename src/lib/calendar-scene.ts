@@ -1,5 +1,5 @@
 import type { CalendarTask } from '@/server/services/google-tasks'
-import type { Target } from './calendar-drag'
+import { targetKey, type Held, type Range } from './calendar-drag'
 import { addDays } from './calendar-grid'
 import {
   placeAllDay,
@@ -36,6 +36,15 @@ export type StripeTarget =
 /** Полоса в переносе: за какой день взялись и какой сейчас под курсором. */
 export type StripeDrag = { target: StripeTarget; from: string; day: string }
 
+const keyOf = (kind: StripeTarget['kind'], id: string) => `${kind}:${id}`
+
+/** Ключ полосы: сроки, задачи и события на весь день нумерованы каждый по-своему. */
+export function stripeKey(target: StripeTarget): string {
+  if (target.kind === 'allday') return keyOf('allday', target.event.id)
+  if (target.kind === 'due') return keyOf('due', target.due.id)
+  return keyOf('task', target.task.id)
+}
+
 /**
  * Событие и тайм-блок раскладываются одним проходом: делить ширину они должны между
  * собой, а не каждый со своими. Идентификатор блока разведён приставкой — ключ раскладки
@@ -68,51 +77,45 @@ function gridItems(events: TimedView[], blocks: TimeBlockView[]): GridItem[] {
   ]
 }
 
-function holds(target: Target | null, type: Target['type'], id: string): boolean {
-  return target?.type === type && target.id === id
-}
-
 /**
  * Полоса, которую тащат, раскладывается по дню под курсором, а не по записанному: так она
  * встаёт в свободный ряд дня-приёмника, а не наезжает на чужую полосу.
  */
-function previewAllDay(
-  shown: AllDayView[],
-  days: string[],
-  held: StripeDrag | null,
-): AllDayView[] {
-  if (held === null || held.target.kind !== 'allday') return shown
+function previewAllDay(shown: AllDayView[], days: string[], held: StripeDrag[]): AllDayView[] {
+  const shifts = new Map<string, number>()
+  for (const one of held) {
+    if (one.target.kind !== 'allday') continue
+    const shift = days.indexOf(one.day) - days.indexOf(one.from)
+    if (shift !== 0) shifts.set(one.target.event.id, shift)
+  }
+  if (shifts.size === 0) return shown
 
-  const moving = held.target.event.id
-  const shift = days.indexOf(held.day) - days.indexOf(held.from)
-  if (shift === 0) return shown
-
-  return shown.map((event) =>
-    event.id === moving
-      ? {
+  return shown.map((event) => {
+    const shift = shifts.get(event.id)
+    return shift === undefined
+      ? event
+      : {
           ...event,
           startDate: addDays(event.startDate, shift),
           endDate: addDays(event.endDate, shift),
         }
-      : event,
-  )
+  })
 }
 
 function previewStripes(
   items: StripeEntry<CardDueView, CalendarTask>[],
-  held: StripeDrag | null,
+  held: StripeDrag[],
 ): StripeEntry<CardDueView, CalendarTask>[] {
-  if (held === null || held.target.kind === 'allday') return items
+  const moved = new Map<string, string>()
+  for (const one of held) {
+    if (one.target.kind !== 'allday') moved.set(stripeKey(one.target), one.day)
+  }
+  if (moved.size === 0) return items
 
-  const kind = held.target.kind
-  const moving = held.target.kind === 'due' ? held.target.due.id : held.target.task.id
-  const day = held.day
-
-  return items.map((item) =>
-    item.kind === kind && (item.kind === 'due' ? item.due.id : item.task.id) === moving
-      ? { ...item, day }
-      : item,
-  )
+  return items.map((item) => {
+    const day = moved.get(keyOf(item.kind, item.kind === 'due' ? item.due.id : item.task.id))
+    return day === undefined ? item : { ...item, day }
+  })
 }
 
 /** Место полосы: сроку и задаче от раскладки нужны только клетка дня и ряд в ней. */
@@ -132,7 +135,7 @@ export function stripeScene(input: {
   events: CalendarEventView[]
   dues: CardDueView[]
   tasks: CalendarTask[]
-  held: StripeDrag | null
+  held: StripeDrag[]
 }): StripeScene {
   const { days, events, dues, tasks, held } = input
 
@@ -144,35 +147,44 @@ export function stripeScene(input: {
   }
 }
 
+/** Заготовка вместо удержанного куска: отрезок и то, что за ним стоит. */
+export type GridDraft = { range: Range; event: TimedView | null; title?: string }
+
 export type GridScene = {
   /** События со временем и тайм-блоки вперемешку: раскладка по дням идёт по ним разом. */
   items: GridItem[]
-  /** Что тащат прямо сейчас: заготовка рисуется по нему, а с прежнего места оно снято. */
-  heldEvent: TimedView | null
-  heldBlock: TimeBlockView | null
+  /** Заготовки по всем удержаниям разом: с прежних мест эти куски сняты. */
+  drafts: GridDraft[]
 }
 
 /**
  * Содержимое временной сетки. Функция чистая: жест приносит сюда своё состояние — то, что
- * тащат, — и получает раскладку, уже учитывающую движение.
+ * тащат и что дописывается в Google, — и получает раскладку, уже учитывающую движение.
  */
 export function gridScene(input: {
   events: CalendarEventView[]
   blocks: TimeBlockView[]
-  held: Target | null
+  held: Held[]
 }): GridScene {
   const { events, blocks, held } = input
   const timed = events.filter(isTimed)
+  const keys = new Set(held.flatMap((one) => (one.target ? [targetKey(one.target)] : [])))
 
-  // то, что тащат, рисуется заготовкой: на прежнем месте его быть не должно
+  // то, что удерживают, рисуется заготовкой: на прежнем месте его быть не должно
   const items = gridItems(
-    timed.filter((event) => !holds(held, 'event', event.id)),
-    blocks.filter((block) => !holds(held, 'block', block.id)),
+    timed.filter((event) => !keys.has(targetKey({ type: 'event', id: event.id }))),
+    blocks.filter((block) => !keys.has(targetKey({ type: 'block', id: block.id }))),
   )
 
   return {
     items,
-    heldEvent: held?.type === 'event' ? (timed.find((one) => one.id === held.id) ?? null) : null,
-    heldBlock: held?.type === 'block' ? (blocks.find((one) => one.id === held.id) ?? null) : null,
+    drafts: held.map(({ target, range }) => ({
+      range,
+      event: target?.type === 'event' ? (timed.find((one) => one.id === target.id) ?? null) : null,
+      title:
+        target?.type === 'block'
+          ? blocks.find((one) => one.id === target.id)?.cardTitle
+          : undefined,
+    })),
   }
 }

@@ -1,15 +1,12 @@
 'use client'
 
-import { timeLabel, type Range } from '@/lib/calendar-drag'
+import { timeLabel } from '@/lib/calendar-drag'
 import { MINUTES_IN_DAY, isToday } from '@/lib/calendar-grid'
 import type { PlacedEvent } from '@/lib/calendar-layout'
-import type { GridItem, TimedView } from '@/lib/calendar-scene'
+import type { GridDraft, GridItem } from '@/lib/calendar-scene'
 import { EventBlock, TaskBlock, TimeBlockChip } from './Blocks'
 import { DAY_PX, HOUR_LINES, type OpenHandler, type TaskOpenHandler } from './grid'
 import type { GridDrag } from './use-grid-drag'
-
-/** Заготовка под курсором вместе с тем, что за ней стоит: событие или название карточки. */
-export type DayDraft = { range: Range; event: TimedView | null; title?: string }
 
 /**
  * Колонка одного дня: разложенные блоки, заготовки под курсором и линия текущего времени.
@@ -29,7 +26,7 @@ export function DayColumn({
 }: {
   day: string
   placed: PlacedEvent<GridItem>[]
-  drafts: DayDraft[]
+  drafts: GridDraft[]
   drag: GridDrag
   now: Date | null
   /** Минута линии текущего времени, если она в этом дне. */
@@ -91,7 +88,7 @@ export function DayColumn({
  * Заготовка под курсором: выделение под новое событие или блок, который тащат. Событий не
  * ловит — иначе она закрывала бы колонку, над которой её держат.
  */
-function Draft({ range, event, title }: DayDraft) {
+function Draft({ range, event, title }: GridDraft) {
   const color = event?.color ?? null
 
   return (

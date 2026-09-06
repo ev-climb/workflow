@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CalendarTask } from '@/server/services/google-tasks'
-import type { Target } from './calendar-drag'
+import type { Held, Range, Target } from './calendar-drag'
 import { gridScene, stripeScene, type AllDayView, type StripeDrag } from './calendar-scene'
 import type { CalendarEventView, CardDueView, TimeBlockView } from './calendar-view'
 
@@ -62,23 +62,27 @@ function task(id: string, day: string): CalendarTask {
   return { id, color: '#33b679', title: 'Купить билеты', due: day, completed: false }
 }
 
+const range = (day: string, start: number, end: number): Range => ({ day, start, end })
+
+const holding = (target: Target, at: Range): Held => ({ target, range: at })
+
 function scene(input: {
   events?: CalendarEventView[]
   blocks?: TimeBlockView[]
   dues?: CardDueView[]
   tasks?: CalendarTask[]
-  held?: Target | null
-  heldStripe?: StripeDrag | null
+  held?: Held[]
+  heldStripes?: StripeDrag[]
 }) {
   const events = input.events ?? []
   return {
-    ...gridScene({ events, blocks: input.blocks ?? [], held: input.held ?? null }),
+    ...gridScene({ events, blocks: input.blocks ?? [], held: input.held ?? [] }),
     ...stripeScene({
       days: DAYS,
       events,
       dues: input.dues ?? [],
       tasks: input.tasks ?? [],
-      held: input.heldStripe ?? null,
+      held: input.heldStripes ?? [],
     }),
   }
 }
@@ -102,32 +106,52 @@ describe('раскладка сетки', () => {
     expect(built.allDay.map((one) => one.event.id)).toEqual(['a1'])
   })
 
-  it('снимает с прежнего места то, что тащат, и отдаёт его отдельно', () => {
+  it('снимает с прежнего места то, что тащат, и отдаёт его заготовкой', () => {
     const held = scene({
       events: [timed()],
       blocks: [block('b', '12:00', '13:00')],
-      held: { type: 'event', id: 'e1' },
+      held: [holding({ type: 'event', id: 'e1' }, range(DAYS[0], 600, 660))],
     })
 
     expect(held.items.map((one) => one.id)).toEqual(['block:b'])
-    expect(held.heldEvent?.id).toBe('e1')
-    expect(held.heldBlock).toBeNull()
+    expect(held.drafts).toEqual([
+      {
+        range: range(DAYS[0], 600, 660),
+        event: expect.objectContaining({ id: 'e1' }),
+        title: undefined,
+      },
+    ])
 
     const dragged = scene({
       events: [timed()],
       blocks: [block('b', '12:00', '13:00')],
-      held: { type: 'block', id: 'b' },
+      held: [holding({ type: 'block', id: 'b' }, range(DAYS[0], 780, 840))],
     })
 
     expect(dragged.items.map((one) => one.id)).toEqual(['e1'])
-    expect(dragged.heldBlock?.id).toBe('b')
+    expect(dragged.drafts[0].event).toBeNull()
+    expect(dragged.drafts[0].title).toBe('Починить пуши')
+  })
+
+  it('держит несколько целей разом: соседний перенос не возвращает первую на место', () => {
+    const built = scene({
+      events: [timed()],
+      blocks: [block('b', '12:00', '13:00')],
+      held: [
+        holding({ type: 'event', id: 'e1' }, range(DAYS[0], 600, 660)),
+        holding({ type: 'block', id: 'b' }, range(DAYS[1], 780, 840)),
+      ],
+    })
+
+    expect(built.items).toEqual([])
+    expect(built.drafts.map((one) => one.range.day)).toEqual([DAYS[0], DAYS[1]])
   })
 
   it('раскладывает событие на весь день по дню под курсором, а не по записанному', () => {
     const event = allDay('a1', DAYS[0], DAYS[1])
     const built = scene({
       events: [event],
-      heldStripe: { target: { kind: 'allday', event }, from: DAYS[0], day: DAYS[2] },
+      heldStripes: [{ target: { kind: 'allday', event }, from: DAYS[0], day: DAYS[2] }],
     })
 
     // сутки уехали на два дня вперёд: полоса встаёт в третью колонку, а не в первую
@@ -138,16 +162,47 @@ describe('раскладка сетки', () => {
     const moved = scene({
       dues: [due('d1', DAYS[0])],
       tasks: [task('t1', DAYS[0])],
-      heldStripe: {
-        target: { kind: 'due', due: due('d1', DAYS[0]) },
-        from: DAYS[0],
-        day: DAYS[1],
-      },
+      heldStripes: [
+        { target: { kind: 'due', due: due('d1', DAYS[0]) }, from: DAYS[0], day: DAYS[1] },
+      ],
     })
 
     expect(moved.stripes.map((one) => [one.item.kind, one.index])).toEqual([
       ['due', 1],
       ['task', 0],
+    ])
+  })
+
+  it('держит срок и задачу порознь: запись одной не возвращает другую в её день', () => {
+    const both = scene({
+      dues: [due('d1', DAYS[0])],
+      tasks: [task('t1', DAYS[0])],
+      heldStripes: [
+        { target: { kind: 'due', due: due('d1', DAYS[0]) }, from: DAYS[0], day: DAYS[1] },
+        { target: { kind: 'task', task: task('t1', DAYS[0]) }, from: DAYS[0], day: DAYS[2] },
+      ],
+    })
+
+    expect(both.stripes.map((one) => [one.item.kind, one.index])).toEqual([
+      ['due', 1],
+      ['task', 2],
+    ])
+  })
+
+  it('держит два события на весь день разом, каждое со своим сдвигом', () => {
+    const first = allDay('a1', DAYS[0], DAYS[1])
+    const second = allDay('a2', DAYS[0], DAYS[1])
+    const built = scene({
+      events: [first, second],
+      heldStripes: [
+        { target: { kind: 'allday', event: first }, from: DAYS[0], day: DAYS[1] },
+        { target: { kind: 'allday', event: second }, from: DAYS[0], day: DAYS[2] },
+      ],
+    })
+
+    expect(built.allDay.map((one) => [one.event.id, one.index])).toEqual([
+      ['a1', 1],
+      ['a2', 2],
     ])
   })
 })

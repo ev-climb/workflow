@@ -4,9 +4,10 @@ import { useRef } from 'react'
 import { Failure } from '@/components/board/Failure'
 import type { Range } from '@/lib/calendar-drag'
 import { HOURS, dayNumber, isToday, nowOffset, weekdayLabel } from '@/lib/calendar-grid'
+import type { GridDraft } from '@/lib/calendar-scene'
 import type { CalendarEventView, CardDueView, TimeBlockView } from '@/lib/calendar-view'
 import type { CalendarTask } from '@/server/services/google-tasks'
-import { DayColumn, type DayDraft } from './DayColumn'
+import { DayColumn } from './DayColumn'
 import { AllDayRow, StripeRow } from './Stripes'
 import { DAY_PX, HOUR_PX, RAIL, columns, type OpenHandler, type TaskOpenHandler } from './grid'
 import { useDayColumns } from './use-day-columns'
@@ -57,14 +58,12 @@ export function CalendarGrid({
     blocks,
     dues,
     tasks,
-    held: drag.held?.target ?? null,
-    heldStripe: stripes.held,
+    held: drag.held,
+    heldStripes: stripes.held,
   })
 
-  const drafts: DayDraft[] = [
-    ...(drag.held
-      ? [{ range: drag.held.range, event: scene.heldEvent, title: scene.heldBlock?.cardTitle }]
-      : []),
+  const drafts: GridDraft[] = [
+    ...scene.drafts,
     ...(drop.dropping
       ? [{ range: drop.dropping.range, event: null, title: drop.dropping.title }]
       : []),

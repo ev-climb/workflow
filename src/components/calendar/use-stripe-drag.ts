@@ -1,13 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMoveCardDue } from '@/lib/board-mutations'
 import { addDays } from '@/lib/calendar-grid'
 import { useSetEventTimes, useSetTaskDue } from '@/lib/calendar-mutations'
-import type { StripeDrag, StripeTarget } from '@/lib/calendar-scene'
+import { stripeKey, type StripeDrag, type StripeTarget } from '@/lib/calendar-scene'
 import { moscowParts } from '@/lib/dates'
 import { cardHref, type OpenHandler, type TaskOpenHandler } from './grid'
 import type { DayColumns } from './use-day-columns'
+
+/** Полоса в записи: метка отличает её от нового удержания той же полосы. */
+type Pending = StripeDrag & { stamp: number }
 
 /** Чем полоса цепляется к переносу: захват указателя идёт на ней самой, как и у блока. */
 export type Grip = {
@@ -18,8 +21,8 @@ export type Grip = {
 }
 
 export type StripeGesture = {
-  /** Полоса под курсором или в записи: раскладка ставит её в день, где её держат. */
-  held: StripeDrag | null
+  /** Полосы под курсором и в записи: раскладка ставит каждую в день, где её держат. */
+  held: StripeDrag[]
   grip: (target: StripeTarget) => Grip
   error: Error | null
 }
@@ -38,10 +41,13 @@ export function useStripeDrag(input: {
   const { days, columns, onOpen, onOpenTask } = input
   const [drag, setDrag] = useState<StripeDrag | null>(null)
   /**
-   * Полоса, уехавшая в запрос, но ещё не приехавшая обратно: пока идёт запись, держится на
-   * новом дне — иначе она прыгала бы назад на время похода в сеть, как и блок на сетке.
+   * Полосы, уехавшие в запрос, но ещё не приехавшие обратно: пока идёт запись, каждая
+   * держится на новом дне — иначе она прыгала бы назад на время похода в сеть, как и блок
+   * на сетке. По записи на полосу: одна на всех гасила бы соседний перенос.
    */
-  const [pending, setPending] = useState<StripeDrag | null>(null)
+  const [pending, setPending] = useState<ReadonlyMap<string, Pending>>(new Map())
+  /** Метка записи: ответ прежнего запроса не должен снимать удержание, поставленное после. */
+  const stamp = useRef(0)
   const setTimes = useSetEventTimes()
   const setTaskDue = useSetTaskDue()
   const moveDue = useMoveCardDue()
@@ -82,9 +88,19 @@ export function useStripeDrag(input: {
   }
 
   function move(held: StripeDrag) {
-    setPending(held)
-    const settle = { onSettled: () => setPending(null) }
     const { target } = held
+    const key = stripeKey(target)
+    const mine = ++stamp.current
+    setPending((shown) => new Map(shown).set(key, { ...held, stamp: mine }))
+    const settle = {
+      onSettled: () =>
+        setPending((shown) => {
+          if (shown.get(key)?.stamp !== mine) return shown
+          const rest = new Map(shown)
+          rest.delete(key)
+          return rest
+        }),
+    }
 
     if (target.kind === 'task') {
       setTaskDue.mutate({ id: target.task.id, due: held.day }, settle)
@@ -116,8 +132,15 @@ export function useStripeDrag(input: {
     )
   }
 
+  // жест перебивает своё же удержание: двух полос под одной целью быть не должно
+  const held = useMemo(() => {
+    const shown = new Map<string, StripeDrag>(pending)
+    if (drag) shown.set(stripeKey(drag.target), drag)
+    return [...shown.values()]
+  }, [drag, pending])
+
   return {
-    held: drag ?? pending,
+    held,
     grip: (target) => ({
       onPointerDown: (pointer) => grab(pointer, target),
       onPointerMove: advance,

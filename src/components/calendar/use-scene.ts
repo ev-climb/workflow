@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import type { Target } from '@/lib/calendar-drag'
+import type { Held } from '@/lib/calendar-drag'
 import { placeDay, type PlacedEvent } from '@/lib/calendar-layout'
 import {
   gridScene,
@@ -35,15 +35,15 @@ export function useScene(input: {
   blocks: TimeBlockView[]
   dues: CardDueView[]
   tasks: CalendarTask[]
-  held: Target | null
-  heldStripe: StripeDrag | null
+  held: Held[]
+  heldStripes: StripeDrag[]
 }): Scene {
-  const { days, events, blocks, dues, tasks, held, heldStripe } = input
+  const { days, events, blocks, dues, tasks, held, heldStripes } = input
 
   const grid = useMemo(() => gridScene({ events, blocks, held }), [events, blocks, held])
   const bands = useMemo(
-    () => stripeScene({ days, events, dues, tasks, held: heldStripe }),
-    [days, events, dues, tasks, heldStripe],
+    () => stripeScene({ days, events, dues, tasks, held: heldStripes }),
+    [days, events, dues, tasks, heldStripes],
   )
   const placed = useMemo(() => days.map((day) => placeDay(grid.items, day)), [days, grid.items])
 

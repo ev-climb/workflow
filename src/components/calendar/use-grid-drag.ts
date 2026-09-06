@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   moved,
   rangeTimes,
@@ -8,7 +8,9 @@ import {
   sameRange,
   selection,
   snapMinutes,
+  targetKey,
   type DragKind,
+  type Held,
   type Range,
   type Target,
 } from '@/lib/calendar-drag'
@@ -26,12 +28,18 @@ type Drag = {
   grabbed: number
 }
 
+/** Удержание в записи: метка отличает его от нового удержания той же цели. */
+type Pending = Held & { stamp: number }
+
 export type GrabHandler = (
   event: React.PointerEvent,
   kind: DragKind,
   base: Range,
   target: Target | null,
 ) => void
+
+/** Ключ выделения: цели у него нет, а место среди удержаний нужно. */
+const SELECTION = 'selection'
 
 /** Минута сетки под курсором. Колонки одной высоты, поэтому годится любая из них. */
 function minutesIn(column: HTMLElement, clientY: number): number {
@@ -46,8 +54,8 @@ function dayUnder(clientX: number, clientY: number): string | null {
 }
 
 export type GridDrag = {
-  /** Отрезок под заготовкой: его тащат прямо сейчас или уже дописывают в Google. */
-  held: { target: Target | null; range: Range } | null
+  /** Отрезки под заготовками: один тащат прямо сейчас, остальные дописываются в Google. */
+  held: Held[]
   grab: GrabHandler
   advance: (event: React.PointerEvent) => void
   finish: () => void
@@ -69,10 +77,13 @@ export function useGridDrag(input: {
   const { events, blocks, onSelect, onOpen } = input
   const [drag, setDrag] = useState<Drag | null>(null)
   /**
-   * Отрезок, записанный в Google, но ещё не приехавший обратно: пока идёт запрос, блок
+   * Отрезки, записанные в Google, но ещё не приехавшие обратно: пока идёт запрос, блок
    * держится на новом месте. Иначе событие прыгало бы назад на время похода в сеть.
+   * По записи на цель, а не одна на всю сетку: соседний перенос гасил бы чужое удержание.
    */
-  const [pending, setPending] = useState<{ target: Target; range: Range } | null>(null)
+  const [pending, setPending] = useState<ReadonlyMap<string, Pending>>(new Map())
+  /** Метка записи: ответ прежнего запроса не должен снимать удержание, поставленное после. */
+  const stamp = useRef(0)
   const setTimes = useSetEventTimes()
   const moveBlock = useMoveTimeBlock()
 
@@ -133,9 +144,20 @@ export function useGridDrag(input: {
       return
     }
 
-    setPending({ target: moving, range: current.range })
+    const key = targetKey(moving)
+    const mine = ++stamp.current
+    const holding = { target: moving, range: current.range, stamp: mine }
+    setPending((shown) => new Map(shown).set(key, holding))
     const times = rangeTimes(current.range)
-    const settle = { onSettled: () => setPending(null) }
+    const settle = {
+      onSettled: () =>
+        setPending((shown) => {
+          if (shown.get(key)?.stamp !== mine) return shown
+          const rest = new Map(shown)
+          rest.delete(key)
+          return rest
+        }),
+    }
     if (moving.type === 'event') {
       setTimes.mutate({ id: moving.id, times }, settle)
       return
@@ -143,8 +165,15 @@ export function useGridDrag(input: {
     moveBlock.mutate({ id: moving.id, startsAt: times.startsAt, endsAt: times.endsAt }, settle)
   }
 
+  // жест перебивает своё же удержание: двух заготовок под одной целью быть не должно
+  const held = useMemo(() => {
+    const shown = new Map<string, Held>(pending)
+    if (drag) shown.set(drag.target ? targetKey(drag.target) : SELECTION, drag)
+    return [...shown.values()]
+  }, [drag, pending])
+
   return {
-    held: drag ?? pending,
+    held,
     grab,
     advance,
     finish,

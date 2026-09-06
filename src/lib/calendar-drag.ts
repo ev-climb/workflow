@@ -32,6 +32,14 @@ export type DragKind = 'select' | 'move' | 'start' | 'end'
 /** Кого тащат: событие календаря или тайм-блок. Время у них правится разными записями. */
 export type Target = { type: 'event' | 'block'; id: string }
 
+/** Ключ цели: идентификаторы события и блока живут порознь и вполне могут совпасть. */
+export function targetKey(target: Target): string {
+  return `${target.type}:${target.id}`
+}
+
+/** Удержание: отрезок, на котором вещь стоит, пока её тащат или дописывают в Google. */
+export type Held = { target: Target | null; range: Range }
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
