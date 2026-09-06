@@ -11,14 +11,7 @@ import {
 import { publishCalendarChanged } from './board-events.ts'
 import { NotFoundError, ReauthRequiredError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
-
-/**
- * ADR-008, правило 5: окно полной синхронизации прибито к моменту запроса и само вперёд
- * не едет. Раз в месяц синхронизация идёт полной заново, иначе горизонт не катится.
- */
-const FULL_RESYNC_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000
-
-const INSERT_CHUNK = 500
+import { INSERT_CHUNK, chunks, lastPerKey, needsFullSync } from './google-shared.ts'
 
 export type CalendarSyncResult = {
   calendarId: string
@@ -37,12 +30,6 @@ const CALENDAR = {
   googleCalendarId: googleCalendars.googleCalendarId,
   syncToken: googleCalendars.syncToken,
   fullSyncedAt: googleCalendars.fullSyncedAt,
-}
-
-function chunks<T>(items: T[], size: number): T[][] {
-  const result: T[][] = []
-  for (let at = 0; at < items.length; at += size) result.push(items.slice(at, at + size))
-  return result
 }
 
 /**
@@ -71,17 +58,6 @@ async function markCancelled(calendarId: string, events: GoogleEvent[]): Promise
   }
 
   return cancelled
-}
-
-/**
- * Пагинация у Google не снимок: событие, изменённое между запросами соседних страниц,
- * приезжает в пачке дважды. Повтор ключа внутри одного `INSERT ... ON CONFLICT` Постгрес
- * не берёт — оставляем последнюю версию, она же самая свежая.
- */
-function lastPerKey<T>(items: T[], key: (item: T) => string): T[] {
-  const byKey = new Map<string, T>()
-  for (const item of items) byKey.set(key(item), item)
-  return [...byKey.values()]
 }
 
 type TimedEvent = GoogleEvent & { times: EventTimes }
@@ -165,10 +141,7 @@ export async function syncCalendar(id: string, now: Date = new Date()): Promise<
   const [calendar] = await db.select(CALENDAR).from(googleCalendars).where(eq(googleCalendars.id, id))
   if (!calendar) throw new NotFoundError(`календаря ${id} нет`)
 
-  const stale =
-    !calendar.fullSyncedAt ||
-    now.getTime() - calendar.fullSyncedAt.getTime() > FULL_RESYNC_INTERVAL_MS
-  let syncToken = stale ? null : calendar.syncToken
+  let syncToken = needsFullSync(calendar.fullSyncedAt, now) ? null : calendar.syncToken
   const accessToken = await accessTokenFor(calendar.accountId)
 
   let page

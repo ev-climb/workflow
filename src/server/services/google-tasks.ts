@@ -12,6 +12,7 @@ import {
 } from '../google/tasks.ts'
 import { ConflictError, InvalidInputError, NotFoundError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
+import { writeThroughEtag } from './google-shared.ts'
 import { applyTasks } from './google-tasks-sync.ts'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -201,19 +202,9 @@ async function locateTask(id: string) {
   return task
 }
 
-function reportConflict(googleTaskId: string, ours: TaskPatch, theirs: GoogleTask | null): void {
-  const when = theirs?.googleUpdatedAt?.toISOString() ?? 'неизвестно когда'
-  const what = theirs ? `правка в Google от ${when}` : 'задача стёрта в Google'
-  console.warn(
-    `конфликт записи задачи ${googleTaskId}: ${what}, наш etag устарел;` +
-      ` наши поля: ${Object.keys(ours).join(', ')}`,
-  )
-}
-
 /**
- * Правка задачи в Google: `PATCH` с `If-Match`, и отметка выполнения идёт тем же путём.
- * На `412` задача перечитывается, чужая версия ложится в базу, и правка накладывается
- * поверх неё вторым `PATCH` — правило «выигрывает более свежая правка».
+ * Правка задачи в Google, и отметка выполнения идёт тем же путём. Разрешение конфликта
+ * на `412` общее с событиями — оно в `writeThroughEtag`.
  *
  * Ответ Google раскладывается у себя тем же кодом, что и синхронизация: своего
  * представления о том, что записалось, мы не строим.
@@ -223,47 +214,21 @@ export async function updateTask(id: string, changes: TaskChanges): Promise<Task
   const task = await locateTask(id)
   const accessToken = await accessTokenFor(task.accountId)
 
-  try {
-    const written = await patchTask(
-      accessToken,
-      task.googleTaskListId,
-      task.googleTaskId,
-      patch,
-      task.etag,
-    )
-    await applyTasks(task.accountId, task.taskListId, [written])
-    return { taskId: id, conflict: false, goneInGoogle: false }
-  } catch (error) {
-    if (!(error instanceof TaskEtagMismatchError)) throw error
-  }
+  const written = await writeThroughEtag({
+    subject: { of: 'задачи', gone: 'задача стёрта в Google', edited: 'задачу' },
+    googleId: task.googleTaskId,
+    fields: Object.keys(patch),
+    etag: task.etag,
+    mismatch: TaskEtagMismatchError,
+    patch: (etag) => patchTask(accessToken, task.googleTaskListId, task.googleTaskId, patch, etag),
+    fetch: () => fetchTask(accessToken, task.googleTaskListId, task.googleTaskId),
+    apply: async (remote) => {
+      await applyTasks(task.accountId, task.taskListId, [remote])
+    },
+    gone: () => goneTask(task.googleTaskId),
+  })
 
-  const current = await fetchTask(accessToken, task.googleTaskListId, task.googleTaskId)
-  reportConflict(task.googleTaskId, patch, current)
-
-  if (!current) {
-    await applyTasks(task.accountId, task.taskListId, [goneTask(task.googleTaskId)])
-    return { taskId: id, conflict: true, goneInGoogle: true }
-  }
-
-  await applyTasks(task.accountId, task.taskListId, [current])
-
-  try {
-    const written = await patchTask(
-      accessToken,
-      task.googleTaskListId,
-      task.googleTaskId,
-      patch,
-      current.etag,
-    )
-    await applyTasks(task.accountId, task.taskListId, [written])
-    return { taskId: id, conflict: true, goneInGoogle: false }
-  } catch (error) {
-    // второй подряд 412 — задачу правят прямо сейчас; крутить цикл дальше некуда
-    if (error instanceof TaskEtagMismatchError) {
-      throw new ConflictError(`задачу ${task.googleTaskId} правят в Google, правка не записана`)
-    }
-    throw error
-  }
+  return { taskId: id, ...written }
 }
 
 /**

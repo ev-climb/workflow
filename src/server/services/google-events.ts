@@ -28,6 +28,7 @@ import {
 import { ConflictError, ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
 import { isWritable } from './google-calendars.ts'
+import { writeThroughEtag } from './google-shared.ts'
 import { applyEvents } from './google-sync.ts'
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -318,15 +319,6 @@ function goneEvent(googleEventId: string): GoogleEvent {
   }
 }
 
-function reportConflict(googleEventId: string, ours: EventPatch, theirs: GoogleEvent | null): void {
-  const when = theirs?.googleUpdatedAt?.toISOString() ?? 'неизвестно когда'
-  const what = theirs ? `правка в Google от ${when}` : 'событие стёрто в Google'
-  console.warn(
-    `конфликт записи события ${googleEventId}: ${what}, наш etag устарел;` +
-      ` наши поля: ${Object.keys(ours).join(', ')}`,
-  )
-}
-
 /** Событие вместе с тем, что нужно для похода в Google: календарь, аккаунт, `etag`. */
 async function locateEvent(id: string) {
   const [event] = await db
@@ -340,11 +332,8 @@ async function locateEvent(id: string) {
 }
 
 /**
- * Правка события в Google: `PATCH` с `If-Match`. На `412` событие перечитывается, чужая
- * версия ложится в базу, и правка накладывается поверх неё вторым `PATCH` — правило
- * «выигрывает более свежая правка» из `02-technical.md`, раздел 4: наша правка приходит
- * сейчас, то есть она и есть более свежая. Чужие поля при этом остаются чужими: `PATCH`
- * несёт только то, что правим.
+ * Правка события в Google. Разрешение конфликта на `412` общее с задачами — оно в
+ * `writeThroughEtag`.
  *
  * Повторяющееся событие правится вхождением, а не серией: у нас лежит развёрнутый
  * экземпляр со своим идентификатором, ADR-004.
@@ -354,49 +343,25 @@ export async function updateEvent(id: string, changes: EventChanges): Promise<Ev
   const event = await locateEvent(id)
   const accessToken = await accessTokenFor(event.accountId)
 
-  try {
-    const written = await patchEvent(
-      accessToken,
-      event.googleCalendarId,
-      event.googleEventId,
-      patch,
-      event.etag,
-    )
-    await applyEvents(event.calendarId, [written])
-    return { eventId: id, conflict: false, goneInGoogle: false }
-  } catch (error) {
-    if (!(error instanceof EventEtagMismatchError)) throw error
-  }
+  const written = await writeThroughEtag({
+    subject: { of: 'события', gone: 'событие стёрто в Google', edited: 'событие' },
+    googleId: event.googleEventId,
+    fields: Object.keys(patch),
+    etag: event.etag,
+    mismatch: EventEtagMismatchError,
+    patch: (etag) =>
+      patchEvent(accessToken, event.googleCalendarId, event.googleEventId, patch, etag),
+    fetch: () => fetchEvent(accessToken, event.googleCalendarId, event.googleEventId),
+    apply: async (remote) => {
+      await applyEvents(event.calendarId, [remote])
+    },
+    gone: () => goneEvent(event.googleEventId),
+    // отменённое в Google событие правкой не воскрешаем: у нас нет ни просьбы об этом, ни
+    // способа отличить отмену от переноса в другой календарь
+    cancelled: (remote) => remote.status === 'cancelled',
+  })
 
-  const current = await fetchEvent(accessToken, event.googleCalendarId, event.googleEventId)
-  reportConflict(event.googleEventId, patch, current)
-
-  // отменённое в Google событие правкой не воскрешаем: у нас нет ни просьбы об этом, ни
-  // способа отличить отмену от переноса в другой календарь
-  if (!current || current.status === 'cancelled') {
-    await applyEvents(event.calendarId, [current ?? goneEvent(event.googleEventId)])
-    return { eventId: id, conflict: true, goneInGoogle: true }
-  }
-
-  await applyEvents(event.calendarId, [current])
-
-  try {
-    const written = await patchEvent(
-      accessToken,
-      event.googleCalendarId,
-      event.googleEventId,
-      patch,
-      current.etag,
-    )
-    await applyEvents(event.calendarId, [written])
-    return { eventId: id, conflict: true, goneInGoogle: false }
-  } catch (error) {
-    // второй подряд 412 — событие правят прямо сейчас; крутить цикл дальше некуда
-    if (error instanceof EventEtagMismatchError) {
-      throw new ConflictError(`событие ${event.googleEventId} правят в Google, правка не записана`)
-    }
-    throw error
-  }
+  return { eventId: id, ...written }
 }
 
 /**

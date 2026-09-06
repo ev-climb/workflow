@@ -5,14 +5,7 @@ import { type GoogleTask, TasksAccessError, fetchTaskLists, fetchTasks } from '.
 import { publishCalendarChanged } from './board-events.ts'
 import { NotFoundError, ReauthRequiredError } from './errors.ts'
 import { accessTokenFor } from './google-accounts.ts'
-
-/**
- * Раз в месяц список читается целиком заново. Разъехавшийся `updatedMin` молча теряет
- * правки — в отличие от негодного sync-токена, который отвечает `410` (ADR-012).
- */
-const FULL_RESYNC_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000
-
-const INSERT_CHUNK = 500
+import { INSERT_CHUNK, chunks, lastPerKey, needsFullSync } from './google-shared.ts'
 
 export type TaskListSyncResult = {
   taskListId: string
@@ -26,23 +19,6 @@ export type TaskListSyncResult = {
 export type AccountTasksSyncResult = {
   accountId: string
   lists: TaskListSyncResult[]
-}
-
-function chunks<T>(items: T[], size: number): T[][] {
-  const result: T[][] = []
-  for (let at = 0; at < items.length; at += size) result.push(items.slice(at, at + size))
-  return result
-}
-
-/**
- * Пагинация у Google не снимок: запись, изменённая между запросами соседних страниц,
- * приезжает в пачке дважды. Повтор ключа внутри одного `INSERT ... ON CONFLICT` Постгрес
- * не берёт — оставляем последнюю версию, она же самая свежая.
- */
-function lastPerKey<T>(items: T[], key: (item: T) => string): T[] {
-  const byKey = new Map<string, T>()
-  for (const item of items) byKey.set(key(item), item)
-  return [...byKey.values()]
 }
 
 /**
@@ -190,9 +166,7 @@ export async function syncTaskList(id: string, now: Date = new Date()): Promise<
     .where(eq(googleTaskLists.id, id))
   if (!list) throw new NotFoundError(`списка задач ${id} нет`)
 
-  const stale =
-    !list.fullSyncedAt || now.getTime() - list.fullSyncedAt.getTime() > FULL_RESYNC_INTERVAL_MS
-  const updatedMin = stale ? null : list.updatedMin
+  const updatedMin = needsFullSync(list.fullSyncedAt, now) ? null : list.updatedMin
   const full = !updatedMin
 
   const accessToken = await accessTokenFor(list.accountId)
