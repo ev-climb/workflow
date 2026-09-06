@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { checklistItemPatchBody, errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { checklistItemPatchBody } from '@/lib/schemas'
 import {
   deleteChecklistItem,
   moveChecklistItem,

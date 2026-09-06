@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, titleBody } from '@/lib/http'
+import { errorResponse, jsonBody } from '@/lib/http'
+import { titleBody } from '@/lib/schemas'
 import { createFolder, listFolders } from '@/server/services/notes'
 
 export async function GET() {

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, titleBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { titleBody } from '@/lib/schemas'
 import { createChecklist, listChecklists } from '@/server/services/checklists'
 
 type Params = { params: Promise<{ cardId: string }> }

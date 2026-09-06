@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, notePatchBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { notePatchBody } from '@/lib/schemas'
 import { archiveNote, deleteNote, getNote, restoreNote, updateNote } from '@/server/services/notes'
 
 type Params = { params: Promise<{ noteId: string }> }

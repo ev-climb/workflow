@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, timeBlockBody } from '@/lib/http'
+import { errorResponse, jsonBody } from '@/lib/http'
+import { timeBlockBody } from '@/lib/schemas'
 import { createTimeBlock, listTimeBlocks } from '@/server/services/time-blocks'
 
 export const dynamic = 'force-dynamic'

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { toEventDetailsView, toEventTimes } from '@/lib/calendar-view'
-import { errorResponse, eventPatchBody, jsonBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { eventPatchBody } from '@/lib/schemas'
 import { getEvent, removeEvent, updateEvent } from '@/server/services/google-events'
 import type { EventChanges } from '@/server/services/google-events'
 

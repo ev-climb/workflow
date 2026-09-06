@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { toCardView } from '@/lib/card-view'
-import { cardPatchBody, errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { cardPatchBody } from '@/lib/schemas'
 import { archiveCard, getCard, moveCard, restoreCard, updateCard } from '@/server/services/cards'
 
 type Params = { params: Promise<{ cardId: string }> }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, timeBlockPatchBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { timeBlockPatchBody } from '@/lib/schemas'
 import {
   mirrorTimeBlock,
   moveTimeBlock,

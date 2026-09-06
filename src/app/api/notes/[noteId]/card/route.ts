@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, noteToCardBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { noteToCardBody } from '@/lib/schemas'
 import { noteToCard } from '@/server/services/notes'
 
 /** Разбирает вход, зовёт сервис, сериализует ответ. Логики здесь нет — инвариант 2. */

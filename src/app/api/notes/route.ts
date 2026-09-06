@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, noteBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { noteBody } from '@/lib/schemas'
 import { createNote, listNotes } from '@/server/services/notes'
 
 /**

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, taskBody } from '@/lib/http'
+import { errorResponse, jsonBody } from '@/lib/http'
+import { taskBody } from '@/lib/schemas'
 import { createTask, listTasks } from '@/server/services/google-tasks'
 
 export const dynamic = 'force-dynamic'

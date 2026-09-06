@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, labelBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { labelBody } from '@/lib/schemas'
 import { createLabel } from '@/server/services/labels'
 
 /** Разбирает вход, зовёт сервис, сериализует ответ. Логики здесь нет — инвариант 2. */

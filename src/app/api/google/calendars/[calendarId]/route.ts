@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { calendarPatchBody, errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { calendarPatchBody } from '@/lib/schemas'
 import { updateGoogleCalendar } from '@/server/services/google-calendars'
 
 /** Разбирает вход, зовёт сервис, сериализует ответ. Логики здесь нет — инвариант 2. */

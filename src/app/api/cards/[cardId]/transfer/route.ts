@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, transferBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { transferBody } from '@/lib/schemas'
 import { moveCardToBoard, previewBoardMove } from '@/server/services/cards'
 
 type Params = { params: Promise<{ cardId: string }> }

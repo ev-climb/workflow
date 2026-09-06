@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { errorResponse, jsonBody, taskPatchBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { taskPatchBody } from '@/lib/schemas'
 import { getTask, updateTask } from '@/server/services/google-tasks'
 import type { TaskChanges } from '@/server/services/google-tasks'
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { accountPatchBody, errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
+import { accountPatchBody } from '@/lib/schemas'
 import { removeGoogleAccount, updateGoogleAccount } from '@/server/services/google-accounts'
 
 /** Разбирает вход, зовёт сервис, сериализует ответ. Логики здесь нет — инвариант 2. */

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { toEventTimes, toEventView } from '@/lib/calendar-view'
-import { errorResponse, eventBody, jsonBody } from '@/lib/http'
+import { errorResponse, jsonBody } from '@/lib/http'
+import { eventBody } from '@/lib/schemas'
 import { createEvent, listEvents } from '@/server/services/google-events'
 
 export const dynamic = 'force-dynamic'

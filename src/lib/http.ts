@@ -100,26 +100,3 @@ export function uuidParam(value: string, what: string): string {
   if (!isUuid(value)) throw new InvalidInputError(`идентификатор ${what} не uuid`)
   return value
 }
-
-/** Схемы входа переехали в `schemas.ts` — маршруты по-прежнему берут их отсюда. */
-export {
-  accountPatchBody,
-  calendarPatchBody,
-  cardPatchBody,
-  checklistItemPatchBody,
-  eventBody,
-  eventPatchBody,
-  labelBody,
-  labelPatchBody,
-  noteBody,
-  noteItemPatchBody,
-  notePatchBody,
-  noteToCardBody,
-  patchBody,
-  taskBody,
-  taskPatchBody,
-  timeBlockBody,
-  timeBlockPatchBody,
-  titleBody,
-  transferBody,
-} from './schemas.ts'
