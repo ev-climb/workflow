@@ -151,7 +151,7 @@ export function BoardCard({ boards, boardId, slot, listId, card }: Props) {
       {...drag.attributes}
       {...(renaming ? {} : drag.listeners)}
       onClick={open}
-      className={`group/card relative ${CARD_FRAME} outline-none focus-visible:border-accent-line ${
+      className={`group/card relative cursor-pointer ${CARD_FRAME} outline-none focus-visible:border-accent-line ${
         // место карточки остаётся видимым: под курсором её рисует накладка
         drag.isDragging ? 'opacity-30' : 'surface-card-lift'
       }`}

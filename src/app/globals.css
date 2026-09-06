@@ -444,6 +444,29 @@
     color: var(--color-fog-faint);
   }
 
+  /* плюс у пункта, который заводит директорию заметок */
+  .badge-plus {
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border: 1px dashed rgb(255 255 255 / 0.2);
+    border-radius: 6px;
+    color: var(--color-fog-dim);
+    font-size: 12px;
+    line-height: 1;
+    transition: all 0.3s var(--ease-glide);
+  }
+
+  .menu-item[data-highlighted] .badge-plus {
+    transform: scale(1.1);
+    border-style: solid;
+    border-color: var(--color-accent-line);
+    background: var(--color-accent-wash);
+    box-shadow: 0 0 12px oklch(0.45 0.11 300);
+    color: #fff;
+  }
+
   /**
    * Время под карточку на сетке. Штриховка, а не заливка: цвет события приходит из
    * Google и может оказаться тем же, что у акцента, — тогда одинаковыми остались бы

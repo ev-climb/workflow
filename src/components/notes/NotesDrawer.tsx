@@ -142,9 +142,11 @@ export function NotesDrawer({ open, onOpenChange }: Props) {
                   <Select.Item
                     value={MANAGE}
                     aria-label="Директории"
-                    className="menu-item px-2 py-1 text-sm text-fog-dim"
+                    className="menu-item flex justify-center px-2 py-1.5"
                   >
-                    <Select.ItemText>+</Select.ItemText>
+                    <Select.ItemText>
+                      <span className="badge-plus">+</span>
+                    </Select.ItemText>
                   </Select.Item>
                 </Select.Viewport>
               </Select.Content>
