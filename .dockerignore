@@ -6,6 +6,7 @@ attachments
 .env
 .env.*
 !.env.example
+**/*tokens.json
 *.tsbuildinfo
 playwright-report
 test-results
