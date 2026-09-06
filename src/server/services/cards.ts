@@ -558,6 +558,20 @@ export async function moveCard(input: {
   return moved
 }
 
+/** Перенос в конец списка одним UPDATE под повтором: соседей из меню не выбирают. */
+async function moveCardToListEnd(cardId: string, listId: string): Promise<CardPosition> {
+  return withRankRetry(async () => {
+    const [updated] = await db
+      .update(cards)
+      .set({ listId, rank: rankAfter(await lastRank(listId)), updatedAt: new Date() })
+      .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
+      .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
+
+    if (!updated) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
+    return updated
+  })
+}
+
 /** Какие метки отвалятся при переносе. Диалог показывает это до подтверждения (ADR-005). */
 export async function previewBoardMove(
   cardId: string,
@@ -605,7 +619,8 @@ export async function moveCardToBoard(input: {
   const target = await locateList(input.listId)
 
   if (target.boardId === card.boardId) {
-    const moved = await moveCard({ cardId: input.cardId, listId: input.listId })
+    const moved = await moveCardToListEnd(input.cardId, input.listId)
+    publishBoardChanged(card.boardId)
     return { ...moved, droppedLabels: [] }
   }
 

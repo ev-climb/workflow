@@ -538,6 +538,16 @@ describe('перенос на другую доску через меню', () =
     expect(await order(to, 'Входящие')).toEqual(['карточка'])
   })
 
+  it('внутри своей доски кладёт карточку в конец непустого списка', async () => {
+    const b = await board('Доска', ['Бэклог', 'Готово'])
+    const ids = await fill(b.lists['Бэклог'], ['a'])
+    await fill(b.lists['Готово'], ['x', 'y'])
+
+    await moveCardToBoard({ cardId: ids.a, listId: b.lists['Готово'] })
+
+    expect(await order(b, 'Готово')).toEqual(['x', 'y', 'a'])
+  })
+
   it('внутри своей доски меток не трогает', async () => {
     const b = await board('Доска', ['Бэклог', 'Готово'])
     const ids = await fill(b.lists['Бэклог'], ['a'])
