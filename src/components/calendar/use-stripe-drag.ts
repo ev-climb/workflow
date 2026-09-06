@@ -7,8 +7,8 @@ import { addDays } from '@/lib/calendar-grid'
 import { useSetEventTimes, useSetTaskDue } from '@/lib/calendar-mutations'
 import { stripeKey, type StripeDrag, type StripeTarget } from '@/lib/calendar-scene'
 import { moscowParts } from '@/lib/dates'
-import { cardHref, type OpenHandler, type TaskOpenHandler } from './grid'
-import type { DayColumns } from './use-day-columns'
+import { DAY_CELLS, cardHref, type OpenHandler, type TaskOpenHandler } from './grid'
+import { dayAtRow } from './use-day-columns'
 
 /** Полоса в записи: метка отличает её от нового удержания той же полосы. */
 type Pending = StripeDrag & { stamp: number }
@@ -35,11 +35,10 @@ export type StripeGesture = {
  */
 export function useStripeDrag(input: {
   days: string[]
-  columns: DayColumns
   onOpen: OpenHandler
   onOpenTask: TaskOpenHandler
 }): StripeGesture {
-  const { days, columns, onOpen, onOpenTask } = input
+  const { days, onOpen, onOpenTask } = input
   const [drag, setDrag] = useState<StripeDrag | null>(null)
   /**
    * Полосы, уехавшие в запрос, но ещё не приехавшие обратно: пока идёт запись, каждая
@@ -54,9 +53,15 @@ export function useStripeDrag(input: {
   const moveDue = useMoveCardDue()
   const router = useRouter()
 
+  /** День под курсором считается по ряду, в котором идёт жест: у сетки колонки другие. */
+  function dayUnder(event: React.PointerEvent): string | null {
+    const row = event.currentTarget.closest(DAY_CELLS)
+    return row ? dayAtRow(days, row, event.clientX) : null
+  }
+
   function grab(event: React.PointerEvent, target: StripeTarget) {
     if (event.button !== 0) return
-    const day = columns.columnAt(event.clientX)?.day
+    const day = dayUnder(event)
     if (!day) return
 
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -66,7 +71,7 @@ export function useStripeDrag(input: {
   function advance(event: React.PointerEvent) {
     if (!drag || !event.currentTarget.hasPointerCapture(event.pointerId)) return
 
-    const day = columns.columnAt(event.clientX)?.day
+    const day = dayUnder(event)
     if (day && day !== drag.day) setDrag({ ...drag, day })
   }
 

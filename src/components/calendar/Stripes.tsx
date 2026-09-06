@@ -39,6 +39,7 @@ export function AllDayRow({
     <div className={ROW} style={{ maxHeight: ALL_DAY_MAX_PX }}>
       <div className={RAIL} />
       <div
+        data-day-cells
         className={CELLS}
         style={{ gridTemplateColumns: columns(days), gridAutoRows: `${ALL_DAY_PX}px` }}
       >
@@ -75,6 +76,7 @@ export function StripeRow({
     <div className={ROW} style={{ maxHeight: STRIPE_MAX_PX }}>
       <div className={RAIL} />
       <div
+        data-day-cells
         className={CELLS}
         style={{ gridTemplateColumns: columns(days), gridAutoRows: `${STRIPE_PX}px` }}
       >

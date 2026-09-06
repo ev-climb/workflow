@@ -49,7 +49,7 @@ export function CalendarGrid({
 
   const dayColumns = useDayColumns(days)
   const drag = useGridDrag({ events, blocks, onSelect, onOpen })
-  const stripes = useStripeDrag({ days, columns: dayColumns, onOpen, onOpenTask })
+  const stripes = useStripeDrag({ days, onOpen, onOpenTask })
   const drop = useGridDrop(dayColumns)
 
   const scene = useScene({

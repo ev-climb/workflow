@@ -26,6 +26,9 @@ export const HOUR_LINES = `repeating-linear-gradient(
 /** Ссылка в карточку: страница стола открывает её на серверной отрисовке, см. `DueStripe`. */
 export const cardHref = (cardId: string) => `/?card=${cardId}`
 
+/** Метка ряда полос: жест находит по ней свой ряд, чтобы взять день по его колонкам. */
+export const DAY_CELLS = '[data-day-cells]'
+
 export type OpenHandler = (event: CalendarEventView) => void
 
 /** Панель задачи открывается и с полосы, и с зеркала на сетке: у зеркала своей строки нет. */

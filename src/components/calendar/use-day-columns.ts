@@ -14,8 +14,9 @@ export type DayColumns = {
  * временем, и курсор над ней попадает в первый день, а не в пустоту: мёртвой полосы внутри
  * цели быть не должно.
  *
- * Полосы над сеткой размечены теми же долями ширины, что и сама сетка, поэтому день для них
- * берётся отсюда же.
+ * Полосы над сеткой лежат в своих контейнерах: доли ширины у них те же, а сама ширина
+ * другая — сетка прокручивается всегда, и её колонки уже на полосу прокрутки. День для
+ * полос берёт `dayAtRow`.
  */
 export function useDayColumns(days: string[]): DayColumns {
   const nodes = useRef(new Map<string, HTMLElement>())
@@ -34,4 +35,17 @@ export function useDayColumns(days: string[]): DayColumns {
       return boxes.find(({ box }) => clientX < box.right) ?? boxes[boxes.length - 1]
     },
   }
+}
+
+/**
+ * День по доле ширины ряда полос: колонки ряда равны между собой, и узел под курсором
+ * искать не в чем — в ряду лежат только сами полосы, а не колонки. Слева от ряда рейка со
+ * временем, курсор над ней попадает в первый день, как и на сетке.
+ */
+export function dayAtRow(days: string[], row: Element, clientX: number): string | null {
+  const box = row.getBoundingClientRect()
+  if (days.length === 0 || box.width === 0) return null
+
+  const index = Math.floor(((clientX - box.left) / box.width) * days.length)
+  return days[Math.min(Math.max(index, 0), days.length - 1)] ?? null
 }
