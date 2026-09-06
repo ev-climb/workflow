@@ -1,4 +1,4 @@
-import { moscowParts } from './dates.ts'
+import { minutesOf, moscowParts } from './dates.ts'
 
 export type CalendarMode = 'day' | 'week'
 
@@ -8,9 +8,11 @@ export const MINUTES_IN_DAY = 24 * 60
 
 export const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
 
-// день сетки — календарная дата, а не момент: арифметика идёт в UTC, где сутки всегда
-// ровно 24 часа, и перевод часов не может сдвинуть её на день назад
-function utcOf(date: string): Date {
+/**
+ * Календарная дата как полночь UTC. Вся арифметика дат идёт там, где сутки всегда ровно
+ * 24 часа: разбор в поясе процесса сдвинул бы дату на сутки — инвариант 3.
+ */
+export function utcOf(date: string): Date {
   const [year, month, day] = date.split('-').map(Number)
   return new Date(Date.UTC(year, month - 1, day))
 }
@@ -89,8 +91,7 @@ export function nowOffset(days: string[], now: Date = new Date()): { date: strin
   const { date, time } = moscowParts(now.toISOString())
   if (!days.includes(date)) return null
 
-  const [hour, minute] = time.split(':').map(Number)
-  return { date, minutes: hour * 60 + minute }
+  return { date, minutes: minutesOf(time) }
 }
 
 export function isCalendarMode(value: string): value is CalendarMode {

@@ -1,5 +1,5 @@
-import { MINUTES_IN_DAY } from './calendar-grid'
-import { moscowParts } from './dates'
+import { MINUTES_IN_DAY, utcOf } from './calendar-grid'
+import { minutesOf, moscowParts } from './dates'
 
 /** Событие короче этого на сетке не видно: блок растягивается вниз до читаемой высоты. */
 export const MIN_EVENT_MINUTES = 20
@@ -21,20 +21,14 @@ export type PlacedEvent<T> = {
   columns: number
 }
 
-function utcOf(date: string): number {
-  const [year, month, day] = date.split('-').map(Number)
-  return Date.UTC(year, month - 1, day)
-}
-
 /**
  * Минуты от полуночи дня `day` до момента. Считается по московским стенным часам, как и
  * линия текущего времени: высота суток на сетке всегда 24 часа, даже когда часы переводят.
  */
 function offsetFrom(day: string, iso: string): number {
   const { date, time } = moscowParts(iso)
-  const [hour, minute] = time.split(':').map(Number)
-  const days = (utcOf(date) - utcOf(day)) / 86_400_000
-  return days * MINUTES_IN_DAY + hour * 60 + minute
+  const days = (utcOf(date).getTime() - utcOf(day).getTime()) / 86_400_000
+  return days * MINUTES_IN_DAY + minutesOf(time)
 }
 
 /**
@@ -114,8 +108,8 @@ export function placeAllDay<T extends AllDayEvent>(
 ): PlacedAllDay<T>[] {
   if (days.length === 0) return []
 
-  const first = utcOf(days[0])
-  const dayOf = (date: string) => Math.round((utcOf(date) - first) / 86_400_000)
+  const first = utcOf(days[0]).getTime()
+  const dayOf = (date: string) => Math.round((utcOf(date).getTime() - first) / 86_400_000)
 
   const drafts = events.flatMap((event) => {
     const from = dayOf(event.startDate)

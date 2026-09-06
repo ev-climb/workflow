@@ -76,6 +76,12 @@ export function moscowParts(iso: string): { date: string; time: string } {
   return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` }
 }
 
+/** Время вида `09:30` в минуты от полуночи: так размечена сетка календаря. */
+export function minutesOf(time: string): number {
+  const [hour, minute] = time.split(':').map(Number)
+  return hour * 60 + minute
+}
+
 /** Насколько московское время опережает UTC в этот момент. */
 function offsetMs(at: Date): number {
   const p = partsOf(at)

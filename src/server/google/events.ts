@@ -1,3 +1,5 @@
+import { addDays } from '../../lib/calendar-grid.ts'
+
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3/calendars'
 
 /** ADR-008: окно полной синхронизации. Назад — месяц, вперёд — год от момента запроса. */
@@ -78,15 +80,6 @@ type ListResponse = {
   items?: EventItem[]
   nextPageToken?: string
   nextSyncToken?: string
-}
-
-// арифметика по календарным датам идёт в UTC, где сутки всегда ровно 24 часа: разбор
-// такой даты в поясе процесса сдвинул бы событие на весь день на сутки
-function addDays(date: string, days: number): string {
-  const [year, month, day] = date.split('-').map(Number)
-  const at = new Date(Date.UTC(year, month - 1, day))
-  at.setUTCDate(at.getUTCDate() + days)
-  return at.toISOString().slice(0, 10)
 }
 
 function statusOf(value: string | undefined): EventStatus {
