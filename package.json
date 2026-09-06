@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "pretest": "docker compose up -d --wait db",
     "test": "vitest run",
+    "pretest:e2e": "docker compose up -d --wait db",
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.ts",
