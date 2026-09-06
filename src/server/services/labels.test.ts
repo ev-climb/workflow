@@ -9,7 +9,6 @@ import {
   createLabel,
   deleteLabel,
   detachLabel,
-  listLabels,
   updateLabel,
 } from './labels.ts'
 
@@ -26,7 +25,6 @@ describe('набор меток доски', () => {
     const label = await createLabel({ boardId: board.id, name: 'срочно', color: 'red' })
 
     expect(label).toMatchObject({ name: 'срочно', color: 'red' })
-    expect(await listLabels(board.id)).toEqual([label])
     expect((await getBoard(board.id)).labels).toEqual([label])
   })
 
@@ -106,7 +104,6 @@ describe('набор меток доски', () => {
 
     await deleteLabel(red.id)
 
-    expect(await listLabels(boardId)).toEqual([blue])
     const [card] = (await getBoard(boardId)).lists[0].cards
     expect(card.labels).toEqual([blue])
     expect(await db.select().from(cardLabels)).toHaveLength(1)

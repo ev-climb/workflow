@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { isLabelColor } from '../../lib/label-colors.ts'
 import { db } from '../db/client.ts'
 import { boards, cardLabels, labels } from '../db/schema.ts'
@@ -161,12 +161,4 @@ export async function detachLabel(
 
   publishBoardChanged(boardId)
   return { cardId, labelId }
-}
-
-export async function listLabels(boardId: string): Promise<LabelSummary[]> {
-  return db
-    .select(LABEL_SELECT)
-    .from(labels)
-    .where(eq(labels.boardId, boardId))
-    .orderBy(asc(labels.name), asc(labels.color))
 }

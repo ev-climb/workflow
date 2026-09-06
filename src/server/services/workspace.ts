@@ -1,4 +1,4 @@
-import { asc, eq, isNull, sql } from 'drizzle-orm'
+import { asc, eq, isNull } from 'drizzle-orm'
 import { isCalendarMode, type CalendarMode } from '../../lib/calendar-grid.ts'
 import { clampRatio } from '../../lib/split-ratio.ts'
 import { db } from '../db/client.ts'
@@ -150,16 +150,4 @@ export async function setNoteDropArchives(archives: boolean): Promise<WorkspaceS
     .returning(SELECT)
 
   return state
-}
-
-/** Слоты, указывающие на удалённую или заархивированную доску, гасятся. */
-export async function forgetBoardInSlots(boardId: string): Promise<void> {
-  await db
-    .update(workspaceState)
-    .set({
-      topBoardId: sql`case when ${workspaceState.topBoardId} = ${boardId} then null else ${workspaceState.topBoardId} end`,
-      bottomBoardId: sql`case when ${workspaceState.bottomBoardId} = ${boardId} then null else ${workspaceState.bottomBoardId} end`,
-      updatedAt: new Date(),
-    })
-    .where(eq(workspaceState.id, SINGLE_ROW))
 }

@@ -15,14 +15,6 @@ import { moveWithinCollection, rankAfter, withRankRetry } from './rank.ts'
 import { unmirrorCardBlocks } from './time-blocks.ts'
 import { title } from './validation.ts'
 
-function wipLimit(value: number | null | undefined): number | null {
-  if (value === null || value === undefined) return null
-  if (!Number.isInteger(value) || value < 1) {
-    throw new InvalidInputError(`лимит списка: нужно целое от единицы, а не ${value}`)
-  }
-  return value
-}
-
 export type BoardSummary = { id: string; title: string; rank: string }
 
 export type LabelSummary = { id: string; name: string; color: string }
@@ -194,21 +186,6 @@ export async function createBoard(input: { title: string }): Promise<BoardSummar
   })
 }
 
-export async function renameBoard(boardId: string, newTitle: string): Promise<BoardSummary> {
-  const name = title(newTitle, 'доска')
-
-  const [updated] = await db
-    .update(boards)
-    .set({ title: name, updatedAt: new Date() })
-    .where(and(eq(boards.id, boardId), isNull(boards.archivedAt)))
-    .returning({ id: boards.id, title: boards.title, rank: boards.rank })
-
-  if (!updated) throw new NotFoundError(`доски ${boardId} нет`)
-
-  publishBoardChanged(boardId)
-  return updated
-}
-
 export type ListSummary = {
   id: string
   title: string
@@ -226,13 +203,8 @@ const LIST_SELECT = {
 }
 
 /** Новый список встаёт в конец доски. */
-export async function createList(input: {
-  boardId: string
-  title: string
-  wipLimit?: number | null
-}): Promise<ListSummary> {
+export async function createList(input: { boardId: string; title: string }): Promise<ListSummary> {
   const name = title(input.title, 'список')
-  const limit = wipLimit(input.wipLimit)
 
   const [board] = await db
     .select({ id: boards.id })
@@ -254,7 +226,6 @@ export async function createList(input: {
         boardId: input.boardId,
         title: name,
         rank: rankAfter(last?.rank ?? null),
-        wipLimit: limit,
       })
       .returning(LIST_SELECT)
 

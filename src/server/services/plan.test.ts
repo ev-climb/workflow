@@ -1,6 +1,7 @@
+import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { db } from '../db/client.ts'
-import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts'
+import { calendarEvents, googleAccounts, googleCalendars, lists } from '../db/schema.ts'
 import { createBoard, createList } from './boards.ts'
 import { createCard, updateCard } from './cards.ts'
 import { InvalidInputError } from './errors.ts'
@@ -87,7 +88,9 @@ describe('план дня', () => {
   it('колонка с лимитом считается рабочей, как бы ни называлась', async () => {
     const board = await createBoard({ title: 'Job' })
     await createList({ boardId: board.id, title: 'Бэклог' })
-    await createList({ boardId: board.id, title: 'Загадочное', wipLimit: 3 })
+    const limited = await createList({ boardId: board.id, title: 'Загадочное' })
+    // лимит на список приезжает только импортом из Trello, руками его не выставляют
+    await db.update(lists).set({ wipLimit: 3 }).where(eq(lists.id, limited.id))
     await setBoardSlot('top', board.id)
     await setBoardSlot('bottom', null)
 

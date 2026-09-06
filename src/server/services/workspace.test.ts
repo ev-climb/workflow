@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { createBoard } from './boards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import {
-  forgetBoardInSlots,
   getWorkspaceState,
   setBoardSlot,
   setCalendarMode,
@@ -101,19 +100,5 @@ describe('вид календаря', () => {
 
   it('чужой вид не принимается', async () => {
     await expect(setCalendarMode('month')).rejects.toThrow(InvalidInputError)
-  })
-})
-
-describe('доска исчезла из слотов', () => {
-  it('гасит только свои слоты', async () => {
-    const first = await createBoard({ title: 'Первая' })
-    const second = await createBoard({ title: 'Вторая' })
-    await getWorkspaceState()
-
-    await forgetBoardInSlots(first.id)
-    const state = await getWorkspaceState()
-
-    expect(state.topBoardId).toBeNull()
-    expect(state.bottomBoardId).toBe(second.id)
   })
 })

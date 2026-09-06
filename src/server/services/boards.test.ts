@@ -105,20 +105,6 @@ describe('чтение доски', () => {
 })
 
 describe('списки', () => {
-  it('лимит меньше единицы не принимается', async () => {
-    const board = await createBoard({ title: 'Доска' })
-    await expect(
-      createList({ boardId: board.id, title: 'Сейчас', wipLimit: 0 }),
-    ).rejects.toThrow(InvalidInputError)
-  })
-
-  it('лимит доезжает до чтения доски', async () => {
-    const board = await createBoard({ title: 'Доска' })
-    await createList({ boardId: board.id, title: 'Сейчас', wipLimit: 3 })
-
-    expect((await getBoard(board.id)).lists[0].wipLimit).toBe(3)
-  })
-
   it('восстановление возвращает список в конец доски', async () => {
     const board = await createBoard({ title: 'Доска' })
     const first = await createList({ boardId: board.id, title: 'Первый' })
