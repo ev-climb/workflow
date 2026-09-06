@@ -3,7 +3,7 @@ import { getJson } from './api-client'
 
 export type MovePreview = { droppedLabels: LabelRef[]; keptLabels: LabelRef[] }
 
-export const transferPreviewKey = (cardId: string, listId: string) =>
+const transferPreviewKey = (cardId: string, listId: string) =>
   ['card-transfer', cardId, listId] as const
 
 export function transferPreviewQuery(cardId: string, listId: string) {

@@ -11,13 +11,13 @@ import type { TimeBlock } from './time-blocks.ts'
 import { listTimeBlocks } from './time-blocks.ts'
 import { getWorkspaceState } from './workspace.ts'
 
-export type PlanList = {
+type PlanList = {
   id: string
   title: string
   cards: BoardCard[]
 }
 
-export type PlanBoard = {
+type PlanBoard = {
   id: string
   title: string
   inWork: PlanList[]

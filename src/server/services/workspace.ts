@@ -5,7 +5,7 @@ import { db } from '../db/client.ts'
 import { boards, workspaceState } from '../db/schema.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 
-export const SINGLE_ROW = 1
+const SINGLE_ROW = 1
 
 export type Slot = 'top' | 'bottom'
 

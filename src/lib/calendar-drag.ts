@@ -2,7 +2,7 @@ import { MINUTES_IN_DAY, addDays } from './calendar-grid'
 import { momentInMoscow } from './dates'
 
 /** Шаг сетки при выделении и перетаскивании: четверть часа. */
-export const SNAP_MINUTES = 15
+const SNAP_MINUTES = 15
 
 /** Длина заготовки, если по сетке щёлкнули, а не протянули. */
 export const NEW_EVENT_MINUTES = 30

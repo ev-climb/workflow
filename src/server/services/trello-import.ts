@@ -56,7 +56,7 @@ const label = z.object({
   color: z.string().nullish(),
 })
 
-export const trelloExportSchema = z.object({
+const trelloExportSchema = z.object({
   id: z.string(),
   name: z.string(),
   closed: z.boolean().default(false),
@@ -66,7 +66,7 @@ export const trelloExportSchema = z.object({
   checklists: z.array(checklist).default([]),
 })
 
-export type TrelloExport = z.infer<typeof trelloExportSchema>
+type TrelloExport = z.infer<typeof trelloExportSchema>
 
 export type ImportSummary = {
   boardId: string
@@ -82,7 +82,7 @@ export type ImportSummary = {
   skippedLabels: number
 }
 
-export function parseTrelloExport(raw: unknown): TrelloExport {
+function parseTrelloExport(raw: unknown): TrelloExport {
   const parsed = trelloExportSchema.safeParse(raw)
   if (!parsed.success) {
     const first = parsed.error.issues[0]

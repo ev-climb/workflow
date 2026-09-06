@@ -2,7 +2,7 @@ import { moscowParts } from './dates.ts'
 
 export type CalendarMode = 'day' | 'week'
 
-export const CALENDAR_MODES = ['day', 'week'] as const
+const CALENDAR_MODES = ['day', 'week'] as const
 
 export const MINUTES_IN_DAY = 24 * 60
 

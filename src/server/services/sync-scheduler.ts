@@ -30,7 +30,7 @@ function disabled(): boolean {
   return value !== '' && value !== '0'
 }
 
-export function nextDelayMs(): number {
+function nextDelayMs(): number {
   return viewersOnline() > 0 ? FOREGROUND_INTERVAL_MS : BACKGROUND_INTERVAL_MS
 }
 

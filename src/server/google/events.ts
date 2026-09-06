@@ -1,8 +1,8 @@
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3/calendars'
 
 /** ADR-008: окно полной синхронизации. Назад — месяц, вперёд — год от момента запроса. */
-export const FULL_SYNC_DAYS_BACK = 30
-export const FULL_SYNC_DAYS_AHEAD = 365
+const FULL_SYNC_DAYS_BACK = 30
+const FULL_SYNC_DAYS_AHEAD = 365
 
 export type EventStatus = 'confirmed' | 'tentative' | 'cancelled'
 

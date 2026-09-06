@@ -118,7 +118,7 @@ export const accountsQuery = {
 }
 
 /** Списки задач для выбора при создании задачи. Читаются, когда диалог открывают. */
-export const taskListsKey = ['google-task-lists'] as const
+const taskListsKey = ['google-task-lists'] as const
 
 export const taskListsQuery = {
   queryKey: taskListsKey,
