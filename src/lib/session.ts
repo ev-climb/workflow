@@ -1,4 +1,5 @@
-import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+import { derivedKey } from './master-key.ts'
 
 export const SESSION_COOKIE = 'workflow_session'
 const TTL_SECONDS = 30 * 24 * 60 * 60
@@ -15,17 +16,11 @@ const INFO = 'workflow session v1'
  * подключать заново.
  */
 function signingKey(): Buffer {
-  const master = process.env.APP_ENCRYPTION_KEY
-  if (!master) {
-    throw new Error('APP_ENCRYPTION_KEY не задан: без него вход не работает, см. .env.example')
-  }
   const stored = process.env.APP_PASSWORD_HASH
   if (!stored) {
     throw new Error('APP_PASSWORD_HASH не задан: без него вход не работает, см. .env.example')
   }
-  return Buffer.from(
-    hkdfSync('sha256', Buffer.from(master, 'base64'), '', `${INFO} ${stored}`, 32),
-  )
+  return derivedKey(`${INFO} ${stored}`)
 }
 
 const b64url = (value: Buffer | string) =>

@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto'
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
+import { derivedKey } from '../../lib/master-key.ts'
 
 const INFO = 'workflow google tokens v1'
 const IV_BYTES = 12
@@ -9,13 +10,7 @@ const TAG_BYTES = 16
  * подписывает сессию (`src/lib/session.ts`), но разные `info` разводят их по разным ключам.
  */
 function key(): Buffer {
-  const master = process.env.APP_ENCRYPTION_KEY
-  if (!master) {
-    throw new Error(
-      'APP_ENCRYPTION_KEY не задан: без него токены Google негде хранить, см. .env.example',
-    )
-  }
-  return Buffer.from(hkdfSync('sha256', Buffer.from(master, 'base64'), '', INFO, 32))
+  return derivedKey(INFO)
 }
 
 /** Токен в базу кладётся только так — инвариант 6. Формат: base64 от `iv | tag | шифротекст`. */
