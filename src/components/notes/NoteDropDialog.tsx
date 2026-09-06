@@ -63,6 +63,7 @@ export function NoteDropDialog({ target, archives, onArchivesChange, onClose }: 
   const [allDay, setAllDay] = useState(false)
   const [chosenCalendar, setChosenCalendar] = useState<string | null>(null)
   const [chosenList, setChosenList] = useState<string | null>(null)
+  const [created, setCreated] = useState(false)
 
   const toCardMutation = useNoteToCard()
   const createEvent = useCreateEvent()
@@ -75,14 +76,25 @@ export function NoteDropDialog({ target, archives, onArchivesChange, onClose }: 
   const pending =
     toCardMutation.isPending || createEvent.isPending || createTask.isPending || archive.isPending
 
-  /** Заметка уезжает в архив только после того, как на новом месте всё получилось. */
+  /**
+   * Заметка уезжает в архив только после того, как на новом месте всё получилось.
+   * Отказ архивирования оставляет окно открытым: закрыть его значило бы соврать,
+   * что заметку убрали.
+   */
   function done() {
-    if (archives) archive.mutate(true, { onSuccess: onClose, onError: onClose })
+    setCreated(true)
+    if (archives) archive.mutate(true, { onSuccess: onClose })
     else onClose()
   }
 
   function submit(event: React.FormEvent) {
     event.preventDefault()
+
+    // на новом месте уже создано, повтор относится только к неудавшейся уборке в архив
+    if (created) {
+      done()
+      return
+    }
 
     if (target.kind === 'board') {
       toCardMutation.mutate(
@@ -120,7 +132,7 @@ export function NoteDropDialog({ target, archives, onArchivesChange, onClose }: 
     )
   }
 
-  const ready = target.kind === 'board' || (kind === 'event' ? calendarId : taskListId)
+  const ready = created || target.kind === 'board' || (kind === 'event' ? calendarId : taskListId)
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
@@ -237,7 +249,7 @@ export function NoteDropDialog({ target, archives, onArchivesChange, onClose }: 
                 disabled={!ready || pending}
                 className="btn-primary px-3 py-1.5 text-sm"
               >
-                Создать
+                {created ? 'Убрать в архив' : 'Создать'}
               </button>
             </div>
           </form>
