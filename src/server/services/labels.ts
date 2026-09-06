@@ -1,9 +1,10 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { isLabelColor } from '../../lib/label-colors.ts'
 import { db } from '../db/client.ts'
-import { boards, cardLabels, cards, labels, lists } from '../db/schema.ts'
+import { boards, cardLabels, labels } from '../db/schema.ts'
 import type { LabelSummary } from './boards.ts'
 import { publishBoardChanged } from './board-events.ts'
+import { locateCard } from './cards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 
 const NAME_MAX = 128
@@ -127,17 +128,6 @@ export async function deleteLabel(labelId: string): Promise<{ id: string }> {
   return { id: removed.id }
 }
 
-async function boardOfCard(cardId: string): Promise<string> {
-  const [found] = await db
-    .select({ boardId: lists.boardId })
-    .from(cards)
-    .innerJoin(lists, eq(cards.listId, lists.id))
-    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
-
-  if (!found) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
-  return found.boardId
-}
-
 /**
  * Метка вешается на карточку своей доски. Чужая — ошибка входа: набор принадлежит доске,
  * и на другой доске та же по виду метка это другая строка (ADR-005).
@@ -147,7 +137,7 @@ export async function attachLabel(
   cardId: string,
   labelId: string,
 ): Promise<{ cardId: string; labelId: string }> {
-  const boardId = await boardOfCard(cardId)
+  const { boardId } = await locateCard(cardId)
   if ((await boardOfLabel(labelId)) !== boardId) {
     throw new InvalidInputError(`метки ${labelId} нет на доске карточки`)
   }
@@ -163,7 +153,7 @@ export async function detachLabel(
   cardId: string,
   labelId: string,
 ): Promise<{ cardId: string; labelId: string }> {
-  const boardId = await boardOfCard(cardId)
+  const { boardId } = await locateCard(cardId)
 
   await db
     .delete(cardLabels)

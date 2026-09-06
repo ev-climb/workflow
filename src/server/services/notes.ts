@@ -6,18 +6,9 @@ import { publishBoardChanged } from './board-events.ts'
 import { cardDescription, locateList } from './cards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, rankBefore, rankSequence, withRankRetry } from './rank.ts'
+import { TITLE_MAX, title } from './validation.ts'
 
-const TITLE_MAX = 512
 const BODY_MAX = 20000
-
-function title(raw: string, what: string): string {
-  const value = raw.trim()
-  if (!value) throw new InvalidInputError(`${what}: заголовок пустой`)
-  if (value.length > TITLE_MAX) {
-    throw new InvalidInputError(`${what}: заголовок длиннее ${TITLE_MAX} символов`)
-  }
-  return value
-}
 
 /** Заголовок заметки необязателен: пустая строка и `null` одинаково означают «своего нет». */
 function optionalTitle(raw: string | null): string | null {

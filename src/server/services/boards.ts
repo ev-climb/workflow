@@ -11,19 +11,9 @@ import {
 } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
-import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
+import { moveWithinCollection, rankAfter, withRankRetry } from './rank.ts'
 import { unmirrorCardBlocks } from './time-blocks.ts'
-
-const TITLE_MAX = 512
-
-function title(raw: string, what: string): string {
-  const value = raw.trim()
-  if (!value) throw new InvalidInputError(`${what}: заголовок пустой`)
-  if (value.length > TITLE_MAX) {
-    throw new InvalidInputError(`${what}: заголовок длиннее ${TITLE_MAX} символов`)
-  }
-  return value
-}
+import { title } from './validation.ts'
 
 function wipLimit(value: number | null | undefined): number | null {
   if (value === null || value === undefined) return null
@@ -334,21 +324,21 @@ export async function moveList(input: {
   }
 
   const prev = await neighbourListRank(input.prevListId, list.boardId, 'слева')
-  let next = await neighbourListRank(input.nextListId, list.boardId, 'справа')
-  let attempt = 0
+  const next = await neighbourListRank(input.nextListId, list.boardId, 'справа')
 
-  const moved = await withRankRetry(async () => {
-    // соседи те же, значит между ними успели встать: берём того, кто стоит там теперь
-    if (attempt++) next = await nextListRank(list.boardId, prev)
+  const moved = await moveWithinCollection(
+    { prev, next },
+    (after) => nextListRank(list.boardId, after),
+    async (rank) => {
+      const [updated] = await db
+        .update(lists)
+        .set({ rank, updatedAt: new Date() })
+        .where(and(eq(lists.id, input.listId), isNull(lists.archivedAt)))
+        .returning({ id: lists.id, rank: lists.rank })
 
-    const [updated] = await db
-      .update(lists)
-      .set({ rank: rankBetween(prev, next), updatedAt: new Date() })
-      .where(and(eq(lists.id, input.listId), isNull(lists.archivedAt)))
-      .returning({ id: lists.id, rank: lists.rank })
-
-    return updated
-  })
+      return updated
+    },
+  )
 
   publishBoardChanged(list.boardId)
   return moved

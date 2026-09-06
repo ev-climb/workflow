@@ -1,20 +1,11 @@
-import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, sql } from 'drizzle-orm'
 import { db } from '../db/client.ts'
 import { cards, checklistItems, checklists, lists } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
+import { locateCard } from './cards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
-import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
-
-const TITLE_MAX = 512
-
-function title(raw: string, what: string): string {
-  const value = raw.trim()
-  if (!value) throw new InvalidInputError(`${what}: заголовок пустой`)
-  if (value.length > TITLE_MAX) {
-    throw new InvalidInputError(`${what}: заголовок длиннее ${TITLE_MAX} символов`)
-  }
-  return value
-}
+import { moveWithinCollection, rankAfter, withRankRetry } from './rank.ts'
+import { title } from './validation.ts'
 
 export type ChecklistItemView = { id: string; title: string; done: boolean; rank: string }
 
@@ -27,17 +18,6 @@ const ITEM_SELECT = {
   title: checklistItems.title,
   done: checklistItems.done,
   rank: checklistItems.rank,
-}
-
-async function locateCard(cardId: string): Promise<{ id: string; boardId: string }> {
-  const [found] = await db
-    .select({ id: cards.id, boardId: lists.boardId })
-    .from(cards)
-    .innerJoin(lists, eq(cards.listId, lists.id))
-    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
-
-  if (!found) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
-  return found
 }
 
 async function locateChecklist(
@@ -296,25 +276,21 @@ export async function moveChecklistItem(input: {
   }
 
   const prev = await neighbourRank(input.prevItemId, input.checklistId, 'слева')
-  let next = await neighbourRank(input.nextItemId, input.checklistId, 'справа')
-  let attempt = 0
+  const next = await neighbourRank(input.nextItemId, input.checklistId, 'справа')
 
-  const moved = await withRankRetry(async () => {
-    // соседи те же, значит между ними успели встать: берём того, кто стоит там теперь
-    if (attempt++) next = await nextRankInChecklist(input.checklistId, prev)
+  const moved = await moveWithinCollection(
+    { prev, next },
+    (after) => nextRankInChecklist(input.checklistId, after),
+    async (rank) => {
+      const [updated] = await db
+        .update(checklistItems)
+        .set({ checklistId: input.checklistId, rank, updatedAt: new Date() })
+        .where(eq(checklistItems.id, input.itemId))
+        .returning({ ...ITEM_SELECT, checklistId: checklistItems.checklistId })
 
-    const [updated] = await db
-      .update(checklistItems)
-      .set({
-        checklistId: input.checklistId,
-        rank: rankBetween(prev, next),
-        updatedAt: new Date(),
-      })
-      .where(eq(checklistItems.id, input.itemId))
-      .returning({ ...ITEM_SELECT, checklistId: checklistItems.checklistId })
-
-    return updated
-  })
+      return updated
+    },
+  )
 
   publishBoardChanged(item.boardId)
   return moved

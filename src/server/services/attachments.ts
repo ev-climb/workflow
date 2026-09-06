@@ -3,10 +3,11 @@ import { createReadStream } from 'node:fs'
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { Readable } from 'node:stream'
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { db } from '../db/client.ts'
 import { attachments, cards, lists } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
+import { locateCard } from './cards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 
 const NAME_MAX = 255
@@ -53,17 +54,6 @@ function fileName(raw: string): string {
     throw new InvalidInputError(`вложение: имя длиннее ${NAME_MAX} символов`)
   }
   return value
-}
-
-async function locateCard(cardId: string): Promise<{ id: string; boardId: string }> {
-  const [found] = await db
-    .select({ id: cards.id, boardId: lists.boardId })
-    .from(cards)
-    .innerJoin(lists, eq(cards.listId, lists.id))
-    .where(and(eq(cards.id, cardId), isNull(cards.archivedAt)))
-
-  if (!found) throw new NotFoundError(`карточки ${cardId} нет или она в архиве`)
-  return found
 }
 
 async function locateAttachment(

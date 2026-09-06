@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { InvalidInputError, ConflictError } from './errors.ts'
 import {
   isRankCollision,
+  moveWithinCollection,
   rankAfter,
   rankBefore,
   rankBetween,
@@ -139,5 +140,44 @@ describe('коллизия ранга', () => {
     const write = vi.fn<() => Promise<string>>().mockRejectedValue(boom)
     await expect(withRankRetry(write)).rejects.toBe(boom)
     expect(write).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('перестановка между соседями', () => {
+  it('пишет ранг между переданными соседями и не перечитывает правого', async () => {
+    const nextAfter = vi.fn<(prev: string | null) => Promise<string | null>>()
+    const write = vi.fn(async (rank: string) => rank)
+
+    const rank = await moveWithinCollection({ prev: 'a0', next: 'a1' }, nextAfter, write)
+
+    expect(byBytes(rank, 'a0')).toBe(1)
+    expect(byBytes(rank, 'a1')).toBe(-1)
+    expect(nextAfter).not.toHaveBeenCalled()
+  })
+
+  it('на коллизии берёт правого соседа заново: между прежними успели встать', async () => {
+    // между a0 и a2 встал a1, и посчитанный от a2 ранг попал в занятое место
+    const nextAfter = vi.fn(async () => 'a1')
+    const write = vi
+      .fn<(rank: string) => Promise<string>>()
+      .mockRejectedValueOnce(collision())
+      .mockImplementation(async (rank) => rank)
+
+    const rank = await moveWithinCollection({ prev: 'a0', next: 'a2' }, nextAfter, write)
+
+    expect(nextAfter).toHaveBeenCalledWith('a0')
+    expect(byBytes(rank, 'a0')).toBe(1)
+    expect(byBytes(rank, 'a1')).toBe(-1)
+  })
+
+  it('чужая ошибка записи наружу, без перечитывания соседа', async () => {
+    const boom = new Error('соединение с базой потеряно')
+    const nextAfter = vi.fn<(prev: string | null) => Promise<string | null>>()
+    const write = vi.fn<(rank: string) => Promise<string>>().mockRejectedValue(boom)
+
+    await expect(moveWithinCollection({ prev: null, next: null }, nextAfter, write)).rejects.toBe(
+      boom,
+    )
+    expect(nextAfter).not.toHaveBeenCalled()
   })
 })

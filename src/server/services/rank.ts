@@ -82,3 +82,27 @@ export async function withRankRetry<T>(
     }
   }
 }
+
+/**
+ * Перестановка элемента между соседями: одна общая реализация для карточек в списке,
+ * списков на доске и пунктов чек-листа. Инвариант 1 — ранг считается на сервере,
+ * запись это один UPDATE одной строки.
+ *
+ * `neighbours` — ранги соседей, уже проверенные вызывающим на принадлежность коллекции.
+ * `nextAfter` возвращает ранг, идущий следом за левым соседом сейчас: если место занято,
+ * значит между соседями успели встать, и правого надо брать заново.
+ */
+export async function moveWithinCollection<T>(
+  neighbours: { prev: string | null; next: string | null },
+  nextAfter: (prev: string | null) => Promise<string | null>,
+  write: (rank: string) => Promise<T>,
+): Promise<T> {
+  const { prev } = neighbours
+  let next = neighbours.next
+  let attempt = 0
+
+  return withRankRetry(async () => {
+    if (attempt++) next = await nextAfter(prev)
+    return write(rankBetween(prev, next))
+  })
+}

@@ -6,28 +6,19 @@ import { boards, cardLabels, cards, labels, lists } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
 import { parseCardInput } from './card-input.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
-import { rankAfter, rankBetween, withRankRetry } from './rank.ts'
+import { moveWithinCollection, rankAfter, withRankRetry } from './rank.ts'
 import { retitleCardBlocks, unmirrorCardBlocks } from './time-blocks.ts'
-
-const TITLE_MAX = 512
+import { title } from './validation.ts'
 
 /** Столько же, сколько у описания в Trello: привезённое импортом должно влезать. */
 const DESCRIPTION_MAX = 16_384
-
-function title(raw: string): string {
-  const value = raw.trim()
-  if (!value) throw new InvalidInputError('карточка: заголовок пустой')
-  if (value.length > TITLE_MAX) {
-    throw new InvalidInputError(`карточка: заголовок длиннее ${TITLE_MAX} символов`)
-  }
-  return value
-}
 
 export type CardPosition = { id: string; listId: string; rank: string }
 
 export type LabelRef = { id: string; name: string; color: string }
 
-async function locateCard(
+/** Место живой карточки. Чек-листы, вложения и метки опознают её через ту же выборку. */
+export async function locateCard(
   cardId: string,
 ): Promise<{ id: string; listId: string; rank: string; boardId: string }> {
   const [found] = await db
@@ -192,7 +183,7 @@ function insertCard(
 }
 
 export async function createCard(input: { listId: string; title: string }): Promise<CardPosition> {
-  const name = title(input.title)
+  const name = title(input.title, 'карточка')
   const target = await locateList(input.listId)
 
   const created = await insertCard(input.listId, name, null)
@@ -232,7 +223,7 @@ export async function createCardFromText(input: {
   text: string
 }): Promise<CardPosition> {
   const parsed = parseCardInput(input.text)
-  const name = title(parsed.title)
+  const name = title(parsed.title, 'карточка')
   const due = parsed.due === null ? null : dueMoment(parsed.due)
   const target = await locateList(input.listId)
   const chosen = parsed.labels.length ? await labelsByName(target.boardId, parsed.labels) : []
@@ -332,7 +323,7 @@ export async function updateCard(cardId: string, changes: CardChanges): Promise<
     dueDone?: boolean
   } = {}
 
-  if (changes.title !== undefined) patch.title = title(changes.title)
+  if (changes.title !== undefined) patch.title = title(changes.title, 'карточка')
   if (changes.description !== undefined) patch.description = cardDescription(changes.description)
   if (changes.due !== undefined) {
     const due = changes.due === null ? null : dueMoment(changes.due)
@@ -560,22 +551,22 @@ export async function moveCard(input: {
   }
 
   const prev = await neighbourRank(input.prevCardId, input.listId, 'слева')
-  let next = await neighbourRank(input.nextCardId, input.listId, 'справа')
-  let attempt = 0
+  const next = await neighbourRank(input.nextCardId, input.listId, 'справа')
 
-  const moved = await withRankRetry(async () => {
-    // соседи те же, значит между ними успели встать: берём того, кто стоит там теперь
-    if (attempt++) next = await nextRankInList(input.listId, prev)
+  const moved = await moveWithinCollection(
+    { prev, next },
+    (after) => nextRankInList(input.listId, after),
+    async (rank) => {
+      const [updated] = await db
+        .update(cards)
+        .set({ listId: input.listId, rank, updatedAt: new Date() })
+        .where(and(eq(cards.id, input.cardId), isNull(cards.archivedAt)))
+        .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
 
-    const [updated] = await db
-      .update(cards)
-      .set({ listId: input.listId, rank: rankBetween(prev, next), updatedAt: new Date() })
-      .where(and(eq(cards.id, input.cardId), isNull(cards.archivedAt)))
-      .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
-
-    if (!updated) throw new NotFoundError(`карточки ${input.cardId} нет или она в архиве`)
-    return updated
-  })
+      if (!updated) throw new NotFoundError(`карточки ${input.cardId} нет или она в архиве`)
+      return updated
+    },
+  )
 
   publishBoardChanged(card.boardId)
   return moved
