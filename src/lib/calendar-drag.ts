@@ -26,6 +26,12 @@ export function isCalendarDrop(data: unknown): boolean {
 /** Отрезок на сетке: день и границы в минутах от его полуночи по московским часам. */
 export type Range = { day: string; start: number; end: number }
 
+/** Что тянут: пустую сетку под новое событие, блок целиком или один из его краёв. */
+export type DragKind = 'select' | 'move' | 'start' | 'end'
+
+/** Кого тащат: событие календаря или тайм-блок. Время у них правится разными записями. */
+export type Target = { type: 'event' | 'block'; id: string }
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
