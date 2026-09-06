@@ -4,22 +4,17 @@ import { Dialog } from 'radix-ui'
 import { useState } from 'react'
 import { Failure } from '@/components/board/Failure'
 import {
-  CalendarChoice,
-  TaskListChoice,
-  useCalendarTarget,
-  useTaskListTarget,
-} from '@/components/calendar/TargetChoice'
-import { rangeDates, rangeTimes, timeLabel } from '@/lib/calendar-drag'
-import { rangeLabel } from '@/lib/calendar-grid'
+  KindSwitch,
+  ScheduleFields,
+  scheduleCaption,
+  scheduleTimes,
+  useSchedule,
+} from '@/components/calendar/Schedule'
 import { useCreateEvent, useCreateTask } from '@/lib/calendar-mutations'
 import type { NoteDropTarget } from '@/lib/note-drop'
 import { splitHeading } from '@/lib/notes'
 import { useArchiveNote, useNoteToCard } from '@/lib/notes-mutations'
 import type { NoteView } from '@/server/services/notes'
-
-type Kind = 'event' | 'task'
-
-const KIND_LABEL: Record<Kind, string> = { event: 'Событие', task: 'Задача' }
 
 /**
  * Текст, с которым заметка поедет дальше. У карточки пункты списка дел становятся
@@ -57,21 +52,15 @@ export function NoteDropDialog({ target, archives, onArchivesChange, onClose }: 
   const toCard = target.kind === 'board'
   const initial = draftOf(note, toCard)
 
-  const [kind, setKind] = useState<Kind>('event')
   const [title, setTitle] = useState(initial.title)
   const [description, setDescription] = useState(initial.description)
-  const [allDay, setAllDay] = useState(false)
-  const [chosenCalendar, setChosenCalendar] = useState<string | null>(null)
-  const [chosenList, setChosenList] = useState<string | null>(null)
   const [created, setCreated] = useState(false)
+  const schedule = useSchedule(!toCard)
 
   const toCardMutation = useNoteToCard()
   const createEvent = useCreateEvent()
   const createTask = useCreateTask()
   const archive = useArchiveNote(note.id)
-
-  const calendarId = useCalendarTarget(chosenCalendar, !toCard && kind === 'event')
-  const taskListId = useTaskListTarget(chosenList, !toCard && kind === 'task')
 
   const pending =
     toCardMutation.isPending || createEvent.isPending || createTask.isPending || archive.isPending
@@ -111,28 +100,28 @@ export function NoteDropDialog({ target, archives, onArchivesChange, onClose }: 
       return
     }
 
-    if (kind === 'task') {
-      if (!taskListId) return
+    if (schedule.kind === 'task') {
+      if (!schedule.taskListId) return
       createTask.mutate(
-        { taskListId, title, notes: description, due: target.range.day },
+        { taskListId: schedule.taskListId, title, notes: description, due: target.range.day },
         { onSuccess: done },
       )
       return
     }
 
-    if (!calendarId) return
+    if (!schedule.calendarId) return
     createEvent.mutate(
       {
-        calendarId,
+        calendarId: schedule.calendarId,
         title,
         description,
-        times: allDay ? rangeDates(target.range) : rangeTimes(target.range),
+        times: scheduleTimes(schedule, target.range),
       },
       { onSuccess: done },
     )
   }
 
-  const ready = created || target.kind === 'board' || (kind === 'event' ? calendarId : taskListId)
+  const ready = created || target.kind === 'board' || schedule.target
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
@@ -145,26 +134,12 @@ export function NoteDropDialog({ target, archives, onArchivesChange, onClose }: 
               <Dialog.Description className="mt-0.5 text-xs text-fog-dim">
                 {target.kind === 'board'
                   ? `Карточка в колонку «${target.listTitle}»`
-                  : `${rangeLabel('day', [target.range.day])}, ${
-                      kind === 'task' ? 'срок' : allDay ? 'весь день' : timeLabel(target.range)
-                    }`}
+                  : scheduleCaption(schedule, target.range)}
               </Dialog.Description>
             </div>
 
             {target.kind === 'calendar' ? (
-              <div className="segment shrink-0">
-                {(Object.keys(KIND_LABEL) as Kind[]).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={kind === value}
-                    onClick={() => setKind(value)}
-                    className="segment-item px-2.5 py-1 text-xs font-medium"
-                  >
-                    {KIND_LABEL[value]}
-                  </button>
-                ))}
-              </div>
+              <KindSwitch value={schedule.kind} onChange={schedule.setKind} />
             ) : null}
           </div>
 
@@ -203,24 +178,7 @@ export function NoteDropDialog({ target, archives, onArchivesChange, onClose }: 
                 </p>
               ) : null}
 
-              {target.kind === 'calendar' ? (
-                kind === 'event' ? (
-                  <>
-                    <CalendarChoice value={calendarId} onChange={setChosenCalendar} enabled />
-                    <label className="flex items-center gap-2 text-sm text-fog-muted">
-                      <input
-                        type="checkbox"
-                        checked={allDay}
-                        onChange={(event) => setAllDay(event.target.checked)}
-                        className="size-3.5 shrink-0 accent-accent"
-                      />
-                      Весь день
-                    </label>
-                  </>
-                ) : (
-                  <TaskListChoice value={taskListId} onChange={setChosenList} enabled />
-                )
-              ) : null}
+              {target.kind === 'calendar' ? <ScheduleFields schedule={schedule} /> : null}
 
               <label className="flex items-center gap-2 text-sm text-fog-muted">
                 <input
