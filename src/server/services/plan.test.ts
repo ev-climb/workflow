@@ -85,18 +85,17 @@ describe('план дня', () => {
     expect(plan.boards[0].inWork[0].cards.map((card) => card.title)).toEqual(['Починить пуши'])
   })
 
-  it('колонка с лимитом считается рабочей, как бы ни называлась', async () => {
+  it('лимит списка рабочей колонкой не делает: импорт ставит его подряд всем спискам', async () => {
     const board = await createBoard({ title: 'Job' })
     await createList({ boardId: board.id, title: 'Бэклог' })
     const limited = await createList({ boardId: board.id, title: 'Загадочное' })
-    // лимит на список приезжает только импортом из Trello, руками его не выставляют
     await db.update(lists).set({ wipLimit: 3 }).where(eq(lists.id, limited.id))
     await setBoardSlot('top', board.id)
     await setBoardSlot('bottom', null)
 
     const plan = await planDay(DAY)
 
-    expect(plan.boards[0].inWork.map((list) => list.title)).toEqual(['Загадочное'])
+    expect(plan.boards[0].inWork).toEqual([])
   })
 
   it('рабочая колонка не опозналась — отдаёт названия колонок, чтобы пустота объяснилась', async () => {

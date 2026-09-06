@@ -36,15 +36,12 @@ export type DayPlan = {
 
 /**
  * Признака «рабочая колонка» в схеме нет, а заводить его ради одного инструмента дороже,
- * чем ошибиться: опознаём по названию и по выставленному лимиту. Лимит на списке и
- * означает ограничение незавершённой работы, так что он тут точнее любого названия — но
- * на живых досках он не заполнен, и название остаётся единственным признаком.
+ * чем ошибиться: опознаём по названию. Лимит списка признаком не считается: импорт из
+ * Trello проставляет его подряд всем спискам, и по нему в план попал бы весь бэклог.
  */
 const IN_WORK = ['сейчас', 'в работе', 'в процессе', 'делаю', 'doing', 'in progress', 'wip']
 
-function isInWork(list: { title: string; wipLimit: number | null }): boolean {
-  if (list.wipLimit !== null) return true
-
+function isInWork(list: { title: string }): boolean {
   const title = list.title.trim().toLowerCase()
   return IN_WORK.some(
     (name) => title === name || title.startsWith(`${name} `) || title.startsWith(`${name}(`),
