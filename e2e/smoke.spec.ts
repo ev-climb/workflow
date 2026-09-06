@@ -5,15 +5,14 @@ import { seed } from './seed.ts'
 test.beforeEach(seed)
 
 /**
- * Первая отрисовка приходит с сервера, следом клиент перечитывает доски. Ждём этого
- * до жеста, чтобы перерисовка не пришлась на середину перетаскивания.
+ * Доски приходят с сервера, и клиент их не перечитывает. Признак ожившей страницы —
+ * первый запрос календаря: он уходит из эффекта, то есть после гидратации. Ждём его
+ * до жеста, чтобы тот не пришёлся на страницу без обработчиков.
  */
 async function opened(page: Page, go: () => Promise<unknown>) {
-  const board = page.waitForResponse(
-    (r) => r.request().method() === 'GET' && r.url().includes('/api/boards/'),
-  )
+  const calendar = page.waitForResponse((r) => r.url().includes('/api/calendar/dues'))
   await go()
-  await board
+  await calendar
   await expect(page.locator('section[data-slot="top"]')).toBeVisible()
 }
 

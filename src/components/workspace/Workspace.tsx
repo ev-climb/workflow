@@ -20,6 +20,8 @@ type Props = {
   boards: BoardSummary[]
   /** Доски слотов, прочитанные на сервере: первая отрисовка идёт без похода в сеть. */
   initialBoards: Record<string, BoardView>
+  /** Когда их прочитали: иначе запрос считает их свежими с гидратации, а не с чтения. */
+  initialBoardsAt: number
   topBoardId: string | null
   bottomBoardId: string | null
   topBoardRatio: number
@@ -32,6 +34,7 @@ type Props = {
 export function Workspace({
   boards,
   initialBoards,
+  initialBoardsAt,
   topBoardId,
   bottomBoardId,
   topBoardRatio,
@@ -159,6 +162,7 @@ export function Workspace({
                 boards={boards}
                 boardId={slots.top}
                 initial={slots.top ? initialBoards[slots.top] : undefined}
+                initialAt={initialBoardsAt}
                 onChoose={(boardId) => void chooseBoard('top', boardId)}
               />
               <Splitter
@@ -171,6 +175,7 @@ export function Workspace({
                 boards={boards}
                 boardId={slots.bottom}
                 initial={slots.bottom ? initialBoards[slots.bottom] : undefined}
+                initialAt={initialBoardsAt}
                 onChoose={(boardId) => void chooseBoard('bottom', boardId)}
               />
             </div>

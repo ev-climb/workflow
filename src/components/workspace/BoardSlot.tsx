@@ -15,10 +15,11 @@ type Props = {
   boards: BoardSummary[]
   boardId: string | null
   initial?: BoardView
+  initialAt?: number
   onChoose: (boardId: string | null) => void
 }
 
-export function BoardSlot({ slot, boards, boardId, initial, onChoose }: Props) {
+export function BoardSlot({ slot, boards, boardId, initial, initialAt, onChoose }: Props) {
   return (
     <section data-slot={slot} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
       <header className="flex shrink-0 items-center gap-4 px-6 pt-4 pb-3.5">
@@ -40,7 +41,13 @@ export function BoardSlot({ slot, boards, boardId, initial, onChoose }: Props) {
       {/* колонки доски прокручиваются здесь: страница целиком не ездит ни вбок, ни вниз */}
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-6 pb-5">
         {boardId ? (
-          <Board boards={boards} boardId={boardId} slot={slot} initial={initial} />
+          <Board
+            boards={boards}
+            boardId={boardId}
+            slot={slot}
+            initial={initial}
+            initialAt={initialAt}
+          />
         ) : (
           <p className="px-1 text-sm text-fog-dim">Слот пуст: доска не выбрана.</p>
         )}

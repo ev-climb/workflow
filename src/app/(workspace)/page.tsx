@@ -53,6 +53,7 @@ export default async function WorkspacePage({ searchParams }: Props) {
       <Workspace
         boards={boards}
         initialBoards={initialBoards}
+        initialBoardsAt={Date.now()}
         topBoardId={topBoardId}
         bottomBoardId={state.bottomBoardId}
         topBoardRatio={state.topBoardRatio}

@@ -9,8 +9,19 @@ import { Failure } from './Failure'
 
 const note = 'text-sm text-fog-dim'
 
-export function BoardArchive({ boardId, initial }: { boardId: string; initial: ArchiveView }) {
-  const { data, error } = useQuery({ ...archiveQuery(boardId), initialData: initial })
+type Props = {
+  boardId: string
+  initial: ArchiveView
+  /** Когда архив прочитали на сервере: иначе запрос считает его свежим с гидратации. */
+  initialAt: number
+}
+
+export function BoardArchive({ boardId, initial, initialAt }: Props) {
+  const { data, error } = useQuery({
+    ...archiveQuery(boardId),
+    initialData: initial,
+    initialDataUpdatedAt: initialAt,
+  })
 
   if (error) return <p className={note}>Архив не прочитался: {error.message}</p>
   if (!data.lists.length && !data.cards.length) return <p className={note}>Архив пуст.</p>

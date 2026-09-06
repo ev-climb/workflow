@@ -13,10 +13,21 @@ import { Failure } from './Failure'
 
 const note = 'px-1 text-sm text-fog-dim'
 
-type Props = { boards: BoardSummary[]; boardId: string; slot: string; initial?: BoardView }
+type Props = {
+  boards: BoardSummary[]
+  boardId: string
+  slot: string
+  initial?: BoardView
+  /** Когда доску прочитали на сервере: иначе запрос считает её свежей с гидратации. */
+  initialAt?: number
+}
 
-export function Board({ boards, boardId, slot, initial }: Props) {
-  const { data, error, isPending } = useQuery({ ...boardQuery(boardId), initialData: initial })
+export function Board({ boards, boardId, slot, initial, initialAt }: Props) {
+  const { data, error, isPending } = useQuery({
+    ...boardQuery(boardId),
+    initialData: initial,
+    initialDataUpdatedAt: initialAt,
+  })
   const create = useCreateList(boardId)
 
   if (error) return <p className={note}>Доска не прочиталась: {error.message}</p>

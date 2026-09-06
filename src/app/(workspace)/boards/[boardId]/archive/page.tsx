@@ -22,7 +22,11 @@ export default async function ArchivePage({ params }: { params: Promise<{ boardI
           ← На стол
         </Link>
       </header>
-      <BoardArchive boardId={boardId} initial={toArchiveView(await getArchive(boardId))} />
+      <BoardArchive
+        boardId={boardId}
+        initial={toArchiveView(await getArchive(boardId))}
+        initialAt={Date.now()}
+      />
     </main>
   )
 }
