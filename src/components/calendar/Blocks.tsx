@@ -1,13 +1,12 @@
 'use client'
 
 import { useSetCardDueDone } from '@/lib/board-mutations'
-import { rangeOf, type Target } from '@/lib/calendar-drag'
+import { placedRange, placedTime, type Range, type Target } from '@/lib/calendar-drag'
 import { MINUTES_IN_DAY } from '@/lib/calendar-grid'
 import type { PlacedEvent } from '@/lib/calendar-layout'
 import { useSetTaskDone } from '@/lib/calendar-mutations'
 import type { TimedView } from '@/lib/calendar-scene'
 import type { TimeBlockView } from '@/lib/calendar-view'
-import { moscowParts } from '@/lib/dates'
 import {
   BOTH_HANDLES_PX,
   DAY_PX,
@@ -58,11 +57,11 @@ export function TimeBlockChip({
   const block = placed.event
   const setDone = useSetCardDueDone(block.boardId, block.cardId)
   const height = heightOf(placed)
-  const time = moscowParts(block.startsAt).time
+  const time = placedTime(placed)
   // доска перечитывается целиком, задержка видна глазом: пока пишем, показываем свою отметку
   const done = setDone.isPending ? !block.cardDone : block.cardDone
   // кусок блока, обрезанный полуночью, не тащится: правка переписала бы блок целиком
-  const base = rangeOf(block, day)
+  const base = placedRange(day, placed)
   const target: Target = { type: 'block', id: block.id }
 
   return (
@@ -134,7 +133,7 @@ export function TaskBlock({
   const setDone = useSetTaskDone()
   const height = heightOf(placed)
   const title = event.title ?? 'Без названия'
-  const time = moscowParts(event.startsAt).time
+  const time = placedTime(placed)
   // отметка ходит в Google и приезжает обратно синхронизацией: пока идёт, показываем свою
   const done = setDone.isPending ? event.taskCompleted !== true : event.taskCompleted === true
 
@@ -193,9 +192,9 @@ export function EventBlock({
   const { event } = placed
   const height = heightOf(placed)
   const title = event.title ?? 'Без названия'
-  const time = moscowParts(event.startsAt).time
+  const time = placedTime(placed)
   // кусок события, обрезанный полуночью, не тащится: правка переписала бы событие целиком
-  const base = rangeOf(event, day)
+  const base = placedRange(day, placed)
   const target: Target = { type: 'event', id: event.id }
 
   /**
@@ -243,7 +242,7 @@ function Handles({
   target,
   onGrab,
 }: {
-  base: ReturnType<typeof rangeOf>
+  base: Range | null
   height: number
   target: Target
   onGrab: GrabHandler

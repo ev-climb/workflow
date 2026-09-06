@@ -1,5 +1,5 @@
 import { MINUTES_IN_DAY, addDays } from './calendar-grid'
-import { momentInMoscow, moscowParts } from './dates'
+import { momentInMoscow } from './dates'
 
 /** Шаг сетки при выделении и перетаскивании: четверть часа. */
 export const SNAP_MINUTES = 15
@@ -78,30 +78,28 @@ export function resized(base: Range, edge: 'start' | 'end', minutes: number): Ra
   return { ...base, end: clamp(minutes, base.start + SNAP_MINUTES, MINUTES_IN_DAY) }
 }
 
-function minutesOf(time: string): number {
-  const [hour, minute] = time.split(':').map(Number)
-  return hour * 60 + minute
-}
+/**
+ * Границы куска на сетке дня — то же, что показывает раскладка, но без обрезки суточной
+ * границей: началу вчера отвечает минус, концу завтра — больше суток.
+ */
+export type PlacedBounds = { from: number; to: number }
 
 /**
  * Отрезок события на сетке дня. `null` — событие в этот день целиком не укладывается:
  * кусок, обрезанный полуночью, перетаскивать нельзя, правка переписала бы всё событие.
+ * Конец ровно в полночь принадлежит этому дню, а не следующему: это его нижняя граница.
  */
-export function rangeOf(event: { startsAt: string; endsAt: string }, day: string): Range | null {
-  const from = moscowParts(event.startsAt)
-  if (from.date !== day) return null
+export function placedRange(day: string, { from, to }: PlacedBounds): Range | null {
+  if (from < 0 || from >= MINUTES_IN_DAY || to > MINUTES_IN_DAY) return null
+  return { day, start: from, end: to }
+}
 
-  const to = moscowParts(event.endsAt)
-  // конец ровно в полночь принадлежит этому дню, а не следующему: это его нижняя граница
-  const end =
-    to.date === day
-      ? minutesOf(to.time)
-      : to.date === addDays(day, 1) && to.time === '00:00'
-        ? MINUTES_IN_DAY
-        : null
-  if (end === null) return null
-
-  return { day, start: minutesOf(from.time), end }
+/**
+ * Начало куска московскими стенными часами. У куска, обрезанного полуночью, это время
+ * самого события, а не полночь: смещение отсчитано от суток колонки и приводится к своим.
+ */
+export function placedTime({ from }: PlacedBounds): string {
+  return clock(((from % MINUTES_IN_DAY) + MINUTES_IN_DAY) % MINUTES_IN_DAY)
 }
 
 const pad = (value: number) => String(value).padStart(2, '0')

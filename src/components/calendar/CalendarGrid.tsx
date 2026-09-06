@@ -4,7 +4,6 @@ import { useRef } from 'react'
 import { Failure } from '@/components/board/Failure'
 import type { Range } from '@/lib/calendar-drag'
 import { HOURS, dayNumber, isToday, nowOffset, weekdayLabel } from '@/lib/calendar-grid'
-import { buildScene } from '@/lib/calendar-scene'
 import type { CalendarEventView, CardDueView, TimeBlockView } from '@/lib/calendar-view'
 import type { CalendarTask } from '@/server/services/google-tasks'
 import { DayColumn, type DayDraft } from './DayColumn'
@@ -14,6 +13,7 @@ import { useDayColumns } from './use-day-columns'
 import { useFirstScroll, useNow } from './use-grid-clock'
 import { useGridDrag } from './use-grid-drag'
 import { useGridDrop } from './use-grid-drop'
+import { useScene } from './use-scene'
 import { useStripeDrag } from './use-stripe-drag'
 
 type Props = {
@@ -29,7 +29,7 @@ type Props = {
 
 /**
  * Сетка недели или дня: шапка с числами, полосы над сеткой и колонки со временем. Здесь
- * только каркас — жесты живут в своих хуках, раскладка собирается `buildScene`, а сами
+ * только каркас — жесты живут в своих хуках, раскладка собирается `useScene`, а сами
  * блоки и полосы рисуют `DayColumn` и `Stripes`.
  */
 export function CalendarGrid({
@@ -51,7 +51,7 @@ export function CalendarGrid({
   const stripes = useStripeDrag({ days, columns: dayColumns, onOpen, onOpenTask })
   const drop = useGridDrop(dayColumns)
 
-  const scene = buildScene({
+  const scene = useScene({
     days,
     events,
     blocks,
@@ -130,11 +130,11 @@ export function CalendarGrid({
             ))}
           </div>
           <div className="grid flex-1" style={{ gridTemplateColumns: columns(days.length) }}>
-            {days.map((day) => (
+            {days.map((day, index) => (
               <DayColumn
                 key={day}
                 day={day}
-                items={scene.items}
+                placed={scene.placed[index]}
                 drafts={drafts.filter((draft) => draft.range.day === day)}
                 drag={drag}
                 now={now}

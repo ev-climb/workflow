@@ -4,8 +4,9 @@ import {
   TIME_BLOCK_MINUTES,
   blockAt,
   moved,
+  placedRange,
+  placedTime,
   rangeDates,
-  rangeOf,
   rangeTimes,
   resized,
   selection,
@@ -16,12 +17,6 @@ import {
 const DAY = '2026-09-02'
 const NEXT = '2026-09-03'
 const HEIGHT = 1056
-
-// смещение Москвы в сентябре +03:00, поэтому в тесте оно записано прямо в момент
-function moment(wall: string): string {
-  const [date, time] = wall.includes(' ') ? wall.split(' ') : [DAY, wall]
-  return `${date}T${time}:00+03:00`
-}
 
 describe('snapMinutes', () => {
   it('притягивает точку к четверти часа', () => {
@@ -80,29 +75,33 @@ describe('resized', () => {
   })
 })
 
-describe('rangeOf', () => {
-  it('берёт границы события московскими часами', () => {
-    expect(rangeOf({ startsAt: moment('09:00'), endsAt: moment('10:30') }, DAY)).toEqual({
-      day: DAY,
-      start: 540,
-      end: 630,
-    })
+/** Границы куска так, как их отдаёт раскладка: минуты от полуночи своей колонки. */
+function bounds(from: number, to: number) {
+  return { from, to }
+}
+
+describe('placedRange', () => {
+  it('берёт границы куска как есть', () => {
+    expect(placedRange(DAY, bounds(540, 630))).toEqual({ day: DAY, start: 540, end: 630 })
   })
 
   it('конец ровно в полночь принадлежит своему дню', () => {
-    expect(rangeOf({ startsAt: moment('23:00'), endsAt: moment(`${NEXT} 00:00`) }, DAY)).toEqual({
-      day: DAY,
-      start: 1380,
-      end: 1440,
-    })
+    expect(placedRange(DAY, bounds(1380, 1440))).toEqual({ day: DAY, start: 1380, end: 1440 })
   })
 
   it('событие через полночь не отдаёт: кусок дня тащить нельзя', () => {
-    expect(rangeOf({ startsAt: moment('23:00'), endsAt: moment(`${NEXT} 01:00`) }, DAY)).toBeNull()
+    expect(placedRange(DAY, bounds(1380, 1500))).toBeNull()
   })
 
   it('чужой день не отдаёт', () => {
-    expect(rangeOf({ startsAt: moment('09:00'), endsAt: moment('10:00') }, NEXT)).toBeNull()
+    expect(placedRange(NEXT, bounds(-900, -840))).toBeNull()
+  })
+})
+
+describe('placedTime', () => {
+  it('показывает время события, а не полночь куска, обрезанного ею', () => {
+    expect(placedTime(bounds(540, 630))).toBe('09:00')
+    expect(placedTime(bounds(-60, 120))).toBe('23:00')
   })
 })
 

@@ -2,7 +2,7 @@
 
 import { timeLabel, type Range } from '@/lib/calendar-drag'
 import { MINUTES_IN_DAY, isToday } from '@/lib/calendar-grid'
-import { placeDay } from '@/lib/calendar-layout'
+import type { PlacedEvent } from '@/lib/calendar-layout'
 import type { GridItem, TimedView } from '@/lib/calendar-scene'
 import { EventBlock, TaskBlock, TimeBlockChip } from './Blocks'
 import { DAY_PX, HOUR_LINES, type OpenHandler, type TaskOpenHandler } from './grid'
@@ -18,7 +18,7 @@ export type DayDraft = { range: Range; event: TimedView | null; title?: string }
  */
 export function DayColumn({
   day,
-  items,
+  placed,
   drafts,
   drag,
   now,
@@ -28,7 +28,7 @@ export function DayColumn({
   onOpenTask,
 }: {
   day: string
-  items: GridItem[]
+  placed: PlacedEvent<GridItem>[]
   drafts: DayDraft[]
   drag: GridDrag
   now: Date | null
@@ -54,25 +54,25 @@ export function DayColumn({
       }`}
       style={{ backgroundImage: HOUR_LINES }}
     >
-      {placeDay(items, day).map((placed) =>
-        placed.event.kind !== 'event' ? (
+      {placed.map((one) =>
+        one.event.kind !== 'event' ? (
           <TimeBlockChip
-            key={placed.key}
-            placed={{ ...placed, event: placed.event.block }}
+            key={one.key}
+            placed={{ ...one, event: one.event.block }}
             day={day}
             onGrab={drag.grab}
           />
-        ) : placed.event.event.taskId ? (
+        ) : one.event.event.taskId ? (
           <TaskBlock
-            key={placed.key}
-            placed={{ ...placed, event: placed.event.event }}
-            taskId={placed.event.event.taskId}
+            key={one.key}
+            placed={{ ...one, event: one.event.event }}
+            taskId={one.event.event.taskId}
             onOpen={onOpenTask}
           />
         ) : (
           <EventBlock
-            key={placed.key}
-            placed={{ ...placed, event: placed.event.event }}
+            key={one.key}
+            placed={{ ...one, event: one.event.event }}
             day={day}
             onGrab={drag.grab}
             onOpen={onOpen}

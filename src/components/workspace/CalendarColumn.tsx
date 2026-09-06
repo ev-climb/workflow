@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Mark } from '@/components/brand/Logo'
 import { CalendarGrid } from '@/components/calendar/CalendarGrid'
 import { CreateDialog } from '@/components/calendar/CreateDialog'
@@ -33,7 +33,8 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
   const [range, setRange] = useState<Range | null>(null)
   const [opened, setOpened] = useState<{ id: string; title: string } | null>(null)
   const [openedTask, setOpenedTask] = useState<{ id: string; title: string } | null>(null)
-  const days = daysOf(mode, anchor)
+  // окно недели держится за одну ссылку: по нему мемоизирована вся раскладка сетки
+  const days = useMemo(() => daysOf(mode, anchor), [mode, anchor])
   const events = useQuery(calendarQuery(days[0], days[days.length - 1]))
   const dues = useQuery(duesQuery(days[0], days[days.length - 1]))
   const blocks = useQuery(timeBlocksQuery(days[0], days[days.length - 1]))

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CalendarTask } from '@/server/services/google-tasks'
 import type { Target } from './calendar-drag'
-import { buildScene, type AllDayView, type StripeDrag } from './calendar-scene'
+import { gridScene, stripeScene, type AllDayView, type StripeDrag } from './calendar-scene'
 import type { CalendarEventView, CardDueView, TimeBlockView } from './calendar-view'
 
 const DAYS = ['2026-09-02', '2026-09-03', '2026-09-04']
@@ -70,18 +70,20 @@ function scene(input: {
   held?: Target | null
   heldStripe?: StripeDrag | null
 }) {
-  return buildScene({
-    days: DAYS,
-    events: input.events ?? [],
-    blocks: input.blocks ?? [],
-    dues: input.dues ?? [],
-    tasks: input.tasks ?? [],
-    held: input.held ?? null,
-    heldStripe: input.heldStripe ?? null,
-  })
+  const events = input.events ?? []
+  return {
+    ...gridScene({ events, blocks: input.blocks ?? [], held: input.held ?? null }),
+    ...stripeScene({
+      days: DAYS,
+      events,
+      dues: input.dues ?? [],
+      tasks: input.tasks ?? [],
+      held: input.heldStripe ?? null,
+    }),
+  }
 }
 
-describe('buildScene', () => {
+describe('раскладка сетки', () => {
   it('раскладывает событие и блок одним проходом: ширину они делят между собой', () => {
     const built = scene({
       events: [timed()],

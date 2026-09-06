@@ -118,9 +118,33 @@ function previewStripes(
 /** Место полосы: сроку и задаче от раскладки нужны только клетка дня и ряд в ней. */
 export type StripePlace = PlacedStripe<StripeEntry<CardDueView, CalendarTask>>
 
-export type Scene = {
+export type StripeScene = {
   allDay: PlacedAllDay<AllDayView>[]
   stripes: StripePlace[]
+}
+
+/**
+ * Полосы над сеткой: события на весь день и ряд сроков с задачами под ними. Считаются
+ * отдельно от временной сетки — жест по полосе её содержимого не касается.
+ */
+export function stripeScene(input: {
+  days: string[]
+  events: CalendarEventView[]
+  dues: CardDueView[]
+  tasks: CalendarTask[]
+  held: StripeDrag | null
+}): StripeScene {
+  const { days, events, dues, tasks, held } = input
+
+  return {
+    // события на весь день во временную сетку не попадают: они полосой сверху, инвариант 3
+    allDay: placeAllDay(previewAllDay(events.filter(isAllDay), days, held), days),
+    // срок и задача — не события и не отрезки времени: своя полоса под событиями на весь день
+    stripes: placeStripe(previewStripes(stripeItems(dues, tasks), held), days),
+  }
+}
+
+export type GridScene = {
   /** События со временем и тайм-блоки вперемешку: раскладка по дням идёт по ним разом. */
   items: GridItem[]
   /** Что тащат прямо сейчас: заготовка рисуется по нему, а с прежнего места оно снято. */
@@ -129,36 +153,24 @@ export type Scene = {
 }
 
 /**
- * Всё, что рисует сетка, из того, что ей пришло. Функция чистая: жесты приносят сюда своё
- * состояние — то, что тащат, — и получают раскладку, уже учитывающую движение.
+ * Содержимое временной сетки. Функция чистая: жест приносит сюда своё состояние — то, что
+ * тащат, — и получает раскладку, уже учитывающую движение.
  */
-export function buildScene(input: {
-  days: string[]
+export function gridScene(input: {
   events: CalendarEventView[]
   blocks: TimeBlockView[]
-  dues: CardDueView[]
-  tasks: CalendarTask[]
   held: Target | null
-  heldStripe: StripeDrag | null
-}): Scene {
-  const { days, events, blocks, dues, tasks, held, heldStripe } = input
-
-  // события на весь день во временную сетку не попадают: они полосой сверху, инвариант 3
+}): GridScene {
+  const { events, blocks, held } = input
   const timed = events.filter(isTimed)
-  const allDay = placeAllDay(previewAllDay(events.filter(isAllDay), days, heldStripe), days)
-  // срок и задача — не события и не отрезки времени: своя полоса под событиями на весь день
-  const stripes = placeStripe(previewStripes(stripeItems(dues, tasks), heldStripe), days)
 
   // то, что тащат, рисуется заготовкой: на прежнем месте его быть не должно
-  const shown = timed.filter((event) => !holds(held, 'event', event.id))
   const items = gridItems(
-    shown,
+    timed.filter((event) => !holds(held, 'event', event.id)),
     blocks.filter((block) => !holds(held, 'block', block.id)),
   )
 
   return {
-    allDay,
-    stripes,
     items,
     heldEvent: held?.type === 'event' ? (timed.find((one) => one.id === held.id) ?? null) : null,
     heldBlock: held?.type === 'block' ? (blocks.find((one) => one.id === held.id) ?? null) : null,

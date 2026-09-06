@@ -63,6 +63,14 @@ describe('placeDay', () => {
     expect(placeDay([event('b', '2026-09-03 00:00', '2026-09-03 02:00')], DAY)).toEqual([])
   })
 
+  it('отдаёт границы куска и до обрезки днём: по ним блок берёт своё время', () => {
+    const night = event('a', '2026-09-01 23:00', '2026-09-02 01:00')
+    const [placed] = placeDay([night], DAY)
+
+    expect([placed.from, placed.to]).toEqual([-60, 60])
+    expect([placed.start, placed.end]).toEqual([0, 60])
+  })
+
   it('растягивает слишком короткое событие до читаемой высоты', () => {
     const [placed] = placeDay([event('a', '09:00', '09:05')], DAY)
     expect(placed.end - placed.start).toBe(MIN_EVENT_MINUTES)

@@ -13,6 +13,9 @@ export type PlacedEvent<T> = {
   /** Минуты от полуночи московских суток; границы уже обрезаны днём. */
   start: number
   end: number
+  /** Те же границы до обрезки: минус — начало вчера, больше суток — конец завтра. */
+  from: number
+  to: number
   /** Место в ряду пересекающихся: столбец из `columns`, по ним и делится ширина. */
   column: number
   columns: number
@@ -54,7 +57,7 @@ export function placeDay<T extends TimedEvent>(events: readonly T[], day: string
     const bottom = Math.min(to, MINUTES_IN_DAY)
     const end = Math.min(MINUTES_IN_DAY, Math.max(bottom, start + MIN_EVENT_MINUTES))
 
-    drafts.push({ event, key: `${event.id}:${day}`, start, end, column: 0 })
+    drafts.push({ event, key: `${event.id}:${day}`, start, end, from, to, column: 0 })
   }
 
   drafts.sort((a, b) => a.start - b.start || b.end - a.end || (a.key < b.key ? -1 : 1))
