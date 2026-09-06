@@ -45,6 +45,29 @@ export function seeOther(location: string): NextResponse {
   return new NextResponse(null, { status: 303, headers: { location } })
 }
 
+/** База для разбора: своим считается путь, который к ней и приклеился. */
+const OWN_ORIGIN = 'http://own.invalid'
+
+/**
+ * Путь для `seeOther`, пришедший запросом. Проверки на ведущий слэш мало: обратный слэш
+ * браузер нормализует в прямой, и `/\evil.com` уходит в `Location` относительным путём,
+ * а открывается чужим доменом. Разбор через `URL` сводит такое к чужому origin, а заодно
+ * выбрасывает управляющие символы, которым в заголовке делать нечего.
+ */
+export function safeNext(value: string): string {
+  if (!value.startsWith('/')) return '/'
+
+  let url: URL
+  try {
+    url = new URL(value, OWN_ORIGIN)
+  } catch {
+    return '/'
+  }
+
+  if (url.origin !== OWN_ORIGIN) return '/'
+  return `${url.pathname}${url.search}${url.hash}`
+}
+
 /** Кривой JSON и несошедшаяся схема — такая же ошибка входа, как и всё остальное. */
 export async function jsonBody<T>(request: Request, schema: z.ZodType<T>): Promise<T> {
   let raw: unknown

@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server'
-import { seeOther } from '@/lib/http'
+import { safeNext, seeOther } from '@/lib/http'
 import { SESSION_COOKIE, SESSION_MAX_AGE } from '@/lib/session'
 import { signIn } from '@/server/services/auth'
 import { UnauthorizedError } from '@/server/services/errors'
@@ -30,9 +30,4 @@ export async function POST(request: NextRequest) {
     }
     throw error
   }
-}
-
-/** Только свои пути: иначе форма превратилась бы в открытый редирект. */
-function safeNext(value: string): string {
-  return value.startsWith('/') && !value.startsWith('//') ? value : '/'
 }
