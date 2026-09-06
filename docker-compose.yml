@@ -6,7 +6,7 @@ x-app: &app
   env_file: .env
   environment:
     # внутри сети приложение ходит в базу по имени сервиса, а не через порт хоста
-    DATABASE_URL: postgres://${POSTGRES_USER:-workflow}:${POSTGRES_PASSWORD:-workflow}@db:5432/${POSTGRES_DB:-workflow}
+    DATABASE_URL: postgres://${POSTGRES_USER:-workflow}:${POSTGRES_PASSWORD:?задай POSTGRES_PASSWORD в .env}@db:5432/${POSTGRES_DB:-workflow}
     ATTACHMENTS_DIR: /app/attachments
   volumes:
     - ./attachments:/app/attachments
@@ -25,10 +25,13 @@ services:
       -c maintenance_work_mem=32MB
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-workflow}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-workflow}
+      # дефолта здесь нет намеренно: пустое значение должно ронять запуск, а не поднимать
+      # базу с паролем, известным всякому, кто видел этот файл
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задай POSTGRES_PASSWORD в .env}
       POSTGRES_DB: ${POSTGRES_DB:-workflow}
+    # только петля: порт на хосте нужен pnpm dev и db:studio, снаружи в базу не ходят
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - db-data:/var/lib/postgresql/data
     mem_limit: 256m
