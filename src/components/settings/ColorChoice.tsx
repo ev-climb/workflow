@@ -8,6 +8,8 @@ type Props = {
   label: string
   /** Цвет, которым красится календарь без своего: строка «как у аккаунта» и её образец. */
   inherited?: string
+  /** Пока правка пишется, выбор закрыт: иначе поверх неё уходит второй запрос. */
+  disabled?: boolean
   onChange: (color: string | null) => void
 }
 
@@ -18,7 +20,7 @@ const INHERIT = 'inherit'
  * вне набора получает свою строку в списке — иначе `Select` остался бы без выбранного
  * пункта и показал бы пустоту.
  */
-export function ColorChoice({ value, label, inherited, onChange }: Props) {
+export function ColorChoice({ value, label, inherited, disabled, onChange }: Props) {
   const known = value === null || CALENDAR_COLORS.some((color) => color.hex === value)
   const options = known
     ? CALENDAR_COLORS
@@ -30,6 +32,7 @@ export function ColorChoice({ value, label, inherited, onChange }: Props) {
   return (
     <Select.Root
       value={value ?? INHERIT}
+      disabled={disabled}
       onValueChange={(next) => onChange(next === INHERIT ? null : next)}
     >
       <Select.Trigger

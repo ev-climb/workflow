@@ -1,12 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { sendJson } from '@/lib/api-client'
+import { Failure } from '@/components/board/Failure'
+import { useUpdateCalendar } from '@/lib/settings-mutations'
 import type { GoogleCalendarSummary } from '@/server/services/google-calendars'
 import { ColorChoice } from './ColorChoice'
-import { useSettingsRefresh } from './settings-refresh'
-
-type Patch = { color?: string | null; visible?: boolean }
 
 /**
  * Календари одного аккаунта: что показывать в колонке и каким цветом. Список приезжает
@@ -28,26 +25,15 @@ export function AccountCalendars({ calendars }: { calendars: GoogleCalendarSumma
 }
 
 function CalendarRow({ calendar }: { calendar: GoogleCalendarSummary }) {
-  const refresh = useSettingsRefresh()
-  const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-
-  const save = (patch: Patch) => {
-    setError(null)
-    setPending(true)
-    sendJson('PATCH', `/api/google/calendars/${calendar.id}`, patch)
-      .then(refresh)
-      .catch((failure: Error) => setError(failure.message))
-      .finally(() => setPending(false))
-  }
+  const update = useUpdateCalendar(calendar.id)
 
   return (
     <li className="flex items-center gap-2">
       <input
         type="checkbox"
         checked={calendar.visible}
-        disabled={pending}
-        onChange={(event) => save({ visible: event.target.checked })}
+        disabled={update.isPending}
+        onChange={(event) => update.mutate({ visible: event.target.checked })}
         id={`calendar-${calendar.id}`}
         className="size-3.5 shrink-0 accent-accent"
       />
@@ -63,9 +49,10 @@ function CalendarRow({ calendar }: { calendar: GoogleCalendarSummary }) {
         value={calendar.color}
         inherited={calendar.accountColor ?? undefined}
         label={`Цвет календаря «${calendar.title}»`}
-        onChange={(next) => save({ color: next })}
+        disabled={update.isPending}
+        onChange={(next) => update.mutate({ color: next })}
       />
-      {error ? <span className="text-xs text-alarm">{error}</span> : null}
+      <Failure error={update.error} />
     </li>
   )
 }

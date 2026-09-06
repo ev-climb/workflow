@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { sendJson } from '@/lib/api-client'
+import { Failure } from '@/components/board/Failure'
 import type { GoogleAccountView } from '@/lib/calendar-view'
+import { useSetAccountColor } from '@/lib/settings-mutations'
 import { ColorChoice } from './ColorChoice'
-import { useSettingsRefresh } from './settings-refresh'
 
 /**
  * Цвет аккаунта: им красятся все его события, поэтому рабочие и личные различимы на
@@ -12,25 +11,19 @@ import { useSettingsRefresh } from './settings-refresh'
  * сервис, поэтому после правки перечитываются оба списка.
  */
 export function AccountColor({ account }: { account: GoogleAccountView }) {
-  const refresh = useSettingsRefresh()
-  const [error, setError] = useState<string | null>(null)
-
-  const save = (color: string | null) => {
-    if (color === null) return
-    setError(null)
-    sendJson('PATCH', `/api/google/accounts/${account.id}`, { color })
-      .then(refresh)
-      .catch((failure: Error) => setError(failure.message))
-  }
+  const setColor = useSetAccountColor(account.id)
 
   return (
     <>
       <ColorChoice
         value={account.color}
         label={`Цвет событий аккаунта ${account.email}`}
-        onChange={save}
+        disabled={setColor.isPending}
+        onChange={(color) => {
+          if (color !== null) setColor.mutate(color)
+        }}
       />
-      {error ? <span className="text-xs text-alarm">{error}</span> : null}
+      <Failure error={setColor.error} />
     </>
   )
 }
