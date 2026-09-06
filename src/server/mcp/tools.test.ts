@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { db } from '../db/client.ts'
 import { calendarEvents, googleAccounts, googleCalendars } from '../db/schema.ts'
+import type { GoogleEvent } from '../google/events.ts'
 import { createBoard, createList } from '../services/boards.ts'
 import { createCard, updateCard } from '../services/cards.ts'
 import { createChecklist } from '../services/checklists.ts'
@@ -9,6 +10,18 @@ import { InvalidInputError, NotFoundError } from '../services/errors.ts'
 import { createLabel } from '../services/labels.ts'
 import { setBoardSlot } from '../services/workspace.ts'
 import { TOOLS } from './tools.ts'
+
+vi.mock('../google/events.ts', async (importActual) => {
+  const actual = await importActual<typeof import('../google/events.ts')>()
+  return { ...actual, insertEvent: vi.fn() }
+})
+vi.mock('../services/google-accounts.ts', async (importActual) => {
+  const actual = await importActual<typeof import('../services/google-accounts.ts')>()
+  return { ...actual, accessTokenFor: vi.fn() }
+})
+
+const { insertEvent } = vi.mocked(await import('../google/events.ts'))
+const { accessTokenFor } = vi.mocked(await import('../services/google-accounts.ts'))
 
 type Json = Record<string, unknown>
 
@@ -303,6 +316,52 @@ describe('события календаря', () => {
     await expect(
       call('list_events', { from: '2026-09-02', to: '2026-09-01' }),
     ).rejects.toBeInstanceOf(InvalidInputError)
+  })
+
+  it('описание нового события доходит до Google и возвращается в ответе', async () => {
+    const [account] = await db
+      .insert(googleAccounts)
+      .values({ email: 'me@gmail.com', refreshTokenEncrypted: 'шифротекст' })
+      .returning({ id: googleAccounts.id })
+    const [calendar] = await db
+      .insert(googleCalendars)
+      .values({ accountId: account.id, googleCalendarId: 'me@gmail.com', title: 'Личный' })
+      .returning({ id: googleCalendars.id })
+
+    accessTokenFor.mockResolvedValue('ya29.access')
+    const times: GoogleEvent['times'] = {
+      allDay: false,
+      startsAt: new Date('2026-09-02T09:00:00Z'),
+      endsAt: new Date('2026-09-02T10:00:00Z'),
+      startDate: null,
+      endDate: null,
+    }
+    insertEvent.mockResolvedValue({
+      googleEventId: 'new1',
+      status: 'confirmed',
+      title: 'Созвон',
+      descriptionHtml: 'Повестка',
+      etag: '"42"',
+      googleUpdatedAt: new Date('2026-09-02T08:00:00Z'),
+      recurringEventId: null,
+      htmlLink: null,
+      googleTaskId: null,
+      times,
+    })
+
+    const created = (await call('create_event', {
+      calendarId: calendar.id,
+      title: 'Созвон',
+      description: 'Повестка',
+      times: {
+        allDay: false,
+        startsAt: '2026-09-02T09:00:00Z',
+        endsAt: '2026-09-02T10:00:00Z',
+      },
+    })) as Json
+
+    expect(insertEvent.mock.calls[0][2]).toMatchObject({ descriptionHtml: 'Повестка' })
+    expect(created).toMatchObject({ title: 'Созвон', description: 'Повестка' })
   })
 })
 

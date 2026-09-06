@@ -386,6 +386,7 @@ export const TOOLS: ToolDef[] = [
       const created = await createEvent(body.calendarId, {
         title: body.title,
         times: toEventTimes(body.times),
+        ...(body.description === undefined ? {} : { description: body.description }),
       })
       return eventDetailsOut(await getEvent(created.eventId))
     },
