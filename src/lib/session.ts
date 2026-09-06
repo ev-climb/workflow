@@ -8,13 +8,24 @@ const INFO = 'workflow session v1'
  * Ключ подписи выводится из `APP_ENCRYPTION_KEY` через HKDF: отдельной переменной
  * окружения не заводим, а разные `info` разводят подпись сессии и шифрование токенов
  * Google по разным ключам.
+ *
+ * В `info` подмешан `APP_PASSWORD_HASH`: смена пароля меняет ключ подписи, и все выданные
+ * куки перестают проходить проверку. Иначе после утечки пароля оставалось бы только
+ * ротировать `APP_ENCRYPTION_KEY`, а на нём висят токены Google — все аккаунты пришлось бы
+ * подключать заново.
  */
 function signingKey(): Buffer {
   const master = process.env.APP_ENCRYPTION_KEY
   if (!master) {
     throw new Error('APP_ENCRYPTION_KEY не задан: без него вход не работает, см. .env.example')
   }
-  return Buffer.from(hkdfSync('sha256', Buffer.from(master, 'base64'), '', INFO, 32))
+  const stored = process.env.APP_PASSWORD_HASH
+  if (!stored) {
+    throw new Error('APP_PASSWORD_HASH не задан: без него вход не работает, см. .env.example')
+  }
+  return Buffer.from(
+    hkdfSync('sha256', Buffer.from(master, 'base64'), '', `${INFO} ${stored}`, 32),
+  )
 }
 
 const b64url = (value: Buffer | string) =>

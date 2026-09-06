@@ -71,6 +71,7 @@ case "${1:-start}" in
     else
       printf '%s\n' "$line" >> .env
     fi
+    echo "пароль сменён, старые сессии больше не действуют"
     exec "$0" restart
     ;;
   *)

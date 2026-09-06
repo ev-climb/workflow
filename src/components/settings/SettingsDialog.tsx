@@ -96,9 +96,16 @@ export function SettingsDialog({ notice, onClose }: Props) {
             </ul>
           )}
 
-          <a href={connectUrl()} className="btn-primary mt-4 inline-block px-3 py-2 text-sm">
-            {accounts.data?.length ? 'Подключить ещё' : 'Подключить аккаунт'}
-          </a>
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <a href={connectUrl()} className="btn-primary inline-block px-3 py-2 text-sm">
+              {accounts.data?.length ? 'Подключить ещё' : 'Подключить аккаунт'}
+            </a>
+            <form method="post" action="/api/auth/logout">
+              <button type="submit" className="btn-quiet px-3 py-2 text-sm">
+                Выйти
+              </button>
+            </form>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
