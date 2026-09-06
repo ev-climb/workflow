@@ -87,20 +87,6 @@
   ::-webkit-scrollbar-thumb:hover {
     background: rgb(220 215 245 / 0.26) content-box;
   }
-
-  @media (prefers-reduced-motion: reduce) {
-    body::before,
-    .beacon,
-    .pulse,
-    .brand-float,
-    .brand-glow,
-    .brand-draw,
-    .loader-bar,
-    .loader-screen,
-    .loader-rise {
-      animation: none;
-    }
-  }
 }
 
 @keyframes drift {
@@ -797,5 +783,15 @@
 
   .markdown input[type='checkbox'] {
     margin-right: 0.4em;
+  }
+}
+
+/* Вне слоёв намеренно: неслоистые правила выигрывают у любого @layer, иначе
+   объявления в components перебивают это независимо от специфичности. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none;
   }
 }
