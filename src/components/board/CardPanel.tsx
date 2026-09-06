@@ -5,6 +5,7 @@ import { Dialog, VisuallyHidden } from 'radix-ui'
 import { useState } from 'react'
 import { useRenameCard, useSetCardDueDone } from '@/lib/board-mutations'
 import { cardQuery } from '@/lib/card-query'
+import { CardAttachments } from './CardAttachments'
 import { CardChecklists } from './CardChecklists'
 import { CardDescription } from './CardDescription'
 import { CardDue } from './CardDue'
@@ -108,6 +109,8 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
               <CardDescription boardId={boardId} cardId={cardId} description={data.description} />
 
               <CardChecklists boardId={boardId} cardId={cardId} onDragging={setDragging} />
+
+              <CardAttachments cardId={cardId} />
 
               <button
                 type="button"

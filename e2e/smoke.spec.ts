@@ -176,3 +176,41 @@ test('завести заметку в шторке и перетащить её
   await opened(page, () => page.reload())
   await expect(cards(page, TODO).filter({ hasText: NOTE })).toHaveCount(1)
 })
+
+const FILE = 'смета за квартал.txt'
+const FILE_BODY = 'две строки\nи ещё одна\n'
+
+test('прицепить файл к карточке, скачать его и удалить', async ({ page }) => {
+  await signIn(page)
+
+  await cards(page, TODO).first().click()
+  const section = page
+    .getByRole('dialog')
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: 'Вложения', exact: true }) })
+  await expect(section).toContainText('пусто')
+
+  const chooser = page.waitForEvent('filechooser')
+  await section.getByRole('button', { name: 'Добавить' }).click()
+  await (await chooser).setFiles({
+    name: FILE,
+    mimeType: 'text/plain',
+    buffer: Buffer.from(FILE_BODY),
+  })
+
+  const link = section.getByRole('link', { name: FILE })
+  await expect(link).toBeVisible()
+
+  // имя с пробелами и кириллицей проверяет обе половины content-disposition
+  const download = page.waitForEvent('download')
+  await link.click()
+  expect((await download).suggestedFilename()).toBe(FILE)
+
+  await opened(page, () => page.reload())
+  await cards(page, TODO).first().click()
+  await expect(section.getByRole('link', { name: FILE })).toBeVisible()
+
+  await section.getByRole('button', { name: `Удалить вложение «${FILE}»` }).click()
+  await section.getByRole('button', { name: 'Удалить', exact: true }).click()
+  await expect(section).toContainText('пусто')
+})
