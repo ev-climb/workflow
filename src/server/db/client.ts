@@ -12,3 +12,6 @@ if (process.env.NODE_ENV !== 'production') cache.__workflowSql = sql
 
 export const db = drizzle(sql, { schema, casing: 'snake_case' })
 export type Db = typeof db
+
+/** Соединение внутри `db.transaction`: чтение и запись одного шага идут через него. */
+export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]

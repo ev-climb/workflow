@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, gte, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { addDays } from '../../lib/calendar-grid.ts'
 import { momentInMoscow, moscowParts } from '../../lib/dates.ts'
-import { db } from '../db/client.ts'
+import { type Db, db, type Tx } from '../db/client.ts'
 import { boards, cardLabels, cards, labels, lists } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
 import { parseCardInput } from './card-input.ts'
@@ -94,8 +94,8 @@ async function neighbourRank(
 }
 
 /** Ранг последней карточки списка. */
-async function lastRank(listId: string): Promise<string | null> {
-  const [last] = await db
+async function lastRank(listId: string, executor: Db | Tx = db): Promise<string | null> {
+  const [last] = await executor
     .select({ rank: cards.rank })
     .from(cards)
     .where(eq(cards.listId, listId))
@@ -631,24 +631,29 @@ export async function moveCardToBoard(input: {
   }
 
   const { droppedLabels, keptLabels } = await previewBoardMove(input.cardId, input.listId)
-  const rank = rankAfter(await lastRank(input.listId))
 
-  const moved = await db.transaction(async (tx) => {
-    const [updated] = await tx
-      .update(cards)
-      .set({ listId: input.listId, rank, updatedAt: new Date() })
-      .where(eq(cards.id, input.cardId))
-      .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
+  const moved = await withRankRetry(() =>
+    db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(cards)
+        .set({
+          listId: input.listId,
+          rank: rankAfter(await lastRank(input.listId, tx)),
+          updatedAt: new Date(),
+        })
+        .where(eq(cards.id, input.cardId))
+        .returning({ id: cards.id, listId: cards.listId, rank: cards.rank })
 
-    await tx.delete(cardLabels).where(eq(cardLabels.cardId, input.cardId))
-    if (keptLabels.length) {
-      await tx
-        .insert(cardLabels)
-        .values(keptLabels.map((l) => ({ cardId: input.cardId, labelId: l.id })))
-    }
+      await tx.delete(cardLabels).where(eq(cardLabels.cardId, input.cardId))
+      if (keptLabels.length) {
+        await tx
+          .insert(cardLabels)
+          .values(keptLabels.map((l) => ({ cardId: input.cardId, labelId: l.id })))
+      }
 
-    return { ...updated, droppedLabels }
-  })
+      return { ...updated, droppedLabels }
+    }),
+  )
 
   // карточка ушла с одной доски на другую: перечитать надо обе
   publishBoardChanged(card.boardId)

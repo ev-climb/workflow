@@ -74,6 +74,36 @@ async function updatedRows(table: string, run: () => Promise<unknown>): Promise<
   return Number(rows[0].n)
 }
 
+/**
+ * Роняет первую правку карточки коллизией ранга и пропускает следующую: конец списка
+ * занимает только гонка, подстроить её запросами нельзя. Счётчик попыток держим
+ * последовательностью — таблица откатилась бы вместе с упавшей транзакцией.
+ */
+async function withRankTaken(run: () => Promise<unknown>): Promise<void> {
+  await db.execute(sql.raw('create sequence if not exists _rank_squat'))
+  await db.execute(sql.raw('alter sequence _rank_squat restart'))
+  await db.execute(
+    sql.raw(`create or replace function _rank_squat_fn() returns trigger language plpgsql as $$
+             begin
+               if nextval('_rank_squat') = 1 then
+                 raise unique_violation using constraint = 'cards_list_id_rank_key';
+               end if;
+               return new;
+             end $$`),
+  )
+  await db.execute(
+    sql.raw(
+      'create trigger _rank_squat_trg before update on "cards" for each row execute function _rank_squat_fn()',
+    ),
+  )
+
+  try {
+    await run()
+  } finally {
+    await db.execute(sql.raw('drop trigger _rank_squat_trg on "cards"'))
+  }
+}
+
 describe('создание карточки', () => {
   it('встаёт в конец списка', async () => {
     const b = await board('Доска', ['Бэклог'])
@@ -289,6 +319,18 @@ describe('коллизия ранга', () => {
     const titles = await order(b, 'Бэклог')
     expect(titles).toEqual(['a', 'd', 'занял место', 'b', 'c'])
     expect(new Set(titles).size).toBe(titles.length)
+  })
+
+  it('перенос на другую доску повторяет запись, а не отдаёт ошибку', async () => {
+    const from = await board('Откуда', ['Бэклог'])
+    const to = await board('Куда', ['Входящие'])
+    const ids = await fill(from.lists['Бэклог'], ['карточка'])
+
+    await withRankTaken(() =>
+      moveCardToBoard({ cardId: ids.карточка, listId: to.lists['Входящие'] }),
+    )
+
+    expect(await order(to, 'Входящие')).toEqual(['карточка'])
   })
 })
 
