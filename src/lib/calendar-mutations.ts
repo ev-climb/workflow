@@ -2,23 +2,24 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { sendJson } from './api-client'
-import { calendarKey } from './calendar-query'
+import { calendarRoots } from './calendar-query'
 import type { EventWriteResult } from '@/server/services/google-events'
 import type { TaskWriteResult } from '@/server/services/google-tasks'
 import type { EventTimesInput } from './calendar-view'
 
 /**
- * После записи сетка перечитывается вся, корнем ключа: событие могло уехать в соседнее
- * окно, а какие из них прочитаны — здесь неизвестно. Инвалидация возвращается наружу, а не
- * гасится: тогда `onSettled` наступает после перечитывания, и снятая заготовка не оставит
- * дырку на месте события, которое ещё не приехало.
+ * После записи календарь перечитывается весь, обоими корнями: событие могло уехать в
+ * соседнее окно, а какие из них прочитаны — здесь неизвестно. Инвалидация возвращается
+ * наружу, а не гасится: тогда `onSettled` наступает после перечитывания, и снятая
+ * заготовка не оставит дырку на месте события, которое ещё не приехало.
  */
 function useCalendarChange<TInput, TResult>(request: (input: TInput) => Promise<TResult>) {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: request,
-    onSuccess: () => client.invalidateQueries({ queryKey: calendarKey }),
+    onSuccess: () =>
+      Promise.all(calendarRoots.map((key) => client.invalidateQueries({ queryKey: key }))),
   })
 }
 

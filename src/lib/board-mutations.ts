@@ -5,7 +5,7 @@ import { sendJson } from './api-client'
 import { archiveKey } from './archive-query'
 import { applyListMove, applyMove, type ListMovePlan, type MovePlan } from './board-move'
 import { boardKey } from './board-query'
-import { calendarKey, duesKey } from './calendar-query'
+import { duesKey, timeBlocksKey } from './calendar-query'
 import type { BoardView } from './board-view'
 import { cardsKey } from './card-query'
 
@@ -14,8 +14,9 @@ import { cardsKey } from './card-query'
  * перетаскивание: там задержка видна глазом, а здесь поле и так закрывается сразу.
  * Архив перечитывается вместе с доской: любая правка перекладывает элемент между ними.
  * Открытая панель гасится вся, корнем ключа, — тем же приёмом, что и в `useBoardEvents`.
- * Сроки на календарной сетке тоже: правка доски двигает и их. Сетку целиком — потому что
- * тайм-блок показывает карточку: её заголовок и отметку «выполнено».
+ * Сроки на календарной сетке тоже: правка доски двигает и их. И тайм-блоки — потому что
+ * блок показывает карточку: её заголовок и отметку «выполнено». Остальное на сетке —
+ * события и задачи Google — от правки доски не меняется.
  */
 function useBoardChange<T = void>(boardId: string, request: (input: T) => Promise<unknown>) {
   const client = useQueryClient()
@@ -32,7 +33,7 @@ function refreshBoard(client: QueryClient, boardId: string): Promise<unknown> {
     client.invalidateQueries({ queryKey: archiveKey(boardId) }),
     client.invalidateQueries({ queryKey: cardsKey }),
     client.invalidateQueries({ queryKey: duesKey }),
-    client.invalidateQueries({ queryKey: calendarKey }),
+    client.invalidateQueries({ queryKey: timeBlocksKey }),
   ])
 }
 

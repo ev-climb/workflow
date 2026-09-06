@@ -16,6 +16,15 @@ import type {
 /** Корень ключа: по нему разом инвалидируются все прочитанные окна сетки. */
 export const calendarKey = ['calendar'] as const
 
+/**
+ * Корень тайм-блоков, отдельный от сетки: блок показывает карточку, поэтому правка доски
+ * гасит его, а события и задачи Google от правки доски не меняются.
+ */
+export const timeBlocksKey = ['calendar-blocks'] as const
+
+/** Оба корня календаря: то, что гасится вместе, когда меняется весь календарь. */
+export const calendarRoots = [calendarKey, timeBlocksKey] as const
+
 export function calendarQuery(from: string, to: string) {
   return {
     queryKey: [...calendarKey, from, to] as const,
@@ -39,12 +48,12 @@ export function eventQuery(id: string) {
 }
 
 /**
- * Тайм-блоки растут из корня сетки, а не из своего: их запись публикует то же
- * `calendar-changed`, что и правка события, и общий корень гасит оба чтения разом.
+ * Тайм-блоки растут из своего корня: их меняет и правка доски, которой события и задачи
+ * Google не касаются. Что гасится вместе с сеткой, перечислено в `calendarRoots`.
  */
 export function timeBlocksQuery(from: string, to: string) {
   return {
-    queryKey: [...calendarKey, 'blocks', from, to] as const,
+    queryKey: [...timeBlocksKey, from, to] as const,
     queryFn: (): Promise<TimeBlockView[]> =>
       getJson<TimeBlockView[]>(`/api/calendar/time-blocks?from=${from}&to=${to}`),
   }

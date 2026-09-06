@@ -2,18 +2,19 @@
 
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { sendJson } from './api-client'
-import { accountsKey, calendarKey, calendarsKey } from './calendar-query'
+import { accountsKey, calendarRoots, calendarsKey } from './calendar-query'
 
 /**
- * После правки в настройках перечитываются оба списка и сетка: цвет события берётся из
- * календаря, а спрятанный календарь уходит с неё целиком. Смена цвета аккаунта снимает
- * выбор с его календарей — это делает сервис, поэтому список календарей гасится и здесь.
+ * После правки в настройках перечитываются оба списка и календарь целиком: цвет события
+ * берётся из календаря, спрятанный календарь уходит с сетки, а зеркала тайм-блоков живут
+ * в отключаемом аккаунте. Смена цвета аккаунта снимает выбор с его календарей — это делает
+ * сервис, поэтому список календарей гасится и здесь.
  */
 function refreshSettings(client: QueryClient): Promise<unknown> {
   return Promise.all([
     client.invalidateQueries({ queryKey: accountsKey }),
     client.invalidateQueries({ queryKey: calendarsKey }),
-    client.invalidateQueries({ queryKey: calendarKey }),
+    ...calendarRoots.map((key) => client.invalidateQueries({ queryKey: key })),
   ])
 }
 
