@@ -148,7 +148,14 @@ export function BoardCard({ boards, boardId, slot, linkable, listId, card }: Pro
 
   return (
     <article
-      ref={drag.setNodeRef}
+      // узел карточки объявлен и активатором перетаскивания: без активатора dnd-kit
+      // начинает клавиатурный перенос по пробелу от любой цели, а события панели
+      // всплывают по дереву React в карточку, хотя в DOM панель лежит в портале, —
+      // и пробел в поле описания уезжал в перетаскивание вместо текста
+      ref={(node) => {
+        drag.setNodeRef(node)
+        drag.setActivatorNodeRef(node)
+      }}
       style={{ transform: CSS.Translate.toString(drag.transform), transition: drag.transition }}
       {...drag.attributes}
       {...(renaming ? {} : drag.listeners)}
