@@ -3,16 +3,21 @@ import { notFound } from 'next/navigation'
 import { BoardArchive } from '@/components/board/BoardArchive'
 import { toArchiveView } from '@/lib/archive-view'
 import { isUuid } from '@/lib/http'
+import { splashFloor } from '@/lib/splash'
 import { getArchive, listBoards } from '@/server/services/boards'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ArchivePage({ params }: { params: Promise<{ boardId: string }> }) {
+  const splash = splashFloor()
   const { boardId } = await params
   if (!isUuid(boardId)) notFound()
 
   const board = (await listBoards()).find((item) => item.id === boardId)
   if (!board) notFound()
+
+  const archive = toArchiveView(await getArchive(boardId))
+  await splash
 
   return (
     <main className="mx-auto flex h-screen w-full max-w-3xl flex-col gap-4 p-6">
@@ -24,7 +29,7 @@ export default async function ArchivePage({ params }: { params: Promise<{ boardI
       </header>
       <BoardArchive
         boardId={boardId}
-        initial={toArchiveView(await getArchive(boardId))}
+        initial={archive}
         initialAt={Date.now()}
       />
     </main>

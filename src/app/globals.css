@@ -653,9 +653,8 @@
     animation: loader-bar 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 
-  /* заставка проявляется с задержкой: быстрая страница успевает прийти и не мелькает */
   .loader-screen {
-    animation: loader-in 0.4s var(--ease-glide) 0.25s both;
+    animation: loader-in 0.4s var(--ease-glide) both;
   }
 
   .loader-rise {

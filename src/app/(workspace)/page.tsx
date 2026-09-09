@@ -3,6 +3,7 @@ import { Workspace } from '@/components/workspace/Workspace'
 import { toBoardView, type BoardView } from '@/lib/board-view'
 import { moscowToday } from '@/lib/calendar-grid'
 import { isUuid } from '@/lib/http'
+import { splashFloor } from '@/lib/splash'
 import { getBoard, listBoards } from '@/server/services/boards'
 import { findCardBoard } from '@/server/services/cards'
 import { listAccountsNeedingReauth } from '@/server/services/google-accounts'
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic'
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> }
 
 export default async function WorkspacePage({ searchParams }: Props) {
+  const splash = splashFloor()
   const { card } = await searchParams
   const cardId = typeof card === 'string' && isUuid(card) ? card : null
 
@@ -46,6 +48,8 @@ export default async function WorkspacePage({ searchParams }: Props) {
   const initialBoards: Record<string, BoardView> = Object.fromEntries(
     await Promise.all(ids.map(async (id) => [id, toBoardView(await getBoard(id))] as const)),
   )
+
+  await splash
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
