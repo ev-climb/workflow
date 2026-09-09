@@ -55,7 +55,7 @@ export function BoardColumn({ boards, boardId, slot, linkable, list }: Props) {
         ref={drag.setActivatorNodeRef}
         {...drag.attributes}
         {...(renaming ? {} : drag.listeners)}
-        className="flex shrink-0 cursor-grab items-center gap-2 rounded-lg px-1 pb-2.5 outline-none focus-visible:ring-1 focus-visible:ring-accent-line"
+        className="flex shrink-0 cursor-grab items-center gap-2 rounded-lg px-1 pb-0.5 outline-none focus-visible:ring-1 focus-visible:ring-accent-line"
       >
         {renaming ? (
           <TitleField
@@ -103,7 +103,7 @@ export function BoardColumn({ boards, boardId, slot, linkable, list }: Props) {
         className={`${
           // пустой список тоже должен быть целью: без высоты в него нечем попасть
           list.cards.length ? 'min-h-0' : 'min-h-12'
-        } flex-1 space-y-2.5 overflow-y-auto rounded-xl pr-0.5`}
+        } flex-1 space-y-2.5 overflow-y-auto rounded-xl pt-2 pr-0.5`}
       >
         <SortableContext
           items={list.cards.map((card) => dragId(slot, 'card', card.id))}
