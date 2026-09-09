@@ -1,18 +1,36 @@
 'use client'
 
 import { Checkbox } from 'radix-ui'
+import { useState } from 'react'
+import { TitleField } from '@/components/board/TitleField'
 import { useDeleteNoteItem, useUpdateNoteItem } from '@/lib/notes-mutations'
 import type { NoteItemView } from '@/server/services/notes'
 
 /**
  * Пункт списка дел. Отмечается прямо в шторке, не раскрывая заметку: отметить дело —
  * самое частое, что с ним делают. Отметка ловит щелчок всей строкой, а не одним
- * квадратиком. Удаление показывается только в правке: в списке крестик у каждой строки
- * был бы шумом.
+ * квадратиком. В правке текст пункта отдаётся под клик: там строку правят и удаляют, а
+ * не отмечают, и двойной клик ради этого искать не хочется. Удаление показывается только
+ * в правке: в списке крестик у каждой строки был бы шумом.
  */
 function Item({ item, editing }: { item: NoteItemView; editing: boolean }) {
+  const [renaming, setRenaming] = useState(false)
   const update = useUpdateNoteItem(item.id)
   const remove = useDeleteNoteItem(item.id)
+
+  if (editing && renaming) {
+    return (
+      <li className="flex items-start">
+        <TitleField
+          initial={item.title}
+          label="Текст пункта"
+          onSubmit={(title) => update.mutate({ title })}
+          onClose={() => setRenaming(false)}
+          className="-mx-2 min-w-0 flex-1 rounded-xl bg-white/10 px-2 py-1.5 text-[13px] leading-[1.45] text-fog"
+        />
+      </li>
+    )
+  }
 
   return (
     <li className="group/item flex items-start">
@@ -44,9 +62,19 @@ function Item({ item, editing }: { item: NoteItemView; editing: boolean }) {
           </svg>
         </span>
         <span
+          // клик по тексту в правке правит пункт, а не отмечает его: до корня чекбокса
+          // событие не доходит
+          onClick={
+            editing
+              ? (event) => {
+                  event.stopPropagation()
+                  setRenaming(true)
+                }
+              : undefined
+          }
           className={`min-w-0 flex-1 text-[13px] leading-[1.45] transition-colors ${
-            item.done ? 'text-fog-dim line-through' : 'text-fog-muted'
-          }`}
+            editing ? 'cursor-text' : ''
+          } ${item.done ? 'text-fog-dim line-through' : 'text-fog-muted'}`}
         >
           {item.title}
         </span>
