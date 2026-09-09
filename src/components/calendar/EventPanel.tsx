@@ -70,11 +70,15 @@ export function EventPanel({ eventId, title, onClose }: Props) {
 type Draft = {
   title: string
   description: string
+  allDay: boolean
   startDate: string
   startTime: string
   endDate: string
   endTime: string
 }
+
+/** Время события, которому его только что назначили: рабочий час, а не полночь. */
+const FALLBACK_TIMES = { startTime: '09:00', endTime: '10:00' }
 
 /**
  * Поля панели. У события на весь день показывается его последний день, а не следующий за
@@ -87,6 +91,7 @@ function draftOf(event: CalendarEventDetailsView): Draft {
   if (event.allDay) {
     return {
       ...common,
+      allDay: true,
       startDate: event.startDate ?? '',
       startTime: '',
       endDate: event.endDate ? addDays(event.endDate, -1) : '',
@@ -98,6 +103,7 @@ function draftOf(event: CalendarEventDetailsView): Draft {
   const to = event.endsAt ? moscowParts(event.endsAt) : null
   return {
     ...common,
+    allDay: false,
     startDate: from?.date ?? '',
     startTime: from?.time ?? '',
     endDate: to?.date ?? '',
@@ -105,8 +111,25 @@ function draftOf(event: CalendarEventDetailsView): Draft {
   }
 }
 
-function timesOf(draft: Draft, allDay: boolean): EventTimesInput | null {
-  if (allDay) {
+/**
+ * Снятая отметка «весь день» даёт событию время: пустые поля до сервера не дойдут, а
+ * заполнить их за человека — единственный способ вернуть время событию, потерявшему его.
+ */
+function withAllDay(draft: Draft, allDay: boolean): Draft {
+  if (allDay) return { ...draft, allDay }
+  return {
+    ...draft,
+    allDay,
+    startTime: draft.startTime || FALLBACK_TIMES.startTime,
+    endTime: draft.endTime || FALLBACK_TIMES.endTime,
+    // у события на весь день конец — это его последний день, у события со временем оба
+    // конца обычно в одном дне: назначенный час иначе растянулся бы на сутки
+    endDate: draft.endTime ? draft.endDate : draft.startDate,
+  }
+}
+
+function timesOf(draft: Draft): EventTimesInput | null {
+  if (draft.allDay) {
     if (!draft.startDate || !draft.endDate) return null
     return { allDay: true, startDate: draft.startDate, endDate: addDays(draft.endDate, 1) }
   }
@@ -123,8 +146,8 @@ function timesOf(draft: Draft, allDay: boolean): EventTimesInput | null {
  * Почему пару времени записывать рано. Полупустая и вывернутая пара до сервера не доходит:
  * иначе правка каждого поля по отдельности упиралась бы в отказ.
  */
-function timesProblem(draft: Draft, allDay: boolean): string | null {
-  if (allDay) {
+function timesProblem(draft: Draft): string | null {
+  if (draft.allDay) {
     if (!draft.startDate || !draft.endDate) return 'дни заполнены не полностью'
     return draft.endDate < draft.startDate ? 'конец раньше начала' : null
   }
@@ -139,6 +162,7 @@ function timesProblem(draft: Draft, allDay: boolean): string | null {
 
 function sameTimes(a: Draft, b: Draft): boolean {
   return (
+    a.allDay === b.allDay &&
     a.startDate === b.startDate &&
     a.startTime === b.startTime &&
     a.endDate === b.endDate &&
@@ -149,6 +173,7 @@ function sameTimes(a: Draft, b: Draft): boolean {
 function withTimesOf(draft: Draft, source: Draft): Draft {
   return {
     ...draft,
+    allDay: source.allDay,
     startDate: source.startDate,
     startTime: source.startTime,
     endDate: source.endDate,
@@ -179,18 +204,19 @@ function EventForm({
     written.current = draftOf(event)
   }, [event])
 
-  const times = timesOf(draft, event.allDay)
-  const problem = timesProblem(draft, event.allDay)
+  const times = timesOf(draft)
+  const problem = timesProblem(draft)
 
-  function save() {
+  function save(current: Draft = draft) {
     const base = written.current
     const changes: EventEdit = {}
-    if (draft.title !== base.title) changes.title = draft.title
-    if (draft.description !== base.description) changes.description = draft.description
-    if (times && !problem && !sameTimes(draft, base)) changes.times = times
+    const edited = timesOf(current)
+    if (current.title !== base.title) changes.title = current.title
+    if (current.description !== base.description) changes.description = current.description
+    if (edited && !timesProblem(current) && !sameTimes(current, base)) changes.times = edited
     if (Object.keys(changes).length === 0) return
 
-    written.current = changes.times ? { ...draft } : withTimesOf(draft, base)
+    written.current = changes.times ? { ...current } : withTimesOf(current, base)
     // событие, стёртое в Google из-под нас, правкой не воскрешаем
     edit.mutate(changes, {
       onSuccess: (result) => {
@@ -200,11 +226,18 @@ function EventForm({
   }
 
   useEffect(() => {
-    flush.current = save
+    flush.current = () => save()
   })
 
   function field(key: keyof Draft) {
     return (value: string) => setDraft({ ...draft, [key]: value })
+  }
+
+  // отметка записывается сразу, а не по уходу фокуса: снятия фокуса у неё не бывает
+  function toggleAllDay(allDay: boolean) {
+    const next = withAllDay(draft, allDay)
+    setDraft(next)
+    save(next)
   }
 
   const timesHeld = problem !== null && !sameTimes(draft, written.current)
@@ -222,7 +255,7 @@ function EventForm({
           id="event-title"
           value={draft.title}
           onChange={(input) => field('title')(input.target.value)}
-          onBlur={save}
+          onBlur={() => save()}
           onKeyDown={(key) => {
             if (key.key === 'Enter') key.currentTarget.blur()
           }}
@@ -233,31 +266,40 @@ function EventForm({
 
       <section>
         <h3 className="mb-1.5 text-[11px] tracking-[0.14em] text-fog-faint uppercase">
-          {event.allDay ? 'Дни' : 'Время'}
+          {draft.allDay ? 'Дни' : 'Время'}
         </h3>
         <div className="space-y-2">
           <Edge
             label="Начало"
             date={draft.startDate}
-            time={event.allDay ? null : draft.startTime}
+            time={draft.allDay ? null : draft.startTime}
             onDate={field('startDate')}
             onTime={field('startTime')}
-            onDone={save}
+            onDone={() => save()}
           />
           <Edge
             label="Конец"
             date={draft.endDate}
-            time={event.allDay ? null : draft.endTime}
+            time={draft.allDay ? null : draft.endTime}
             onDate={field('endDate')}
             onTime={field('endTime')}
-            onDone={save}
+            onDone={() => save()}
           />
         </div>
+        <label className="mt-2 flex w-fit items-center gap-2 text-sm text-fog-muted">
+          <input
+            type="checkbox"
+            checked={draft.allDay}
+            onChange={(input) => toggleAllDay(input.target.checked)}
+            className="size-3.5 shrink-0 accent-accent"
+          />
+          Весь день
+        </label>
         {timesHeld ? (
           <p role="status" className="mt-1.5 text-xs text-alarm">
             {problem}: пока не записано
           </p>
-        ) : event.allDay ? (
+        ) : draft.allDay ? (
           <p className="mt-1.5 text-xs text-fog-faint">
             последний день события, а не следующий за ним
           </p>
@@ -278,7 +320,7 @@ function EventForm({
           rows={6}
           value={draft.description}
           onChange={(input) => field('description')(input.target.value)}
-          onBlur={save}
+          onBlur={() => save()}
           placeholder="Пусто"
           className="field w-full resize-y px-2 py-1.5 text-sm"
         />
