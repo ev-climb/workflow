@@ -5,6 +5,10 @@ import { hasValidSession } from '@/server/services/auth'
 // у /api/mcp своя дверь — bearer-токен: сессии в браузере у клиента MCP нет
 const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/mcp']
 
+// сюда браузер приходит переходом с домена Google, а не запросом из кода: на протухшей
+// сессии нужна страница входа, после которой возврат доигрывается по `next`
+const BROWSER_API_PATHS = ['/api/auth/google/callback']
+
 /** В Next 16 middleware переименован в proxy и по умолчанию идёт в рантайме Node. */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -14,7 +18,7 @@ export function proxy(request: NextRequest) {
 
   // запрос из кода не отправляют на страницу входа: редирект вернул бы её HTML с кодом
   // 200, и клиент принял бы несохранённое за сохранённое
-  if (pathname.startsWith('/api/')) {
+  if (pathname.startsWith('/api/') && !BROWSER_API_PATHS.includes(pathname)) {
     return NextResponse.json({ error: 'сессия негодная или истекла' }, { status: 401 })
   }
 
