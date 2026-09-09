@@ -55,7 +55,7 @@ export function NoteDropDialog({ target, archives, onArchivesChange, onClose }: 
   const [title, setTitle] = useState(initial.title)
   const [description, setDescription] = useState(initial.description)
   const [created, setCreated] = useState(false)
-  const schedule = useSchedule(!toCard)
+  const schedule = useSchedule(!toCard, toCard ? null : target.range)
 
   const toCardMutation = useNoteToCard()
   const createEvent = useCreateEvent()

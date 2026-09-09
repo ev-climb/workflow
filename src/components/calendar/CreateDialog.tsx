@@ -19,11 +19,12 @@ type Props = { range: Range; onClose: () => void }
  * Что заводим на выделенном отрезке — событие или задачу Google. Название переживает
  * переключение: набранное для события уходит в задачу, если человек передумал.
  *
- * Время здесь не правится — его задали выделением по сетке, а поправят перетаскиванием.
+ * Время приходит из выделения по сетке и правится тут же полями: выделение кладёт границы
+ * с точностью до четверти часа.
  */
 export function CreateDialog({ range, onClose }: Props) {
   const [title, setTitle] = useState('')
-  const schedule = useSchedule(true)
+  const schedule = useSchedule(true, range)
 
   const createEvent = useCreateEvent()
   const createTask = useCreateTask()

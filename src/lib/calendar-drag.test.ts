@@ -3,9 +3,11 @@ import {
   NEW_EVENT_MINUTES,
   TIME_BLOCK_MINUTES,
   blockAt,
+  clockOf,
   moved,
   placedRange,
   placedTime,
+  rangeAt,
   rangeDates,
   rangeTimes,
   resized,
@@ -116,6 +118,24 @@ describe('rangeTimes', () => {
 
   it('нижнюю границу суток отдаёт полуночью следующего дня', () => {
     expect(rangeTimes({ day: DAY, start: 1380, end: 1440 }).endsAt).toBe('2026-09-02T21:00:00.000Z')
+  })
+})
+
+describe('clockOf', () => {
+  it('показывает нижнюю границу суток как 00:00: 24:00 поле времени не примет', () => {
+    expect(clockOf(1440)).toBe('00:00')
+    expect(clockOf(570)).toBe('09:30')
+  })
+})
+
+describe('rangeAt', () => {
+  it('берёт границы из полей окна', () => {
+    expect(rangeAt(DAY, '09:00', '10:30')).toEqual({ day: DAY, start: 540, end: 630 })
+  })
+
+  it('конец не позже начала считает концом за полночью', () => {
+    expect(rangeAt(DAY, '23:00', '00:00')).toEqual({ day: DAY, start: 1380, end: 1440 })
+    expect(rangeAt(DAY, '23:00', '01:00')).toEqual({ day: DAY, start: 1380, end: 1500 })
   })
 })
 

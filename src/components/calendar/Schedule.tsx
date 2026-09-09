@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { rangeDates, rangeTimes, timeLabel, type Range } from '@/lib/calendar-drag'
+import { clockOf, rangeAt, rangeDates, rangeTimes, type Range } from '@/lib/calendar-drag'
 import { rangeLabel } from '@/lib/calendar-grid'
 import {
   CalendarChoice,
@@ -17,19 +17,22 @@ const KIND_LABEL: Record<Kind, string> = { event: 'Событие', task: 'За�
 export type Schedule = ReturnType<typeof useSchedule>
 
 /**
- * Что заводим на отрезке — событие или задачу Google, куда и на весь ли день. Об этом
- * спрашивают и окно создания по сетке, и окно переноса заметки, поэтому вопрос один
- * на двоих.
+ * Что заводим на отрезке — событие или задачу Google, куда, на весь ли день и с какого
+ * по какое время. Об этом спрашивают и окно создания по сетке, и окно переноса заметки,
+ * поэтому вопрос один на двоих.
  *
- * Отметка «весь день» — единственный способ завести такое событие: выделением по сетке
- * его не получить, минут у него нет.
+ * Время берётся из выделения, но правится прямо здесь: выделение по сетке кладёт границы
+ * с точностью до четверти часа, а окно даёт вписать любые.
  *
  * `enabled` гасит чтение списков там, где выбора не показывают: заметке, брошенной
- * в колонку доски, ни календарь, ни список задач не нужны.
+ * в колонку доски, ни календарь, ни список задач не нужны. `range` там же отсутствует —
+ * времени у карточки нет.
  */
-export function useSchedule(enabled: boolean) {
+export function useSchedule(enabled: boolean, range: Range | null) {
   const [kind, setKind] = useState<Kind>('event')
   const [allDay, setAllDay] = useState(false)
+  const [from, setFrom] = useState(() => clockOf(range?.start ?? 0))
+  const [to, setTo] = useState(() => clockOf(range?.end ?? 0))
   const [chosenCalendar, setChosenCalendar] = useState<string | null>(null)
   const [chosenList, setChosenList] = useState<string | null>(null)
 
@@ -41,6 +44,10 @@ export function useSchedule(enabled: boolean) {
     setKind,
     allDay,
     setAllDay,
+    from,
+    setFrom,
+    to,
+    setTo,
     calendarId,
     taskListId,
     chooseCalendar: setChosenCalendar,
@@ -50,15 +57,15 @@ export function useSchedule(enabled: boolean) {
 }
 
 /**
- * Время события по отрезку: на весь день — даты без часового пояса, иначе границы
- * выделения. Задаче отрезок отдаёт только день: времени у срока не бывает вовсе.
+ * Время события: на весь день — даты без часового пояса, иначе границы из полей окна.
+ * Задаче отрезок отдаёт только день: времени у срока не бывает вовсе.
  */
-export function scheduleTimes({ allDay }: Schedule, range: Range) {
-  return allDay ? rangeDates(range) : rangeTimes(range)
+export function scheduleTimes({ allDay, from, to }: Schedule, range: Range) {
+  return allDay ? rangeDates(range) : rangeTimes(rangeAt(range.day, from, to))
 }
 
 export function scheduleCaption({ kind, allDay }: Schedule, range: Range): string {
-  const when = kind === 'task' ? 'срок' : allDay ? 'весь день' : timeLabel(range)
+  const when = kind === 'task' ? 'срок' : allDay ? 'весь день' : 'событие'
   return `${rangeLabel('day', [range.day])}, ${when}`
 }
 
@@ -94,7 +101,29 @@ export function ScheduleFields({ schedule }: { schedule: Schedule }) {
   return (
     <>
       <CalendarChoice value={schedule.calendarId} onChange={schedule.chooseCalendar} enabled />
-      <label className="flex items-center gap-2 text-sm text-fog-muted">
+      {schedule.allDay ? null : (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-fog-dim">Время</span>
+          <input
+            type="time"
+            required
+            aria-label="Начало"
+            value={schedule.from}
+            onChange={(event) => schedule.setFrom(event.target.value)}
+            className="field px-2 py-1 text-sm"
+          />
+          <span className="text-sm text-fog-dim">—</span>
+          <input
+            type="time"
+            required
+            aria-label="Конец"
+            value={schedule.to}
+            onChange={(event) => schedule.setTo(event.target.value)}
+            className="field px-2 py-1 text-sm"
+          />
+        </div>
+      )}
+      <label className="flex w-fit items-center gap-2 text-sm text-fog-muted">
         <input
           type="checkbox"
           checked={schedule.allDay}

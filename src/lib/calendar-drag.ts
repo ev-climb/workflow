@@ -1,5 +1,5 @@
 import { MINUTES_IN_DAY, addDays } from './calendar-grid'
-import { momentInMoscow } from './dates'
+import { minutesOf, momentInMoscow } from './dates'
 
 /** Шаг сетки при выделении и перетаскивании: четверть часа. */
 const SNAP_MINUTES = 15
@@ -138,6 +138,21 @@ export function rangeTimes(range: Range): { allDay: false; startsAt: string; end
  */
 export function rangeDates(range: Range): { allDay: true; startDate: string; endDate: string } {
   return { allDay: true, startDate: range.day, endDate: addDays(range.day, 1) }
+}
+
+/** Минуты сетки в поле времени. Полночь снизу — 00:00: 24:00 поле времени не принимает. */
+export function clockOf(minutes: number): string {
+  return clock(minutes % MINUTES_IN_DAY)
+}
+
+/**
+ * Отрезок по времени из полей окна. Конец не позже начала — это конец за полночью:
+ * иначе события до 00:00 полем времени не задать, 24:00 оно не принимает.
+ */
+export function rangeAt(day: string, from: string, to: string): Range {
+  const start = minutesOf(from)
+  const end = minutesOf(to)
+  return { day, start, end: end > start ? end : end + MINUTES_IN_DAY }
 }
 
 /** Подпись отрезка в диалоге. Полночь снизу показывается как 24:00, а не как 00:00. */
