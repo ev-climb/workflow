@@ -23,9 +23,21 @@ type Props = {
   blocks: TimeBlockView[]
   dues: CardDueView[]
   tasks: CalendarTask[]
+  /** Дни, в которые список «Сегодня» закрыт целиком. */
+  complete: string[]
   onSelect: (range: Range) => void
   onOpen: OpenHandler
   onOpenTask: TaskOpenHandler
+}
+
+function dayNumberClass(today: boolean, complete: boolean): string {
+  if (today && complete) {
+    return 'text-[19px] font-semibold text-done [text-shadow:0_0_22px_oklch(0.7_0.13_168/0.45)]'
+  }
+  if (today) {
+    return 'text-[19px] font-semibold text-alarm [text-shadow:0_0_22px_var(--color-alarm-line)]'
+  }
+  return complete ? 'text-[19px] font-medium text-done' : 'text-[19px] font-medium text-fog-muted'
 }
 
 /**
@@ -39,6 +51,7 @@ export function CalendarGrid({
   blocks,
   dues,
   tasks,
+  complete,
   onSelect,
   onOpen,
   onOpenTask,
@@ -81,13 +94,7 @@ export function CalendarGrid({
               <div className="font-mono text-[10.5px] tracking-[0.16em] text-fog-faint uppercase">
                 {weekdayLabel(day)}
               </div>
-              <div
-                className={
-                  isToday(day, now ?? undefined)
-                    ? 'text-[19px] font-semibold text-alarm [text-shadow:0_0_22px_var(--color-alarm-line)]'
-                    : 'text-[19px] font-medium text-fog-muted'
-                }
-              >
+              <div className={dayNumberClass(isToday(day, now ?? undefined), complete.includes(day))}>
                 {dayNumber(day)}
               </div>
             </div>

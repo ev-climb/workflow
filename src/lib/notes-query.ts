@@ -1,3 +1,4 @@
+import type { DailyStats } from '@/server/services/daily'
 import type { FolderView, NoteView } from '@/server/services/notes'
 import { getJson } from './api-client'
 
@@ -5,6 +6,26 @@ import { getJson } from './api-client'
 export const notesKey = ['notes'] as const
 
 export const foldersKey = ['note-folders'] as const
+
+/** Список «Сегодня» и всё, что из него считается: закрытые дни и статистика. */
+export const dailyKey = ['daily'] as const
+
+export const dailyNoteQuery = {
+  queryKey: [...dailyKey, 'note'] as const,
+  queryFn: (): Promise<NoteView> => getJson<NoteView>('/api/daily'),
+}
+
+export function completeDaysQuery(from: string, to: string) {
+  return {
+    queryKey: [...dailyKey, 'days', from, to] as const,
+    queryFn: (): Promise<string[]> => getJson<string[]>(`/api/daily/days?from=${from}&to=${to}`),
+  }
+}
+
+export const dailyStatsQuery = {
+  queryKey: [...dailyKey, 'stats'] as const,
+  queryFn: (): Promise<DailyStats> => getJson<DailyStats>('/api/daily/stats'),
+}
 
 /**
  * Какие заметки показывает шторка. `undefined` — все живые, `null` — только те, что не

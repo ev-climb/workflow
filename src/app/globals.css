@@ -372,6 +372,12 @@
     transition: width 0.5s var(--ease-glide);
   }
 
+  /* закрытый день списка «Сегодня» — тем же зелёным, что и его число над сеткой */
+  .note-progress-done > span {
+    background: linear-gradient(90deg, oklch(0.82 0.14 168), oklch(0.76 0.15 150));
+    box-shadow: 0 0 12px oklch(0.75 0.14 160 / 0.65);
+  }
+
   /* шторка заметок: свёрнутая полоска и раскрытая панель — одна поверхность */
   .surface-notes {
     border-left: 1px solid rgb(255 255 255 / 0.08);

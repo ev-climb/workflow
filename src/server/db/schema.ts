@@ -407,11 +407,14 @@ export const notes = pgTable(
     title: text(),
     body: text(),
     rank: rankText().notNull(),
+    // список «Сегодня»: закреплён над шторкой, отметки в нём живут до конца дня
+    daily: boolean().notNull().default(false),
     archivedAt: tstz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
+    uniqueIndex('notes_daily_key').on(t.daily).where(sql`${t.daily}`),
     // порядок общий на все заметки, а не свой в каждой директории: переезд между
     // директориями тогда не трогает ранг, а список директории — просто подмножество.
     // Уникальность по паре с директорией и не вышла бы: null в индексе дублей не ловит
@@ -431,11 +434,29 @@ export const noteItems = pgTable(
       .references(() => notes.id, { onDelete: 'cascade' }),
     title: text().notNull(),
     done: boolean().notNull().default(false),
+    // московский день отметки: в списке «Сегодня» вчерашняя отметка уже не считается
+    doneOn: date({ mode: 'string' }),
     rank: rankText().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [uniqueIndex('note_items_note_id_rank_key').on(t.noteId, t.rank)],
+)
+
+/**
+ * Итог списка «Сегодня» за день: сколько пунктов было и сколько закрыто. Строка дня
+ * переписывается при каждой правке списка, а с концом дня замирает — поэтому прошлые дни
+ * не зависят от того, какие пункты в списке сейчас.
+ */
+export const dailyResults = pgTable(
+  'daily_results',
+  {
+    day: date({ mode: 'string' }).primaryKey(),
+    total: integer().notNull(),
+    done: integer().notNull(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [check('daily_results_done', sql`${t.done} between 0 and ${t.total}`)],
 )
 
 export const workspaceState = pgTable(

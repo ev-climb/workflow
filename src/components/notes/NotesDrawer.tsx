@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { Failure } from '@/components/board/Failure'
 import { useCreateNote } from '@/lib/notes-mutations'
 import { foldersQuery, notesQuery, type NotesView } from '@/lib/notes-query'
+import { DailyNote } from './DailyNote'
 import { FoldersDialog } from './FoldersDialog'
 import { NoteCard } from './NoteCard'
 
@@ -187,6 +188,8 @@ export function NotesDrawer({ open, onOpenChange }: Props) {
             </button>
           </div>
         )}
+
+        {view === ARCHIVE ? null : <DailyNote />}
 
         <Failure error={notes.error ?? create.error} className="px-[18px] pt-2" />
 

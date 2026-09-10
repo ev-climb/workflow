@@ -18,6 +18,7 @@ import {
   shiftAnchor,
   type CalendarMode,
 } from '@/lib/calendar-grid'
+import { completeDaysQuery } from '@/lib/notes-query'
 
 const MODE_LABEL: Record<CalendarMode, string> = { day: 'День', week: 'Неделя' }
 
@@ -39,6 +40,7 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
   const dues = useQuery(duesQuery(days[0], days[days.length - 1]))
   const blocks = useQuery(timeBlocksQuery(days[0], days[days.length - 1]))
   const tasks = useQuery(tasksQuery(days[0], days[days.length - 1]))
+  const complete = useQuery(completeDaysQuery(days[0], days[days.length - 1]))
 
   // неделя раскрывается на всё окно: семь колонок в боковую колонку не влезают
   const full = isFullScreen(mode)
@@ -103,6 +105,7 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
         blocks={blocks.data ?? []}
         dues={dues.data ?? []}
         tasks={tasks.data ?? []}
+        complete={complete.data ?? []}
         onSelect={setRange}
         onOpen={(event) => setOpened({ id: event.id, title: event.title ?? 'Без названия' })}
         onOpenTask={(task) => setOpenedTask({ id: task.id, title: task.title ?? 'Без названия' })}

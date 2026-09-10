@@ -40,7 +40,7 @@ export async function truncateAll(): Promise<void> {
   const { db } = await import('./src/server/db/client.ts')
 
   await db.execute(
-    sql`truncate boards, google_accounts, workspace_state, notes, note_folders
+    sql`truncate boards, google_accounts, workspace_state, notes, note_folders, daily_results
         restart identity cascade`,
   )
 }

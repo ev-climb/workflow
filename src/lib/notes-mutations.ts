@@ -8,17 +8,19 @@ import { sendJson } from './api-client'
 import { archiveKey } from './archive-query'
 import { boardKey } from './board-query'
 import { cardsKey } from './card-query'
-import { foldersKey, notesKey } from './notes-query'
+import { dailyKey, foldersKey, notesKey } from './notes-query'
 
 /**
  * После любой правки шторка перечитывается целиком, корнем ключа: заметок в ней десятки,
  * а не тысячи, и точечное обновление стоило бы дороже запроса. Директории — вместе с
- * ними: у каждой на виду счётчик заметок.
+ * ними: у каждой на виду счётчик заметок. Список «Сегодня» — тоже: его пункты правятся
+ * теми же запросами, а от отметок зависят закрытые дни в календаре.
  */
 function refreshNotes(client: QueryClient): Promise<unknown> {
   return Promise.all([
     client.invalidateQueries({ queryKey: notesKey }),
     client.invalidateQueries({ queryKey: foldersKey }),
+    client.invalidateQueries({ queryKey: dailyKey }),
   ])
 }
 

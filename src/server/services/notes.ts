@@ -1,9 +1,11 @@
 import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm'
+import { moscowToday } from '../../lib/calendar-grid.ts'
 import type { NoteKind } from '../../lib/notes.ts'
 import { db } from '../db/client.ts'
 import { cards, checklistItems, checklists, noteFolders, noteItems, notes } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
 import { cardDescription, locateList } from './cards.ts'
+import { recordDay } from './daily.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, rankBefore, rankSequence, withRankRetry } from './rank.ts'
 import { TITLE_MAX, title } from './validation.ts'
@@ -39,6 +41,8 @@ export type NoteView = {
   body: string | null
   rank: string
   archived: boolean
+  /** Список «Сегодня»: в общей выдаче его нет, шторка читает его отдельно. */
+  daily: boolean
   // правка на экране, а не в базе: шторка читает заметки только через JSON
   updatedAt: string
   items: NoteItemView[]
@@ -53,6 +57,7 @@ const NOTE_SELECT = {
   title: notes.title,
   body: notes.body,
   rank: notes.rank,
+  daily: notes.daily,
   archivedAt: notes.archivedAt,
   updatedAt: notes.updatedAt,
 }
@@ -61,12 +66,26 @@ const ITEM_SELECT = {
   id: noteItems.id,
   title: noteItems.title,
   done: noteItems.done,
+  doneOn: noteItems.doneOn,
   rank: noteItems.rank,
 }
 
-async function locateNote(noteId: string): Promise<{ id: string; kind: NoteKind }> {
+const DAILY_TITLE = 'Сегодня'
+const DAILY_STAYS = 'список «Сегодня» закреплён и в архив не уходит'
+
+type ItemRow = NoteItemView & { doneOn: string | null }
+
+/**
+ * `today` передаётся только для списка «Сегодня»: там отметка держится до конца дня, а
+ * вчерашняя читается как снятая — список каждое утро начинается заново.
+ */
+function toItem({ doneOn, ...item }: ItemRow, today: string | null = null): NoteItemView {
+  return today === null ? item : { ...item, done: item.done && doneOn === today }
+}
+
+async function locateNote(noteId: string): Promise<{ id: string; kind: NoteKind; daily: boolean }> {
   const [found] = await db
-    .select({ id: notes.id, kind: notes.kind })
+    .select({ id: notes.id, kind: notes.kind, daily: notes.daily })
     .from(notes)
     .where(eq(notes.id, noteId))
 
@@ -74,10 +93,13 @@ async function locateNote(noteId: string): Promise<{ id: string; kind: NoteKind 
   return found
 }
 
-async function locateItem(itemId: string): Promise<{ id: string; noteId: string }> {
+async function locateItem(
+  itemId: string,
+): Promise<{ id: string; noteId: string; daily: boolean }> {
   const [found] = await db
-    .select({ id: noteItems.id, noteId: noteItems.noteId })
+    .select({ id: noteItems.id, noteId: noteItems.noteId, daily: notes.daily })
     .from(noteItems)
+    .innerJoin(notes, eq(noteItems.noteId, notes.id))
     .where(eq(noteItems.id, itemId))
 
   if (!found) throw new NotFoundError(`пункта ${itemId} нет`)
@@ -177,6 +199,7 @@ type NoteRow = {
   title: string | null
   body: string | null
   rank: string
+  daily: boolean
   archivedAt: Date | null
   updatedAt: Date
 }
@@ -197,6 +220,7 @@ export async function listNotes(filter: {
 }): Promise<NoteView[]> {
   const archived = filter.archived === true
   const where = and(
+    eq(notes.daily, false),
     archived ? isNotNull(notes.archivedAt) : isNull(notes.archivedAt),
     filter.folderId === undefined
       ? undefined
@@ -216,7 +240,8 @@ export async function listNotes(filter: {
     .orderBy(asc(noteItems.rank))
 
   const byNote = new Map<string, NoteItemView[]>()
-  for (const { noteId, ...item } of items) {
+  for (const { noteId, ...row } of items) {
+    const item = toItem(row)
     const bucket = byNote.get(noteId)
     if (bucket) bucket.push(item)
     else byNote.set(noteId, [item])
@@ -235,7 +260,28 @@ export async function getNote(noteId: string): Promise<NoteView> {
     .where(eq(noteItems.noteId, noteId))
     .orderBy(asc(noteItems.rank))
 
-  return toView(found, items)
+  const today = found.daily ? moscowToday() : null
+  return toView(
+    found,
+    items.map((item) => toItem(item, today)),
+  )
+}
+
+/**
+ * Список «Сегодня» заводится сам при первом чтении: он нужен всегда. Две первые выдачи
+ * наперегонки упрутся в уникальный индекс, и вторая вставка просто ничего не сделает.
+ */
+export async function getDailyNote(): Promise<NoteView> {
+  const [found] = await db.select({ id: notes.id }).from(notes).where(eq(notes.daily, true))
+  if (found) return getNote(found.id)
+
+  await withRankRetry(async () =>
+    db
+      .insert(notes)
+      .values({ kind: 'list', title: DAILY_TITLE, daily: true, rank: rankBefore(await firstNoteRank()) })
+      .onConflictDoNothing({ target: notes.daily, where: sql`${notes.daily}` }),
+  )
+  return getDailyNote()
 }
 
 /**
@@ -317,6 +363,8 @@ async function requireFolder(folderId: string): Promise<void> {
 
 /** Мягкое удаление, инвариант 5: заметка уходит в архив шторки, а не пропадает. */
 export async function archiveNote(noteId: string): Promise<{ id: string }> {
+  if ((await locateNote(noteId)).daily) throw new InvalidInputError(DAILY_STAYS)
+
   const [updated] = await db
     .update(notes)
     .set({ archivedAt: new Date(), updatedAt: new Date() })
@@ -360,7 +408,7 @@ export async function addNoteItem(input: {
   const note = await locateNote(input.noteId)
   if (note.kind !== 'list') throw new InvalidInputError('пункты бывают только у списка дел')
 
-  return withRankRetry(async () => {
+  const item = await withRankRetry(async () => {
     const [inserted] = await db
       .insert(noteItems)
       .values({ noteId: input.noteId, title: name, rank: rankAfter(await lastItemRank(input.noteId)) })
@@ -368,18 +416,25 @@ export async function addNoteItem(input: {
 
     return inserted
   })
+
+  if (note.daily) await recordDay(input.noteId, moscowToday())
+  return toItem(item)
 }
 
 export async function updateNoteItem(
   itemId: string,
   changes: { title?: string; done?: boolean },
 ): Promise<NoteItemView> {
-  const patch: { title?: string; done?: boolean } = {}
+  const today = moscowToday()
+  const patch: { title?: string; done?: boolean; doneOn?: string | null } = {}
   if (changes.title !== undefined) patch.title = title(changes.title, 'пункт')
-  if (changes.done !== undefined) patch.done = changes.done
+  if (changes.done !== undefined) {
+    patch.done = changes.done
+    patch.doneOn = changes.done ? today : null
+  }
   if (!Object.keys(patch).length) throw new InvalidInputError('пункт: править нечего')
 
-  await locateItem(itemId)
+  const item = await locateItem(itemId)
 
   const [updated] = await db
     .update(noteItems)
@@ -387,18 +442,20 @@ export async function updateNoteItem(
     .where(eq(noteItems.id, itemId))
     .returning(ITEM_SELECT)
 
-  return updated
+  if (item.daily && changes.done !== undefined) await recordDay(item.noteId, today)
+  return toItem(updated, item.daily ? today : null)
 }
 
 /** Пункт удаляется совсем: он часть заметки, своего архива у него нет. */
 export async function deleteNoteItem(itemId: string): Promise<{ id: string }> {
-  await locateItem(itemId)
+  const item = await locateItem(itemId)
 
   const [removed] = await db
     .delete(noteItems)
     .where(eq(noteItems.id, itemId))
     .returning({ id: noteItems.id })
 
+  if (item.daily) await recordDay(item.noteId, moscowToday())
   return removed
 }
 
@@ -418,6 +475,7 @@ export async function noteToCard(input: {
   archive?: boolean
 }): Promise<{ id: string; listId: string; rank: string }> {
   const note = await getNote(input.noteId)
+  if (input.archive && note.daily) throw new InvalidInputError(DAILY_STAYS)
   const name = title(input.title, 'карточка')
   const description = cardDescription(body(input.description ?? null))
 
