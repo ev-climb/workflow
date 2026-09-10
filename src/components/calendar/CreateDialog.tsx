@@ -9,6 +9,7 @@ import {
   KindSwitch,
   ScheduleFields,
   scheduleCaption,
+  scheduleSlot,
   scheduleTimes,
   useSchedule,
 } from './Schedule'
@@ -37,7 +38,7 @@ export function CreateDialog({ range, onClose }: Props) {
     if (schedule.kind === 'task') {
       if (!schedule.taskListId) return
       createTask.mutate(
-        { taskListId: schedule.taskListId, title, due: range.day },
+        { taskListId: schedule.taskListId, title, ...scheduleSlot(schedule, range) },
         { onSuccess: onClose },
       )
       return

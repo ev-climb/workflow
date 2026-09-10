@@ -5,6 +5,7 @@ import { googleAccounts, googleTaskLists, googleTasks } from '../db/schema.ts'
 import { type GoogleTask, TaskEtagMismatchError } from '../google/tasks.ts'
 import { ConflictError, InvalidInputError, NotFoundError } from './errors.ts'
 import { createTask, getTask, listTaskLists, listTasks, updateTask } from './google-tasks.ts'
+import { applyTasks } from './google-tasks-sync.ts'
 
 vi.mock('../google/tasks.ts', async (importActual) => {
   const actual = await importActual<typeof import('../google/tasks.ts')>()
@@ -273,5 +274,134 @@ describe('создание задачи', () => {
       .where(eq(googleTaskLists.id, taskListId))
 
     await expect(createTask(taskListId, { title: 'Отчёт' })).rejects.toBeInstanceOf(NotFoundError)
+  })
+})
+
+describe('часы задачи внутри дня', () => {
+  it('заводятся у себя и в Google не уходят: времени там нет', async () => {
+    const { taskListId } = await stored()
+    insertTask.mockResolvedValue(google({ googleTaskId: 't-slot', due: '2026-10-01' }))
+
+    const { taskId } = await createTask(taskListId, {
+      title: 'Разобрать почту',
+      due: '2026-10-01',
+      slot: { startTime: '15:00', endTime: '16:00' },
+    })
+
+    expect(insertTask).toHaveBeenCalledWith('ya29.access', 'MTIz', {
+      title: 'Разобрать почту',
+      due: '2026-10-01',
+    })
+    const [saved] = await db.select().from(googleTasks).where(eq(googleTasks.id, taskId))
+    expect(saved.startTime).toBe('15:00:00')
+    expect(saved.endTime).toBe('16:00:00')
+  })
+
+  it('отдаются на сетку часами без секунд', async () => {
+    const { id } = await stored({
+      googleTaskId: 't-shown',
+      startTime: '15:00',
+      endTime: '16:30',
+    })
+
+    const [task] = (await listTasks('2026-10-01', '2026-10-01')).filter((one) => one.id === id)
+
+    expect(task).toMatchObject({ startTime: '15:00', endTime: '16:30' })
+    expect(await getTask(id)).toMatchObject({ startTime: '15:00', endTime: '16:30' })
+  })
+
+  it('правка одних часов в Google не ходит', async () => {
+    const { id } = await stored({ googleTaskId: 't-local' })
+
+    const written = await updateTask(id, { slot: { startTime: '09:15', endTime: '10:00' } })
+
+    expect(patchTask).not.toHaveBeenCalled()
+    expect(written).toEqual({ taskId: id, conflict: false, goneInGoogle: false })
+    const [saved] = await db.select().from(googleTasks).where(eq(googleTasks.id, id))
+    expect(saved.startTime).toBe('09:15:00')
+  })
+
+  it('перенос по сетке двигает срок в Google и часы у себя одним разом', async () => {
+    const { id } = await stored({ googleTaskId: 't-move' })
+    patchTask.mockResolvedValue(google({ googleTaskId: 't-move', due: '2026-10-02', etag: '"2"' }))
+
+    await updateTask(id, { due: '2026-10-02', slot: { startTime: '11:00', endTime: '12:00' } })
+
+    expect(patchTask).toHaveBeenCalledWith(
+      'ya29.access',
+      'MTIz',
+      't-move',
+      { due: '2026-10-02' },
+      '"1"',
+    )
+    const [saved] = await db.select().from(googleTasks).where(eq(googleTasks.id, id))
+    expect(saved).toMatchObject({ due: '2026-10-02', startTime: '11:00:00' })
+  })
+
+  it('снятый срок уносит часы за собой: держать их не на чем', async () => {
+    const { id } = await stored({ googleTaskId: 't-drop', startTime: '15:00', endTime: '16:00' })
+    patchTask.mockResolvedValue(google({ googleTaskId: 't-drop', due: null, etag: '"2"' }))
+
+    await updateTask(id, { due: null })
+
+    const [saved] = await db.select().from(googleTasks).where(eq(googleTasks.id, id))
+    expect(saved.startTime).toBeNull()
+    expect(saved.endTime).toBeNull()
+  })
+
+  it('срок, снятый в Google, тоже стирает часы синхронизацией', async () => {
+    const { accountId, taskListId, id } = await stored({
+      googleTaskId: 't-sync',
+      startTime: '15:00',
+      endTime: '16:00',
+    })
+
+    await applyTasks(accountId, taskListId, [google({ googleTaskId: 't-sync', due: null })])
+
+    const [saved] = await db.select().from(googleTasks).where(eq(googleTasks.id, id))
+    expect(saved.startTime).toBeNull()
+  })
+
+  it('вывернутая пара и часы без срока отвергаются', async () => {
+    const { id } = await stored({ googleTaskId: 't-bad', due: null })
+    const withDue = await stored({ googleTaskId: 't-bad-2' })
+
+    await expect(
+      updateTask(withDue.id, { slot: { startTime: '16:00', endTime: '15:00' } }),
+    ).rejects.toBeInstanceOf(InvalidInputError)
+    await expect(
+      updateTask(id, { slot: { startTime: '15:00', endTime: '16:00' } }),
+    ).rejects.toBeInstanceOf(InvalidInputError)
+    expect(patchTask).not.toHaveBeenCalled()
+  })
+})
+
+describe('часы и отказ Google', () => {
+  it('отказ в записи дня не оставляет часы на новом месте', async () => {
+    const { id } = await stored({ googleTaskId: 't-refused', startTime: '15:00', endTime: '16:00' })
+    patchTask.mockRejectedValue(new Error('Google отказал'))
+    fetchTask.mockResolvedValue(google({ googleTaskId: 't-refused' }))
+
+    await expect(
+      updateTask(id, { due: '2026-10-02', slot: { startTime: '11:00', endTime: '12:00' } }),
+    ).rejects.toThrow()
+
+    const [saved] = await db.select().from(googleTasks).where(eq(googleTasks.id, id))
+    expect(saved).toMatchObject({ due: '2026-10-01', startTime: '15:00:00' })
+  })
+
+  it('задача, стёртая в Google из-под нас, часов не получает', async () => {
+    const { id } = await stored({ googleTaskId: 't-vanished-slot' })
+    patchTask.mockRejectedValue(new TaskEtagMismatchError('устарел', 412))
+    fetchTask.mockResolvedValue(null)
+
+    const written = await updateTask(id, {
+      due: '2026-10-02',
+      slot: { startTime: '11:00', endTime: '12:00' },
+    })
+
+    expect(written.goneInGoogle).toBe(true)
+    const [saved] = await db.select().from(googleTasks).where(eq(googleTasks.id, id))
+    expect(saved.startTime).toBeNull()
   })
 })

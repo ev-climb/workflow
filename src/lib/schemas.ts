@@ -161,22 +161,27 @@ export const timeBlockPatchBody = z.union(
 )
 
 /** Новая задача: список, название, заметки и срок датой. Форму срока сверяет сервис. */
+/** Часы задачи внутри дня срока: пара целиком либо `null` — «без времени». */
+const taskSlot = z.object({ startTime: z.string(), endTime: z.string() }).nullable()
+
 export const taskBody = z.object({
   taskListId: z.uuid(),
   title: z.string(),
   notes: z.string().nullable().optional(),
   due: z.string().nullable().optional(),
+  slot: taskSlot.optional(),
 })
 
 /**
- * Правка задачи Google: название, заметки, срок, отметка выполнения — по отдельности или
- * вместе. Срок — голая дата либо `null`, форму сверяет сервис; времени у него нет.
+ * Правка задачи Google: название, заметки, срок, часы внутри дня, отметка выполнения —
+ * по отдельности или вместе. Срок — голая дата либо `null`, форму сверяет сервис.
  */
 export const taskPatchBody = z
   .object({
     title: z.string().nullable().optional(),
     notes: z.string().nullable().optional(),
     due: z.string().nullable().optional(),
+    slot: taskSlot.optional(),
     completed: z.boolean().optional(),
   })
   .refine(
@@ -184,9 +189,15 @@ export const taskPatchBody = z
       body.title !== undefined ||
       body.notes !== undefined ||
       body.due !== undefined ||
+      body.slot !== undefined ||
       body.completed !== undefined,
-    { error: 'ожидается {title}, {notes}, {due}, {completed} или всё сразу' },
+    { error: 'ожидается {title}, {notes}, {due}, {slot}, {completed} или всё сразу' },
   )
+
+/** Смена типа: событие уходит в этот список задач, задача — в этот календарь. */
+export const toTaskBody = z.object({ taskListId: z.uuid() })
+
+export const toEventBody = z.object({ calendarId: z.uuid() })
 
 /** Новая заметка: вид, директория и содержимое — всё необязательно, пустая тоже заметка. */
 export const noteBody = z.object({

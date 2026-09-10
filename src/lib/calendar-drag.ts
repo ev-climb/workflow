@@ -29,10 +29,13 @@ export type Range = { day: string; start: number; end: number }
 /** Что тянут: пустую сетку под новое событие, блок целиком или один из его краёв. */
 export type DragKind = 'select' | 'move' | 'start' | 'end'
 
-/** Кого тащат: событие календаря или тайм-блок. Время у них правится разными записями. */
-export type Target = { type: 'event' | 'block'; id: string }
+/**
+ * Кого тащат: событие календаря, тайм-блок или задачу Google со временем. Время у всех
+ * трёх правится разными записями.
+ */
+export type Target = { type: 'event' | 'block' | 'task'; id: string }
 
-/** Ключ цели: идентификаторы события и блока живут порознь и вполне могут совпасть. */
+/** Ключ цели: идентификаторы у трёх видов свои и вполне могут совпасть. */
 export function targetKey(target: Target): string {
   return `${target.type}:${target.id}`
 }
@@ -138,6 +141,21 @@ export function rangeTimes(range: Range): { allDay: false; startsAt: string; end
  */
 export function rangeDates(range: Range): { allDay: true; startDate: string; endDate: string } {
   return { allDay: true, startDate: range.day, endDate: addDays(range.day, 1) }
+}
+
+/**
+ * Отрезок сетки в часы задачи. Задача живёт внутри одного дня (ADR-015), поэтому конец,
+ * ушедший за полночь, упирается в неё: показывается он как 24:00 — так же, как в подписи.
+ */
+export function rangeSlot(range: Range): { day: string; startTime: string; endTime: string } {
+  const end = Math.min(range.end, MINUTES_IN_DAY)
+  // выделение, начатое у самого низа колонки, иначе схлопнулось бы в пустую пару
+  const start = Math.min(range.start, MINUTES_IN_DAY - SNAP_MINUTES)
+  return {
+    day: range.day,
+    startTime: clock(start),
+    endTime: end === MINUTES_IN_DAY ? '24:00' : clock(end),
+  }
 }
 
 /** Минуты сетки в поле времени. Полночь снизу — 00:00: 24:00 поле времени не принимает. */

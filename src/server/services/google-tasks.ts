@@ -7,6 +7,7 @@ import {
   type GoogleTask,
   type TaskPatch,
   TaskEtagMismatchError,
+  deleteTask,
   fetchTask,
   insertTask,
   patchTask,
@@ -24,6 +25,13 @@ export type CalendarTask = {
   title: string | null
   /** Дата без времени. Задача без срока на сетке не показывается и сюда не попадает. */
   due: string
+  /**
+   * Часы внутри дня срока, `09:30`, либо `null` у задачи без времени. Пара живёт только
+   * у нас: Tasks API времени не хранит вовсе (ADR-015). Часы московские, стенные —
+   * моментом они становятся при отрисовке, а в базе датой не считаются (инвариант 3).
+   */
+  startTime: string | null
+  endTime: string | null
   completed: boolean
 }
 
@@ -45,17 +53,22 @@ export type TaskListSummary = {
   accountEmail: string
 }
 
-/** Новая задача: название и, необязательно, заметки со сроком. */
+/** Часы задачи внутри дня срока: пара целиком либо `null` — «без времени». */
+export type TaskSlot = { startTime: string; endTime: string } | null
+
+/** Новая задача: название и, необязательно, заметки, срок и часы внутри него. */
 export type TaskDraft = {
   title: string | null
   notes?: string | null
   due?: string | null
+  slot?: TaskSlot
 }
 
 export type TaskChanges = {
   title?: string | null
   notes?: string | null
   due?: string | null
+  slot?: TaskSlot
   completed?: boolean
 }
 
@@ -72,6 +85,8 @@ const LISTED = {
   color: googleAccounts.color,
   title: googleTasks.title,
   due: googleTasks.due,
+  startTime: googleTasks.startTime,
+  endTime: googleTasks.endTime,
   status: googleTasks.status,
 }
 
@@ -84,9 +99,25 @@ const DETAILED = {
 
 const alive = () => and(isNull(googleTasks.deletedAt), isNull(googleTaskLists.deletedAt))
 
-function summarize<T extends { color: string | null; status: string }>(row: T) {
+/** `time` приезжает из Postgres с секундами: на сетке и в полях правки они лишние. */
+const clockOf = (value: string | null) => value?.slice(0, 5) ?? null
+
+type Summarizable = {
+  color: string | null
+  status: string
+  startTime: string | null
+  endTime: string | null
+}
+
+function summarize<T extends Summarizable>(row: T) {
   const { status, ...rest } = row
-  return { ...rest, color: rest.color ?? DEFAULT_CALENDAR_COLOR, completed: status === 'completed' }
+  return {
+    ...rest,
+    color: rest.color ?? DEFAULT_CALENDAR_COLOR,
+    startTime: clockOf(rest.startTime),
+    endTime: clockOf(rest.endTime),
+    completed: status === 'completed',
+  }
 }
 
 /**
@@ -153,15 +184,39 @@ function dueOf(value: string | null | undefined): string | null {
   return due
 }
 
-function normalize(changes: TaskChanges): TaskPatch {
+const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/
+// конец задачи упирается в полночь снизу: через сутки она не тянется, а до 24:00 доходит
+const END_CLOCK = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/
+
+/** Часы задачи: пара целиком, конец позже начала. Задача через полночь не тянется. */
+function slotOf(slot: TaskSlot | undefined): TaskSlot | undefined {
+  if (slot === undefined || slot === null) return slot
+  if (!CLOCK.test(slot.startTime) || !END_CLOCK.test(slot.endTime)) {
+    throw new InvalidInputError('время задачи — часы вида 09:30')
+  }
+  if (slot.endTime <= slot.startTime) {
+    throw new InvalidInputError('время задачи кончается не позже, чем начинается')
+  }
+  return slot
+}
+
+/**
+ * Правка врозь: название, заметки, срок и отметка уходят в Google, часы остаются у нас
+ * (ADR-015). Снятый срок уносит часы за собой — держать их не на чем.
+ */
+function normalize(changes: TaskChanges): { patch: TaskPatch; slot: TaskSlot | undefined } {
   const patch: TaskPatch = {}
   if ('title' in changes) patch.title = changes.title?.trim() || null
   if ('notes' in changes) patch.notes = changes.notes?.trim() || null
   if ('due' in changes) patch.due = dueOf(changes.due)
   if (changes.completed !== undefined) patch.completed = changes.completed
 
-  if (Object.keys(patch).length === 0) throw new InvalidInputError('править нечего')
-  return patch
+  const slot = patch.due === null ? null : slotOf(changes.slot)
+
+  if (Object.keys(patch).length === 0 && slot === undefined) {
+    throw new InvalidInputError('править нечего')
+  }
+  return { patch, slot }
 }
 
 /** Задача, стёртая в Google: гасится тем же путём, что и присланная синхронизацией. */
@@ -187,6 +242,7 @@ async function locateTask(id: string) {
       accountId: googleTasks.accountId,
       taskListId: googleTasks.taskListId,
       googleTaskId: googleTasks.googleTaskId,
+      due: googleTasks.due,
       etag: googleTasks.etag,
       deletedAt: googleTasks.deletedAt,
       googleTaskListId: googleTaskLists.googleTaskListId,
@@ -200,6 +256,27 @@ async function locateTask(id: string) {
 }
 
 /**
+ * Часы к себе. Срок к этому моменту мог оказаться пустым — ответ Google приходит раньше,
+ * а стёртая задача возвращается вовсе без него; часы без дня держать не на чем, и
+ * проверка в базе такую пару не пропустит.
+ */
+async function setSlot(id: string, slot: TaskSlot): Promise<void> {
+  const kept = (value: string | null) =>
+    value === null
+      ? null
+      : sql`case when ${googleTasks.due} is null then null else ${value}::time end`
+
+  await db
+    .update(googleTasks)
+    .set({
+      startTime: kept(slot?.startTime ?? null),
+      endTime: kept(slot?.endTime ?? null),
+      updatedAt: new Date(),
+    })
+    .where(eq(googleTasks.id, id))
+}
+
+/**
  * Правка задачи в Google, и отметка выполнения идёт тем же путём. Разрешение конфликта
  * на `412` общее с событиями — оно в `writeThroughEtag`.
  *
@@ -207,8 +284,19 @@ async function locateTask(id: string) {
  * представления о том, что записалось, мы не строим.
  */
 export async function updateTask(id: string, changes: TaskChanges): Promise<TaskWriteResult> {
-  const patch = normalize(changes)
+  const { patch, slot } = normalize(changes)
   const task = await locateTask(id)
+
+  if (slot && (patch.due ?? task.due) === null) {
+    throw new InvalidInputError('время задачи без срока держать не на чем')
+  }
+
+  // правили одни часы: в Google идти незачем, там их нет и не будет
+  if (Object.keys(patch).length === 0) {
+    if (slot !== undefined) await setSlot(id, slot)
+    return { taskId: id, conflict: false, goneInGoogle: false }
+  }
+
   const accessToken = await accessTokenFor(task.accountId)
 
   const written = await writeThroughEtag({
@@ -225,6 +313,10 @@ export async function updateTask(id: string, changes: TaskChanges): Promise<Task
     gone: () => goneTask(task.googleTaskId),
   })
 
+  // часы пишутся после Google: отказ в записи дня не должен оставлять их на новом месте,
+  // а стёртой задаче правка не применялась вовсе
+  if (slot !== undefined && !written.goneInGoogle) await setSlot(id, slot)
+
   return { taskId: id, ...written }
 }
 
@@ -233,12 +325,18 @@ export async function updateTask(id: string, changes: TaskChanges): Promise<Task
  * синхронизация: своего представления о записанном не строим — как и у события.
  *
  * Срок кладётся датой, какой пришёл: приводить его к московскому времени нечего, времени
- * у срока задачи нет вовсе (инвариант 3, ADR-012).
+ * у срока задачи нет вовсе (инвариант 3, ADR-012). Часы внутри дня, если их задали,
+ * дописываются к себе вторым запросом — в Google им места нет (ADR-015).
  */
 export async function createTask(taskListId: string, draft: TaskDraft): Promise<{ taskId: string }> {
   const patch: TaskPatch = { title: draft.title?.trim() || null }
   if (draft.notes !== undefined) patch.notes = draft.notes?.trim() || null
   if (draft.due !== undefined) patch.due = dueOf(draft.due)
+
+  const slot = slotOf(draft.slot) ?? null
+  if (slot !== null && !patch.due) {
+    throw new InvalidInputError('время задачи без срока держать не на чем')
+  }
 
   const [list] = await db
     .select({
@@ -266,5 +364,22 @@ export async function createTask(taskListId: string, draft: TaskDraft): Promise<
     )
   if (!row) throw new ConflictError('Google завёл задачу, но записать её к себе не вышло')
 
+  if (slot !== null) await setSlot(row.id, slot)
+
   return { taskId: row.id }
+}
+
+/**
+ * Задача насовсем — и в Google тоже. Нужна смене типа: задача, ставшая событием, обязана
+ * из Tasks уйти, иначе одна запись раздвоится (ADR-015). Обычная правка сюда не ходит:
+ * задачи гасятся отметкой выполнения, а не удалением.
+ */
+export async function removeTask(id: string): Promise<{ taskId: string }> {
+  const task = await locateTask(id)
+  const accessToken = await accessTokenFor(task.accountId)
+
+  await deleteTask(accessToken, task.googleTaskListId, task.googleTaskId)
+  await applyTasks(task.accountId, task.taskListId, [goneTask(task.googleTaskId)])
+
+  return { taskId: id }
 }

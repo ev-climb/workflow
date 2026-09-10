@@ -293,3 +293,23 @@ export async function insertTask(
   if (!task) throw new TasksApiError('Google вернул задачу без идентификатора', response.status)
   return task
 }
+
+/**
+ * Задача насовсем. Из выдачи она после этого приезжает только с `showDeleted=true`, уже
+ * помеченной стёртой, — гасить её у себя по ответу не нужно, это сделает сервис.
+ *
+ * Стёртой задачи Google не находит и отвечает `404`: считаем это успехом, стирали её
+ * именно за этим.
+ */
+export async function deleteTask(
+  accessToken: string,
+  googleTaskListId: string,
+  googleTaskId: string,
+): Promise<void> {
+  const response = await fetch(taskUrl(googleTaskListId, googleTaskId), {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${accessToken}` },
+  })
+  if (response.status === 404) return
+  if (!response.ok) throw fail('удаление задачи', response.status, await response.text())
+}

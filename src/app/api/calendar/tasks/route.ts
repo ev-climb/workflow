@@ -23,6 +23,7 @@ export async function POST(request: Request) {
       title: body.title,
       notes: body.notes,
       due: body.due,
+      slot: body.slot,
     })
     return NextResponse.json(created, { status: 201 })
   } catch (error) {

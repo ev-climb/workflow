@@ -10,6 +10,7 @@ import {
   primaryKey,
   real,
   text,
+  time,
   timestamp,
   uniqueIndex,
   uuid,
@@ -325,6 +326,10 @@ export const googleTasks = pgTable(
     // инвариант 3: срок — дата, и через часовой пояс она не идёт. Времени у него нет и в
     // источнике: `due` со временем возвращается из Tasks с обнулённым временем
     due: date({ mode: 'string' }),
+    // ADR-015: время внутри дня срока. Живёт только у нас — Tasks API времени не хранит,
+    // и в Google уезжает одна дата. Часы московские, стенные: датой они не становятся
+    startTime: time(),
+    endTime: time(),
     // ADR-012: выполнение — это status, а не hidden; hidden означает «Google убрал с глаз»
     status: text().notNull().default('needsAction'),
     completedAt: tstz(),
@@ -340,6 +345,11 @@ export const googleTasks = pgTable(
     index('google_tasks_task_list_id_idx').on(t.taskListId),
     index('google_tasks_due_idx').on(t.due),
     check('google_tasks_status', sql`${t.status} in ('needsAction', 'completed')`),
+    check(
+      'google_tasks_slot',
+      sql`(${t.startTime} is null) = (${t.endTime} is null)
+          and (${t.startTime} is null or (${t.due} is not null and ${t.endTime} > ${t.startTime}))`,
+    ),
   ],
 )
 

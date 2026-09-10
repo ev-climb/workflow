@@ -5,10 +5,16 @@ import { Dialog } from 'radix-ui'
 import { useEffect, useRef, useState } from 'react'
 import { Failure } from '@/components/board/Failure'
 import { addDays } from '@/lib/calendar-grid'
-import { useEditEvent, useRemoveEvent, type EventEdit } from '@/lib/calendar-mutations'
+import {
+  useEditEvent,
+  useEventToTask,
+  useRemoveEvent,
+  type EventEdit,
+} from '@/lib/calendar-mutations'
 import { eventQuery } from '@/lib/calendar-query'
 import type { CalendarEventDetailsView, EventTimesInput } from '@/lib/calendar-view'
 import { momentInMoscow, moscowParts } from '@/lib/dates'
+import { KindSection } from './KindSection'
 
 type Props = { eventId: string; title: string; onClose: () => void }
 
@@ -196,6 +202,7 @@ function EventForm({
   const [gone, setGone] = useState(false)
   const edit = useEditEvent(event.id)
   const remove = useRemoveEvent()
+  const toTask = useEventToTask(event.id)
 
   // что уже записано: своя запись и правка, приехавшая из Google, двигают точку отсчёта.
   // Без неё одно и то же уходило бы вторым `PATCH` на каждый уход фокуса
@@ -307,6 +314,15 @@ function EventForm({
       </section>
 
       {event.recurringEventId ? <Series htmlLink={event.htmlLink} /> : null}
+
+      {event.taskId === null ? (
+        <KindSection
+          kind="event"
+          pending={toTask.isPending}
+          error={toTask.error}
+          onConvert={(taskListId) => toTask.mutate(taskListId, { onSuccess: onClose })}
+        />
+      ) : null}
 
       <section>
         <label

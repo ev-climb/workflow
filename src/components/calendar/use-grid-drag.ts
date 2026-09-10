@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useMemo, useRef, useState } from 'react'
 import {
   moved,
+  rangeSlot,
   rangeTimes,
   resized,
   sameRange,
@@ -15,9 +16,10 @@ import {
   type Range,
   type Target,
 } from '@/lib/calendar-drag'
-import { useMoveTimeBlock, useSetEventTimes } from '@/lib/calendar-mutations'
+import { useMoveTimeBlock, useSetEventTimes, useSetTaskSlot } from '@/lib/calendar-mutations'
 import type { CalendarEventView, TimeBlockView } from '@/lib/calendar-view'
-import { cardHref, type OpenHandler } from './grid'
+import type { CalendarTask } from '@/server/services/google-tasks'
+import { cardHref, type OpenHandler, type TaskOpenHandler } from './grid'
 
 type Drag = {
   kind: DragKind
@@ -72,10 +74,12 @@ export type GridDrag = {
 export function useGridDrag(input: {
   events: CalendarEventView[]
   blocks: TimeBlockView[]
+  tasks: CalendarTask[]
   onSelect: (range: Range) => void
   onOpen: OpenHandler
+  onOpenTask: TaskOpenHandler
 }): GridDrag {
-  const { events, blocks, onSelect, onOpen } = input
+  const { events, blocks, tasks, onSelect, onOpen, onOpenTask } = input
   const [drag, setDrag] = useState<Drag | null>(null)
   /**
    * Отрезки, записанные в Google, но ещё не приехавшие обратно: пока идёт запрос, блок
@@ -87,6 +91,7 @@ export function useGridDrag(input: {
   const stamp = useRef(0)
   const setTimes = useSetEventTimes()
   const moveBlock = useMoveTimeBlock()
+  const setSlot = useSetTaskSlot()
   const router = useRouter()
 
   const grab: GrabHandler = (event, kind, base, dragging) => {
@@ -141,6 +146,11 @@ export function useGridDrag(input: {
         if (clicked) onOpen(clicked)
         return
       }
+      if (moving.type === 'task') {
+        const clicked = tasks.find((one) => one.id === moving.id)
+        if (clicked) onOpenTask({ id: clicked.id, title: clicked.title })
+        return
+      }
       const clicked = blocks.find((one) => one.id === moving.id)
       if (clicked) router.push(cardHref(clicked.cardId))
       return
@@ -164,6 +174,12 @@ export function useGridDrag(input: {
       setTimes.mutate({ id: moving.id, times }, settle)
       return
     }
+    if (moving.type === 'task') {
+      // день уезжает в Google сроком, часы остаются у нас: одним `PATCH`, чтобы не разъехались
+      const { day, ...slot } = rangeSlot(current.range)
+      setSlot.mutate({ id: moving.id, due: day, slot }, settle)
+      return
+    }
     moveBlock.mutate({ id: moving.id, startsAt: times.startsAt, endsAt: times.endsAt }, settle)
   }
 
@@ -180,6 +196,6 @@ export function useGridDrag(input: {
     advance,
     finish,
     cancel: () => setDrag(null),
-    error: setTimes.error ?? moveBlock.error,
+    error: setTimes.error ?? moveBlock.error ?? setSlot.error,
   }
 }

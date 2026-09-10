@@ -52,18 +52,34 @@ export function DayColumn({
       style={{ backgroundImage: HOUR_LINES }}
     >
       {placed.map((one) =>
-        one.event.kind !== 'event' ? (
+        one.event.kind === 'block' ? (
           <TimeBlockChip
             key={one.key}
             placed={{ ...one, event: one.event.block }}
             day={day}
             onGrab={drag.grab}
           />
-        ) : one.event.event.taskId ? (
+        ) : one.event.kind === 'task' ? (
           <TaskBlock
             key={one.key}
-            placed={{ ...one, event: one.event.event }}
+            placed={one}
+            taskId={one.event.task.id}
+            title={one.event.task.title}
+            color={one.event.task.color}
+            completed={one.event.task.completed}
+            day={day}
+            onGrab={drag.grab}
+            onOpen={onOpenTask}
+          />
+        ) : one.event.event.taskId ? (
+          // зеркало задачи из Google: неподвижно, править его бесполезно (ADR-013)
+          <TaskBlock
+            key={one.key}
+            placed={one}
             taskId={one.event.event.taskId}
+            title={one.event.event.title}
+            color={one.event.event.color}
+            completed={one.event.event.taskCompleted === true}
             onOpen={onOpenTask}
           />
         ) : (

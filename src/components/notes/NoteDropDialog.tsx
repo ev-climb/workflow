@@ -7,6 +7,7 @@ import {
   KindSwitch,
   ScheduleFields,
   scheduleCaption,
+  scheduleSlot,
   scheduleTimes,
   useSchedule,
 } from '@/components/calendar/Schedule'
@@ -103,7 +104,12 @@ export function NoteDropDialog({ target, archives, onArchivesChange, onClose }: 
     if (schedule.kind === 'task') {
       if (!schedule.taskListId) return
       createTask.mutate(
-        { taskListId: schedule.taskListId, title, notes: description, due: target.range.day },
+        {
+          taskListId: schedule.taskListId,
+          title,
+          notes: description,
+          ...scheduleSlot(schedule, target.range),
+        },
         { onSuccess: done },
       )
       return

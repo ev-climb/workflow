@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { sendJson } from './api-client'
 import { calendarRoots } from './calendar-query'
 import type { EventWriteResult } from '@/server/services/google-events'
-import type { TaskWriteResult } from '@/server/services/google-tasks'
+import type { TaskSlot, TaskWriteResult } from '@/server/services/google-tasks'
 import type { EventTimesInput } from './calendar-view'
 
 /**
@@ -75,8 +75,17 @@ export const useRemoveTimeBlock = () =>
 export const useRemoveEvent = () =>
   useCalendarChange((id: string) => sendJson('DELETE', `/api/calendar/events/${id}`))
 
-/** Новая задача: список, название и срок днём выделения. Времени у срока нет. */
-export type NewTask = { taskListId: string; title: string; notes?: string; due: string }
+/**
+ * Новая задача: список, название и день выделения. Часы внутри дня необязательны — без
+ * них задача уходит полосой наверх, с ними встаёт блоком в сетку (ADR-015).
+ */
+export type NewTask = {
+  taskListId: string
+  title: string
+  notes?: string
+  due: string
+  slot?: TaskSlot
+}
 
 export const useCreateTask = () =>
   useCalendarChange((draft: NewTask) => sendJson('POST', '/api/calendar/tasks', draft))
@@ -86,6 +95,7 @@ export type TaskEdit = {
   title?: string
   notes?: string
   due?: string | null
+  slot?: TaskSlot
   completed?: boolean
 }
 
@@ -94,10 +104,34 @@ export const useEditTask = (id: string) =>
     sendJson<TaskWriteResult>('PATCH', `/api/calendar/tasks/${id}`, changes),
   )
 
-/** Перенос задачи по сетке: у задачи только день, времени в её сроке нет — инвариант 3. */
+/** Перенос задачи по полосе: у задачи без времени есть только день — инвариант 3. */
 export const useSetTaskDue = () =>
   useCalendarChange(({ id, due }: { id: string; due: string }) =>
     sendJson<TaskWriteResult>('PATCH', `/api/calendar/tasks/${id}`, { due }),
+  )
+
+/**
+ * Перенос и растягивание задачи по сетке: день уезжает в Google сроком, часы остаются
+ * у нас. Уходят они одним `PATCH`, чтобы день и часы не разъехались.
+ */
+export const useSetTaskSlot = () =>
+  useCalendarChange(({ id, due, slot }: { id: string; due: string; slot: TaskSlot }) =>
+    sendJson<TaskWriteResult>('PATCH', `/api/calendar/tasks/${id}`, { due, slot }),
+  )
+
+/**
+ * Смена типа: событие заводится задачей в выбранном списке, задача — событием в выбранном
+ * календаре, прежняя запись стирается. Прежний идентификатор после этого мёртв, и панель
+ * приходится открывать заново.
+ */
+export const useEventToTask = (eventId: string) =>
+  useCalendarChange((taskListId: string) =>
+    sendJson<{ taskId: string }>('POST', `/api/calendar/events/${eventId}/convert`, { taskListId }),
+  )
+
+export const useTaskToEvent = (taskId: string) =>
+  useCalendarChange((calendarId: string) =>
+    sendJson<{ eventId: string }>('POST', `/api/calendar/tasks/${taskId}/convert`, { calendarId }),
   )
 
 /**

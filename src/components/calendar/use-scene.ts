@@ -40,7 +40,10 @@ export function useScene(input: {
 }): Scene {
   const { days, events, blocks, dues, tasks, held, heldStripes } = input
 
-  const grid = useMemo(() => gridScene({ events, blocks, held }), [events, blocks, held])
+  const grid = useMemo(
+    () => gridScene({ events, blocks, tasks, held }),
+    [events, blocks, tasks, held],
+  )
   const bands = useMemo(
     () => stripeScene({ days, events, dues, tasks, held: heldStripes }),
     [days, events, dues, tasks, heldStripes],

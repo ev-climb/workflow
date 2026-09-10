@@ -117,55 +117,81 @@ export function TimeBlockChip({
 }
 
 /**
- * Зеркало задачи Google на сетке: задаче, которой в Google выставили время, календарь
- * заводит парное событие, и приезжает оно к нам обычным событием (ADR-013). Править его
- * бесполезно — Google сам пишет в описании, что правка не сохранится, — поэтому блок не
- * тащится и не растягивается, а чекбокс закрывает задачу, стоящую за ним.
+ * Задача Google на сетке. Сюда приходят две разных вещи, и рисуются они одинаково:
+ * задача, которой время выставили у нас (ADR-015), и зеркало задачи, которой время
+ * выставили в Google (ADR-013).
  *
- * Чекбокс и название — две кнопки рядом, а не кнопка внутри кнопки, как и в полосе задач.
+ * Разница — в подвижности. Своя задача тащится и растягивается, как событие: часы её
+ * лежат у нас, и переписать их некому. Зеркало неподвижно: Google прямо пишет в описании,
+ * что правка не сохранится, — поэтому `day` и `onGrab` ему не передают.
+ *
+ * Чекбокс закрывает задачу, стоящую за блоком. Чекбокс и название — две кнопки рядом,
+ * а не кнопка внутри кнопки, как и в полосе задач.
  */
 export function TaskBlock({
   placed,
   taskId,
+  title,
+  color,
+  completed,
+  day,
+  onGrab,
   onOpen,
 }: {
-  placed: PlacedEvent<TimedView>
+  placed: PlacedEvent<unknown>
   taskId: string
+  title: string | null
+  color: string
+  completed: boolean
+  /** День колонки; у зеркала его нет — оно не тащится. */
+  day?: string
+  onGrab?: GrabHandler
   onOpen: TaskOpenHandler
 }) {
-  const { event } = placed
   const setDone = useSetTaskDone()
   const height = heightOf(placed)
-  const title = event.title ?? 'Без названия'
+  const shown = title ?? 'Без названия'
   const time = placedTime(placed)
   // отметка ходит в Google и приезжает обратно синхронизацией: пока идёт, показываем свою
-  const done = setDone.isPending ? event.taskCompleted !== true : event.taskCompleted === true
+  const done = setDone.isPending ? !completed : completed
+  // кусок задачи, обрезанный полуночью, не тащится: правка переписала бы её целиком
+  const base = day !== undefined && onGrab ? placedRange(day, placed) : null
+  const target: Target = { type: 'task', id: taskId }
 
   return (
     <div
       className="absolute flex items-start gap-1 overflow-hidden rounded-[11px] px-1.5 py-0.5 text-[10px] leading-tight shadow-[0_6px_18px_rgb(0_0_0/0.3)]"
       style={{
         ...box(placed),
-        border: `1px solid ${event.color}66`,
-        background: `linear-gradient(135deg, ${event.color}8c, ${event.color}52)`,
+        border: `1px solid ${color}66`,
+        background: `linear-gradient(135deg, ${color}8c, ${color}52)`,
         opacity: done ? 0.55 : undefined,
       }}
     >
       <button
         type="button"
-        aria-label={done ? `Снять отметку: ${title}` : `Выполнить: ${title}`}
+        aria-label={done ? `Снять отметку: ${shown}` : `Выполнить: ${shown}`}
         aria-pressed={done}
         disabled={setDone.isPending}
-        onClick={() => setDone.mutate({ id: taskId, completed: event.taskCompleted !== true })}
+        onClick={() => setDone.mutate({ id: taskId, completed: !completed })}
         className="mt-0.5 grid size-2.5 shrink-0 place-items-center rounded-[3px] border border-white/60 text-[8px] leading-none text-white outline-none transition-colors hover:bg-white/20 focus-visible:ring-1 focus-visible:ring-accent-line"
       >
         {done ? <span aria-hidden>✓</span> : null}
       </button>
       <button
         type="button"
-        onClick={() => onOpen({ id: taskId, title: event.title })}
-        title={`Задача: ${time} ${title}`}
-        className="min-w-0 flex-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent-line"
+        onPointerDown={
+          base && onGrab ? (pointer) => onGrab(pointer, 'move', base, target) : undefined
+        }
+        onClick={(pointer) => {
+          // мышь на подвижном блоке ведёт `finish`: он один отличает щелчок от переноса
+          if (base && pointer.detail !== 0) return
+          onOpen({ id: taskId, title })
+        }}
+        title={`Задача: ${time} ${shown}`}
+        className={`min-w-0 flex-1 text-left outline-none focus-visible:ring-1 focus-visible:ring-accent-line ${
+          base ? 'cursor-grab active:cursor-grabbing' : ''
+        }`}
       >
         {height >= TIME_VISIBLE_PX ? (
           <span className="block truncate font-mono text-[9.5px] text-white/70 tabular-nums">
@@ -175,9 +201,11 @@ export function TaskBlock({
         <span
           className={`block truncate font-medium ${done ? 'text-fog-faint line-through' : 'text-fog'}`}
         >
-          {title}
+          {shown}
         </span>
       </button>
+
+      {onGrab ? <Handles base={base} height={height} target={target} onGrab={onGrab} /> : null}
     </div>
   )
 }

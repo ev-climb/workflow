@@ -48,7 +48,7 @@ export function CalendarGrid({
   useFirstScroll(scroll, days, now)
 
   const dayColumns = useDayColumns(days)
-  const drag = useGridDrag({ events, blocks, onSelect, onOpen })
+  const drag = useGridDrag({ events, blocks, tasks, onSelect, onOpen, onOpenTask })
   const stripes = useStripeDrag({ days, onOpen, onOpenTask })
   const drop = useGridDrop(dayColumns)
 

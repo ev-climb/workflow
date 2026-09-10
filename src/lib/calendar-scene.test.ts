@@ -58,8 +58,16 @@ function due(id: string, day: string): CardDueView {
   }
 }
 
-function task(id: string, day: string): CalendarTask {
-  return { id, color: '#33b679', title: 'Купить билеты', due: day, completed: false }
+function task(id: string, day: string, slot?: { from: string; to: string }): CalendarTask {
+  return {
+    id,
+    color: '#33b679',
+    title: 'Купить билеты',
+    due: day,
+    startTime: slot?.from ?? null,
+    endTime: slot?.to ?? null,
+    completed: false,
+  }
 }
 
 const range = (day: string, start: number, end: number): Range => ({ day, start, end })
@@ -75,13 +83,14 @@ function scene(input: {
   heldStripes?: StripeDrag[]
 }) {
   const events = input.events ?? []
+  const tasks = input.tasks ?? []
   return {
-    ...gridScene({ events, blocks: input.blocks ?? [], held: input.held ?? [] }),
+    ...gridScene({ events, blocks: input.blocks ?? [], tasks, held: input.held ?? [] }),
     ...stripeScene({
       days: DAYS,
       events,
       dues: input.dues ?? [],
-      tasks: input.tasks ?? [],
+      tasks,
       held: input.heldStripes ?? [],
     }),
   }
@@ -204,5 +213,47 @@ describe('раскладка сетки', () => {
       ['a1', 1],
       ['a2', 2],
     ])
+  })
+})
+
+describe('задача со временем и без', () => {
+  it('задача с часами встаёт блоком в сетку, а не полосой сверху', () => {
+    const built = scene({ tasks: [task('t1', DAYS[0], { from: '15:00', to: '16:00' })] })
+
+    expect(built.items.map((one) => one.id)).toEqual(['task:t1'])
+    expect(built.stripes).toEqual([])
+  })
+
+  it('задача без часов остаётся полосой, в сетку не идёт', () => {
+    const built = scene({ tasks: [task('t1', DAYS[0])] })
+
+    expect(built.items).toEqual([])
+    expect(built.stripes.map((one) => one.item.kind)).toEqual(['task'])
+  })
+
+  it('часы разбираются московскими: 15:00 — это середина дня, а не его начало', () => {
+    const built = scene({ tasks: [task('t1', DAYS[0], { from: '15:00', to: '16:00' })] })
+
+    expect(built.items[0].startsAt).toBe(new Date(moment(DAYS[0], '15:00')).toISOString())
+    expect(built.items[0].endsAt).toBe(new Date(moment(DAYS[0], '16:00')).toISOString())
+  })
+
+  it('задача, которой время выставили в Google, полосу тоже не занимает', () => {
+    const mirror = timed({ id: 'mirror', taskId: 't1', taskCompleted: false })
+    const built = scene({ events: [mirror], tasks: [task('t1', DAYS[0])] })
+
+    // на сетке одно зеркало, сверху пусто: одна задача видна в окне один раз
+    expect(built.items.map((one) => one.id)).toEqual(['mirror'])
+    expect(built.stripes).toEqual([])
+  })
+
+  it('снимает задачу с прежнего места, пока её тащат по сетке', () => {
+    const built = scene({
+      tasks: [task('t1', DAYS[0], { from: '15:00', to: '16:00' })],
+      held: [holding({ type: 'task', id: 't1' }, range(DAYS[1], 600, 660))],
+    })
+
+    expect(built.items).toEqual([])
+    expect(built.drafts[0].event).toEqual(expect.objectContaining({ id: 't1' }))
   })
 })

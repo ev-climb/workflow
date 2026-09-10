@@ -4,9 +4,10 @@ import { useQuery } from '@tanstack/react-query'
 import { Dialog } from 'radix-ui'
 import { useEffect, useRef, useState } from 'react'
 import { Failure } from '@/components/board/Failure'
-import { useEditTask, type TaskEdit } from '@/lib/calendar-mutations'
+import { useEditTask, useTaskToEvent, type TaskEdit } from '@/lib/calendar-mutations'
 import { taskQuery } from '@/lib/calendar-query'
-import type { CalendarTaskDetails } from '@/server/services/google-tasks'
+import type { CalendarTaskDetails, TaskSlot } from '@/server/services/google-tasks'
+import { KindSection } from './KindSection'
 
 type Props = { taskId: string; title: string; onClose: () => void }
 
@@ -54,7 +55,7 @@ export function TaskPanel({ taskId, title, onClose }: Props) {
               Задача не прочиталась: {error.message}
             </p>
           ) : isPending ? null : (
-            <TaskForm key={data.id} task={data} flush={flush} />
+            <TaskForm key={data.id} task={data} flush={flush} onClose={onClose} />
           )}
         </Dialog.Content>
       </Dialog.Portal>
@@ -62,23 +63,56 @@ export function TaskPanel({ taskId, title, onClose }: Props) {
   )
 }
 
-type Draft = { title: string; notes: string; due: string }
+type Draft = { title: string; notes: string; due: string; startTime: string; endTime: string }
+
+/** Время задаче, которая его только что получила: рабочий час, а не полночь. */
+const FALLBACK_SLOT = { startTime: '09:00', endTime: '10:00' }
+
+const EMPTY_SLOT = { startTime: '', endTime: '' }
 
 function draftOf(task: CalendarTaskDetails): Draft {
-  return { title: task.title ?? '', notes: task.notes ?? '', due: task.due }
+  return {
+    title: task.title ?? '',
+    notes: task.notes ?? '',
+    due: task.due,
+    startTime: task.startTime ?? '',
+    // поле времени 24:00 не принимает: полночь снизу показывается как 00:00, и обратно
+    // её переводит `slotOf` — так же, как отрезок за полночь в окне создания
+    endTime: task.endTime === '24:00' ? '00:00' : (task.endTime ?? ''),
+  }
 }
+
+/**
+ * Часы из полей. `undefined` — пара заполнена наполовину или вывернута: такую до сервера
+ * не доводим, иначе правка одного поля упиралась бы в отказ. `null` — оба поля пусты,
+ * это «без времени, полосой сверху».
+ */
+function slotOf(draft: Draft): TaskSlot | undefined {
+  if (!draft.startTime && !draft.endTime) return null
+  if (!draft.startTime || !draft.endTime) return undefined
+  // поле времени 24:00 не принимает: полночь снизу приходит из него как 00:00
+  const endTime = draft.endTime === '00:00' ? '24:00' : draft.endTime
+  return endTime > draft.startTime ? { startTime: draft.startTime, endTime } : undefined
+}
+
+const slotPart = ({ startTime, endTime }: Draft) => ({ startTime, endTime })
+
+const sameSlot = (a: Draft, b: Draft) => a.startTime === b.startTime && a.endTime === b.endTime
 
 function TaskForm({
   task,
   flush,
+  onClose,
 }: {
   task: CalendarTaskDetails
   /** Дописать несохранённое перед закрытием панели: снятия фокуса при этом не будет. */
   flush: React.RefObject<() => void>
+  onClose: () => void
 }) {
   const [draft, setDraft] = useState(() => draftOf(task))
   const [gone, setGone] = useState(false)
   const edit = useEditTask(task.id)
+  const toEvent = useTaskToEvent(task.id)
 
   // что уже записано: своя запись и правка, приехавшая из Google, двигают точку отсчёта
   const written = useRef(draft)
@@ -95,16 +129,26 @@ function TaskForm({
     })
   }
 
-  function save() {
+  function save(current: Draft = draft) {
     const base = written.current
     const changes: TaskEdit = {}
-    if (draft.title !== base.title) changes.title = draft.title
-    if (draft.notes !== base.notes) changes.notes = draft.notes
+    const slot = slotOf(current)
+    if (current.title !== base.title) changes.title = current.title
+    if (current.notes !== base.notes) changes.notes = current.notes
     // срок снимается пустым полем: у задачи без срока места на сетке нет, и она пропадёт
-    if (draft.due !== base.due) changes.due = draft.due || null
+    if (current.due !== base.due) changes.due = current.due || null
+    // снятый срок уносит часы за собой, и сервис делает это сам: поля идут за ним следом
+    const dropped = changes.due === null
+    if (dropped) setDraft({ ...current, ...EMPTY_SLOT })
+    else if (slot !== undefined && !sameSlot(current, base)) changes.slot = slot
     if (Object.keys(changes).length === 0) return
 
-    written.current = { ...draft }
+    // полупустая пара времени остаётся неотправленной: точку отсчёта она не двигает
+    written.current = dropped
+      ? { ...current, ...EMPTY_SLOT }
+      : changes.slot === undefined
+        ? { ...current, ...slotPart(base) }
+        : { ...current }
     write(changes)
   }
 
@@ -129,7 +173,7 @@ function TaskForm({
           id="task-title"
           value={draft.title}
           onChange={(input) => field('title')(input.target.value)}
-          onBlur={save}
+          onBlur={() => save()}
           onKeyDown={(key) => {
             if (key.key === 'Enter') key.currentTarget.blur()
           }}
@@ -150,13 +194,57 @@ function TaskForm({
           type="date"
           value={draft.due}
           onChange={(input) => field('due')(input.target.value)}
-          onBlur={save}
+          onBlur={() => save()}
           className="field px-2 py-1 text-sm"
         />
+        <p className="mt-1.5 text-xs text-fog-faint">пустой срок убирает задачу с сетки</p>
+      </section>
+
+      <section>
+        <h3 className="mb-1.5 text-[11px] tracking-[0.14em] text-fog-faint uppercase">Время</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="time"
+            aria-label="Начало"
+            value={draft.startTime}
+            onChange={(input) => field('startTime')(input.target.value)}
+            onBlur={() => save()}
+            className="field px-2 py-1 text-sm"
+          />
+          <span className="text-sm text-fog-dim">—</span>
+          <input
+            type="time"
+            aria-label="Конец"
+            value={draft.endTime}
+            onChange={(input) => field('endTime')(input.target.value)}
+            onBlur={() => save()}
+            className="field px-2 py-1 text-sm"
+          />
+        </div>
+        <label className="mt-2 flex w-fit items-center gap-2 text-sm text-fog-muted">
+          <input
+            type="checkbox"
+            checked={!draft.startTime && !draft.endTime}
+            onChange={(input) => {
+              const next = { ...draft, ...(input.target.checked ? EMPTY_SLOT : FALLBACK_SLOT) }
+              setDraft(next)
+              save(next)
+            }}
+            className="size-3.5 shrink-0 accent-accent"
+          />
+          Без времени, полосой сверху
+        </label>
         <p className="mt-1.5 text-xs text-fog-faint">
-          дата без времени: пустой срок убирает задачу с сетки
+          часы живут только здесь: в Google у задачи есть день, но не время
         </p>
       </section>
+
+      <KindSection
+        kind="task"
+        pending={toEvent.isPending}
+        error={toEvent.error}
+        onConvert={(calendarId) => toEvent.mutate(calendarId, { onSuccess: onClose })}
+      />
 
       <section>
         <label className="flex items-center gap-2 text-sm text-fog-muted">
@@ -182,7 +270,7 @@ function TaskForm({
           rows={6}
           value={draft.notes}
           onChange={(input) => field('notes')(input.target.value)}
-          onBlur={save}
+          onBlur={() => save()}
           placeholder="Пусто"
           className="field w-full resize-y px-2 py-1.5 text-sm"
         />

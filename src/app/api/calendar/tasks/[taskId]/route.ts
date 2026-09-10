@@ -27,6 +27,7 @@ export async function PATCH(request: Request, { params }: Context) {
     if (body.title !== undefined) changes.title = body.title
     if (body.notes !== undefined) changes.notes = body.notes
     if (body.due !== undefined) changes.due = body.due
+    if (body.slot !== undefined) changes.slot = body.slot
     if (body.completed !== undefined) changes.completed = body.completed
 
     return NextResponse.json(await updateTask(uuidParam(taskId, 'задачи'), changes))

@@ -115,6 +115,10 @@ async function saveTasks(
           title: sql`excluded.title`,
           notes: sql`excluded.notes`,
           due: sql`excluded.due`,
+          // часы живут у нас и из Google не приезжают (ADR-015), но снятый там срок
+          // уносит их за собой: держать время без дня не на чем
+          startTime: sql`case when excluded.due is null then null else google_tasks.start_time end`,
+          endTime: sql`case when excluded.due is null then null else google_tasks.end_time end`,
           status: sql`excluded.status`,
           completedAt: sql`excluded.completed_at`,
           etag: sql`excluded.etag`,

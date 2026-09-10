@@ -1,7 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { clockOf, rangeAt, rangeDates, rangeTimes, type Range } from '@/lib/calendar-drag'
+import {
+  clockOf,
+  rangeAt,
+  rangeDates,
+  rangeSlot,
+  rangeTimes,
+  type Range,
+} from '@/lib/calendar-drag'
 import { rangeLabel } from '@/lib/calendar-grid'
 import {
   CalendarChoice,
@@ -58,14 +65,25 @@ export function useSchedule(enabled: boolean, range: Range | null) {
 
 /**
  * Время события: на весь день — даты без часового пояса, иначе границы из полей окна.
- * Задаче отрезок отдаёт только день: времени у срока не бывает вовсе.
  */
 export function scheduleTimes({ allDay, from, to }: Schedule, range: Range) {
   return allDay ? rangeDates(range) : rangeTimes(rangeAt(range.day, from, to))
 }
 
+/**
+ * Часы задачи: с ними она встаёт блоком в сетку, без них уходит полосой наверх (ADR-015).
+ * Отметка «весь день» у задачи означает «без времени» — держать два разных переключателя
+ * на один и тот же вопрос незачем.
+ */
+export function scheduleSlot({ allDay, from, to }: Schedule, range: Range) {
+  if (allDay) return { due: range.day, slot: null }
+  const { day, ...slot } = rangeSlot(rangeAt(range.day, from, to))
+  return { due: day, slot }
+}
+
 export function scheduleCaption({ kind, allDay }: Schedule, range: Range): string {
-  const when = kind === 'task' ? 'срок' : allDay ? 'весь день' : 'событие'
+  const when =
+    kind === 'task' ? (allDay ? 'срок' : 'задача') : allDay ? 'весь день' : 'событие'
   return `${rangeLabel('day', [range.day])}, ${when}`
 }
 
@@ -93,14 +111,21 @@ export function KindSwitch({
   )
 }
 
+/**
+ * Время спрашивается одинаково у события и у задачи: задача со временем — такой же блок
+ * в сетке, только с чекбоксом (ADR-015). Разница одна — как называется отметка, снимающая
+ * время: у события это «весь день», у задачи «без времени, полосой сверху».
+ */
 export function ScheduleFields({ schedule }: { schedule: Schedule }) {
-  if (schedule.kind === 'task') {
-    return <TaskListChoice value={schedule.taskListId} onChange={schedule.chooseList} enabled />
-  }
+  const task = schedule.kind === 'task'
 
   return (
     <>
-      <CalendarChoice value={schedule.calendarId} onChange={schedule.chooseCalendar} enabled />
+      {task ? (
+        <TaskListChoice value={schedule.taskListId} onChange={schedule.chooseList} enabled />
+      ) : (
+        <CalendarChoice value={schedule.calendarId} onChange={schedule.chooseCalendar} enabled />
+      )}
       {schedule.allDay ? null : (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-fog-dim">Время</span>
@@ -130,7 +155,7 @@ export function ScheduleFields({ schedule }: { schedule: Schedule }) {
           onChange={(event) => schedule.setAllDay(event.target.checked)}
           className="size-3.5 shrink-0 accent-accent"
         />
-        Весь день
+        {task ? 'Без времени, полосой сверху' : 'Весь день'}
       </label>
     </>
   )

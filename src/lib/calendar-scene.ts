@@ -1,6 +1,7 @@
 import type { CalendarTask } from '@/server/services/google-tasks'
 import { targetKey, type Held, type Range } from './calendar-drag'
 import { addDays } from './calendar-grid'
+import { momentInMoscow } from './dates'
 import {
   placeAllDay,
   placeStripe,
@@ -21,6 +22,13 @@ export type AllDayView = CalendarEventView & { startDate: string; endDate: strin
 
 export function isAllDay(event: CalendarEventView): event is AllDayView {
   return event.allDay && event.startDate !== null && event.endDate !== null
+}
+
+/** Задача с часами внутри дня срока: её место не в полосе сверху, а в сетке (ADR-015). */
+export type TimedTask = CalendarTask & { startTime: string; endTime: string }
+
+export function hasSlot(task: CalendarTask): task is TimedTask {
+  return task.startTime !== null && task.endTime !== null
 }
 
 /**
@@ -53,8 +61,20 @@ export function stripeKey(target: StripeTarget): string {
 export type GridItem =
   | { id: string; startsAt: string; endsAt: string; kind: 'event'; event: TimedView }
   | { id: string; startsAt: string; endsAt: string; kind: 'block'; block: TimeBlockView }
+  | { id: string; startsAt: string; endsAt: string; kind: 'task'; task: TimedTask }
 
-function gridItems(events: TimedView[], blocks: TimeBlockView[]): GridItem[] {
+/**
+ * Место задачи на сетке: часы у неё стенные, московские, и моментом становятся здесь —
+ * в базе они лежат при дне срока и через часовой пояс не идут (инвариант 3).
+ */
+export function taskMoments(task: TimedTask): { startsAt: string; endsAt: string } {
+  return {
+    startsAt: momentInMoscow(task.due, task.startTime).toISOString(),
+    endsAt: momentInMoscow(task.due, task.endTime).toISOString(),
+  }
+}
+
+function gridItems(events: TimedView[], blocks: TimeBlockView[], tasks: TimedTask[]): GridItem[] {
   return [
     ...events.map(
       (event): GridItem => ({
@@ -73,6 +93,9 @@ function gridItems(events: TimedView[], blocks: TimeBlockView[]): GridItem[] {
         kind: 'block',
         block,
       }),
+    ),
+    ...tasks.map(
+      (task): GridItem => ({ id: `task:${task.id}`, ...taskMoments(task), kind: 'task', task }),
     ),
   ]
 }
@@ -143,15 +166,25 @@ export function stripeScene(input: {
     // события на весь день во временную сетку не попадают: они полосой сверху, инвариант 3
     allDay: placeAllDay(previewAllDay(events.filter(isAllDay), days, held), days),
     // срок и задача — не события и не отрезки времени: своя полоса под событиями на весь день
-    stripes: placeStripe(previewStripes(stripeItems(dues, tasks), held), days),
+    stripes: placeStripe(previewStripes(stripeItems(dues, stripeTasks(tasks, events)), held), days),
   }
 }
 
+/**
+ * Наверх идут только задачи без времени: у задачи с часами место в сетке, а у задачи,
+ * которой время выставили в Google, там же стоит присланное им зеркало (ADR-013, ADR-015).
+ * Иначе одна задача была бы видна в окне дважды.
+ */
+function stripeTasks(tasks: CalendarTask[], events: CalendarEventView[]): CalendarTask[] {
+  const mirrored = new Set(events.flatMap((event) => (event.taskId ? [event.taskId] : [])))
+  return tasks.filter((task) => !hasSlot(task) && !mirrored.has(task.id))
+}
+
 /** Заготовка вместо удержанного куска: отрезок и то, что за ним стоит. */
-export type GridDraft = { range: Range; event: TimedView | null; title?: string }
+export type GridDraft = { range: Range; event: TimedView | TimedTask | null; title?: string }
 
 export type GridScene = {
-  /** События со временем и тайм-блоки вперемешку: раскладка по дням идёт по ним разом. */
+  /** События, тайм-блоки и задачи с часами вперемешку: раскладка идёт по ним разом. */
   items: GridItem[]
   /** Заготовки по всем удержаниям разом: с прежних мест эти куски сняты. */
   drafts: GridDraft[]
@@ -164,27 +197,41 @@ export type GridScene = {
 export function gridScene(input: {
   events: CalendarEventView[]
   blocks: TimeBlockView[]
+  tasks: CalendarTask[]
   held: Held[]
 }): GridScene {
-  const { events, blocks, held } = input
+  const { events, blocks, tasks, held } = input
   const timed = events.filter(isTimed)
+  const slotted = tasks.filter(hasSlot)
   const keys = new Set(held.flatMap((one) => (one.target ? [targetKey(one.target)] : [])))
 
   // то, что удерживают, рисуется заготовкой: на прежнем месте его быть не должно
   const items = gridItems(
     timed.filter((event) => !keys.has(targetKey({ type: 'event', id: event.id }))),
     blocks.filter((block) => !keys.has(targetKey({ type: 'block', id: block.id }))),
+    slotted.filter((task) => !keys.has(targetKey({ type: 'task', id: task.id }))),
   )
 
   return {
     items,
     drafts: held.map(({ target, range }) => ({
       range,
-      event: target?.type === 'event' ? (timed.find((one) => one.id === target.id) ?? null) : null,
+      event: draftBehind(target, timed, slotted),
       title:
         target?.type === 'block'
           ? blocks.find((one) => one.id === target.id)?.cardTitle
           : undefined,
     })),
   }
+}
+
+/** Что стоит за заготовкой: цвет и название она берёт у того, кого тащат. */
+function draftBehind(
+  target: Held['target'],
+  events: TimedView[],
+  tasks: TimedTask[],
+): TimedView | TimedTask | null {
+  if (target?.type === 'event') return events.find((one) => one.id === target.id) ?? null
+  if (target?.type === 'task') return tasks.find((one) => one.id === target.id) ?? null
+  return null
 }
