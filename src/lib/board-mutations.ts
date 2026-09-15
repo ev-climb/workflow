@@ -1,6 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import type { BoardSummary } from '@/server/services/boards'
 import { sendJson } from './api-client'
 import { archiveKey } from './archive-query'
 import { applyListMove, applyMove, type ListMovePlan, type MovePlan } from './board-move'
@@ -35,6 +36,24 @@ function refreshBoard(client: QueryClient, boardId: string): Promise<unknown> {
     client.invalidateQueries({ queryKey: duesKey }),
     client.invalidateQueries({ queryKey: timeBlocksKey }),
   ])
+}
+
+export const useCreateBoard = () =>
+  useMutation({
+    mutationFn: (title: string) => sendJson<BoardSummary>('POST', '/api/boards', { title }),
+  })
+
+/** Саму доску не перечитываем: слот опустеет, а запрос вернул бы 404. */
+export function useArchiveBoard(boardId: string) {
+  const client = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => sendJson('PATCH', `/api/boards/${boardId}`, { archived: true }),
+    onSuccess: () =>
+      Promise.all(
+        [cardsKey, duesKey, timeBlocksKey].map((queryKey) => client.invalidateQueries({ queryKey })),
+      ),
+  })
 }
 
 export const useCreateList = (boardId: string) =>

@@ -61,6 +61,14 @@ export function Workspace({
   const [notes, setNotes] = useState(notesOpen)
   const [archives, setArchives] = useState(noteDropArchives)
   const [failure, setFailure] = useState<string | null>(null)
+  // список досок читает сервер при загрузке стола: заведённые и заархивированные с тех пор
+  // учитываются здесь
+  const [created, setCreated] = useState<BoardSummary[]>([])
+  const [archived, setArchived] = useState<string[]>([])
+  const shown = [
+    ...boards,
+    ...created.filter((board) => !boards.some(({ id }) => id === board.id)),
+  ].filter((board) => !archived.includes(board.id))
   const area = useRef<HTMLDivElement>(null)
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -112,6 +120,20 @@ export function Workspace({
     },
     [save, slots],
   )
+
+  function addBoard(slot: Slot, board: BoardSummary) {
+    setCreated((current) => [...current, board])
+    void chooseBoard(slot, board.id)
+  }
+
+  // в базе слот продолжает указывать на доску, но стол при загрузке такой слот и так показывает пустым
+  function dropBoard(boardId: string) {
+    setArchived((current) => [...current, boardId])
+    setSlots((current) => ({
+      top: current.top === boardId ? null : current.top,
+      bottom: current.bottom === boardId ? null : current.bottom,
+    }))
+  }
 
   const chooseMode = useCallback(
     async (next: CalendarMode) => {
@@ -172,12 +194,14 @@ export function Workspace({
             >
               <BoardSlot
                 slot="top"
-                boards={boards}
+                boards={shown}
                 boardId={slots.top}
                 linkable
                 initial={slots.top ? initialBoards[slots.top] : undefined}
                 initialAt={initialBoardsAt}
                 onChoose={(boardId) => void chooseBoard('top', boardId)}
+                onCreated={(board) => addBoard('top', board)}
+                onArchived={dropBoard}
               />
               <Splitter
                 ratio={ratio}
@@ -186,12 +210,14 @@ export function Workspace({
               />
               <BoardSlot
                 slot="bottom"
-                boards={boards}
+                boards={shown}
                 boardId={slots.bottom}
                 linkable={!doubled}
                 initial={slots.bottom ? initialBoards[slots.bottom] : undefined}
                 initialAt={initialBoardsAt}
                 onChoose={(boardId) => void chooseBoard('bottom', boardId)}
+                onCreated={(board) => addBoard('bottom', board)}
+                onArchived={dropBoard}
               />
             </div>
           </div>

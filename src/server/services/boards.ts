@@ -346,6 +346,29 @@ export async function highlightList(listId: string, highlighted: boolean): Promi
   return list
 }
 
+/** Доска уезжает в архив целиком: списки и карточки внутри остаются как были. */
+export async function archiveBoard(boardId: string): Promise<{ id: string }> {
+  const inside = await db
+    .select({ id: cards.id })
+    .from(cards)
+    .innerJoin(lists, eq(cards.listId, lists.id))
+    .where(eq(lists.boardId, boardId))
+  await unmirrorCardBlocks(inside.map((card) => card.id))
+
+  const now = new Date()
+
+  const [archived] = await db
+    .update(boards)
+    .set({ archivedAt: now, updatedAt: now })
+    .where(and(eq(boards.id, boardId), isNull(boards.archivedAt)))
+    .returning({ id: boards.id })
+
+  if (!archived) throw new NotFoundError(`доски ${boardId} нет или она уже в архиве`)
+
+  publishBoardChanged(archived.id)
+  return archived
+}
+
 /** Список уезжает в архив вместе с содержимым: карточки внутри остаются как были. */
 export async function archiveList(listId: string): Promise<{ id: string }> {
   const inside = await db.select({ id: cards.id }).from(cards).where(eq(cards.listId, listId))

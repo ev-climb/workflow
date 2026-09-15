@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { db } from '../db/client.ts'
 import { calendarEvents, cards, googleAccounts, googleCalendars } from '../db/schema.ts'
 import { GoogleApiError, type GoogleEvent } from '../google/events.ts'
-import { archiveList, createBoard, createList } from './boards.ts'
+import { archiveBoard, archiveList, createBoard, createList } from './boards.ts'
 import { archiveCard, createCard, updateCard } from './cards.ts'
 import { ForbiddenError, InvalidInputError, NotFoundError } from './errors.ts'
 import { listEvents } from './google-events.ts'
@@ -28,6 +28,7 @@ vi.mock('./google-accounts.ts', async (importActual) => {
 const { insertEvent, patchEvent, deleteEvent } = vi.mocked(await import('../google/events.ts'))
 const { accessTokenFor } = vi.mocked(await import('./google-accounts.ts'))
 
+let boardId = ''
 let listId = ''
 let cardId = ''
 
@@ -36,8 +37,8 @@ beforeEach(async () => {
   accessTokenFor.mockResolvedValue('ya29.access')
   insertEvent.mockResolvedValue(googleEvent())
 
-  const board = await createBoard({ title: 'Работа' })
-  listId = (await createList({ boardId: board.id, title: 'Сегодня' })).id
+  boardId = (await createBoard({ title: 'Работа' })).id
+  listId = (await createList({ boardId, title: 'Сегодня' })).id
   cardId = (await createCard({ listId, title: 'Починить пуши' })).id
 })
 
@@ -449,6 +450,17 @@ describe('зеркало тайм-блока в Google', () => {
     await mirrorTimeBlock(created.id, calendarId)
 
     await archiveList(listId)
+
+    expect(deleteEvent).toHaveBeenCalledWith('ya29.access', 'me@gmail.com', 'mirror-1')
+    expect(await listTimeBlocks('2026-09-02', '2026-09-02')).toEqual([])
+  })
+
+  it('архивация доски снимает зеркала карточек на ней', async () => {
+    const calendarId = await calendar()
+    const created = await block('2026-09-02T09:00:00Z', '2026-09-02T10:00:00Z')
+    await mirrorTimeBlock(created.id, calendarId)
+
+    await archiveBoard(boardId)
 
     expect(deleteEvent).toHaveBeenCalledWith('ya29.access', 'me@gmail.com', 'mirror-1')
     expect(await listTimeBlocks('2026-09-02', '2026-09-02')).toEqual([])

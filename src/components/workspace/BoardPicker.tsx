@@ -5,22 +5,27 @@ import type { BoardSummary } from '@/server/services/boards'
 
 // Radix не принимает пустую строку как значение пункта: пустой слот получает своё имя
 const EMPTY = 'empty'
+const CREATE = 'create'
 
 type Props = {
   boards: BoardSummary[]
   boardId: string | null
   label: string
   onChoose: (boardId: string | null) => void
+  onCreate: () => void
 }
 
-export function BoardPicker({ boards, boardId, label, onChoose }: Props) {
+export function BoardPicker({ boards, boardId, label, onChoose, onCreate }: Props) {
   // доску могли заархивировать, пока стол был открыт: тогда слот показывается пустым
   const known = boardId !== null && boards.some((board) => board.id === boardId)
 
   return (
     <Select.Root
       value={known ? (boardId as string) : EMPTY}
-      onValueChange={(value) => onChoose(value === EMPTY ? null : value)}
+      onValueChange={(value) => {
+        if (value === CREATE) onCreate()
+        else onChoose(value === EMPTY ? null : value)
+      }}
     >
       <Select.Trigger
         aria-label={label}
@@ -42,6 +47,16 @@ export function BoardPicker({ boards, boardId, label, onChoose }: Props) {
                 {board.title}
               </Item>
             ))}
+            <Select.Separator className="my-1 h-px bg-hair" />
+            <Select.Item
+              value={CREATE}
+              aria-label="Новая доска"
+              className="menu-item flex justify-center px-2 py-1.5"
+            >
+              <Select.ItemText>
+                <span className="badge-plus">+</span>
+              </Select.ItemText>
+            </Select.Item>
           </Select.Viewport>
         </Select.Content>
       </Select.Portal>

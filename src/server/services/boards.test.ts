@@ -10,6 +10,7 @@ import {
   labels,
 } from '../db/schema.ts'
 import {
+  archiveBoard,
   archiveList,
   createBoard,
   createList,
@@ -233,6 +234,18 @@ describe('архив', () => {
     const archive = await getArchive(board.id)
     expect(archive.cards.map((c) => [c.title, c.listTitle])).toEqual([['карточка', 'Бэклог']])
     expect(archive.lists.map((l) => l.title)).toEqual(['Запасной'])
+  })
+
+  it('доска уходит в архив целиком и больше не читается', async () => {
+    const board = await createBoard({ title: 'Старая' })
+    const kept = await createBoard({ title: 'Живая' })
+    await createList({ boardId: board.id, title: 'Бэклог' })
+
+    await archiveBoard(board.id)
+
+    expect((await listBoards()).map((b) => b.id)).toEqual([kept.id])
+    await expect(getBoard(board.id)).rejects.toThrow(NotFoundError)
+    await expect(archiveBoard(board.id)).rejects.toThrow(NotFoundError)
   })
 
   it('у чистой доски пуст', async () => {
