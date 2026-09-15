@@ -52,7 +52,7 @@ export default async function WorkspacePage({ searchParams }: Props) {
   await splash
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-dvh flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
       <ReauthBanner accounts={stale} />
       <Workspace
         boards={boards}

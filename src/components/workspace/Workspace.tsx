@@ -7,10 +7,12 @@ import { sendJson } from '@/lib/api-client'
 import type { BoardView } from '@/lib/board-view'
 import { isFullScreen, type CalendarMode } from '@/lib/calendar-grid'
 import { clampRatio } from '@/lib/split-ratio'
+import { usePhone } from '@/lib/touch'
 import type { BoardSummary } from '@/server/services/boards'
 import type { Slot } from '@/server/services/workspace'
 import { BoardSlot } from './BoardSlot'
 import { CalendarColumn } from './CalendarColumn'
+import { MobileNav, type Tab } from './MobileNav'
 import { Splitter } from './Splitter'
 
 const SPLITTER_PX = 9
@@ -61,6 +63,8 @@ export function Workspace({
   const [notes, setNotes] = useState(notesOpen)
   const [archives, setArchives] = useState(noteDropArchives)
   const [failure, setFailure] = useState<string | null>(null)
+  const [tab, setTab] = useState<Tab>('top')
+  const phone = usePhone()
   // список досок читает сервер при загрузке стола: заведённые и заархивированные с тех пор
   // учитываются здесь
   const [created, setCreated] = useState<BoardSummary[]>([])
@@ -166,18 +170,32 @@ export function Workspace({
   // только верхний экземпляр, иначе поверх стола открылись бы два одинаковых диалога
   const doubled = slots.top !== null && slots.top === slots.bottom
 
-  const full = isFullScreen(mode)
+  // неделя в ширину телефона не влезает: там всегда день, а вид, выбранный на ноутбуке, не трогаем
+  const shownMode: CalendarMode = phone ? 'day' : mode
+  const full = isFullScreen(shownMode)
+
+  const titleOf = (boardId: string | null) =>
+    shown.find((board) => board.id === boardId)?.title ?? 'Пусто'
 
   return (
     <CardDragArea
       noteDropArchives={archives}
       onNoteDropArchivesChange={(value) => void rememberArchives(value)}
     >
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden max-md:flex-col">
         {/* доски держат свою ширину и уезжают за край окна: иначе их колонки
             пересчитывались бы на каждом кадре раскрытия календаря */}
-        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <CalendarColumn mode={mode} today={today} onModeChange={(next) => void chooseMode(next)} />
+        <div
+          className={`relative flex min-h-0 min-w-0 flex-1 overflow-hidden ${
+            tab === 'notes' ? 'max-md:hidden' : ''
+          }`}
+        >
+          <CalendarColumn
+            mode={shownMode}
+            today={today}
+            className={tab === 'calendar' ? 'max-md:w-full max-md:border-r-0' : 'max-md:hidden'}
+            onModeChange={(next) => void chooseMode(next)}
+          />
           {failure ? (
             <p
               role="status"
@@ -186,14 +204,20 @@ export function Workspace({
               Не сохранилось: {failure}
             </p>
           ) : null}
-          <div className="flex min-h-0 w-[calc(100%-19rem)] shrink-0 flex-col" inert={full}>
+          <div
+            className={`flex min-h-0 w-[calc(100%-19rem)] shrink-0 flex-col max-md:w-full ${
+              tab === 'top' || tab === 'bottom' ? '' : 'max-md:hidden'
+            }`}
+            inert={full}
+          >
             <div
               ref={area}
-              className="grid min-h-0 min-w-0 flex-1"
+              className="grid min-h-0 min-w-0 flex-1 max-md:grid-rows-[minmax(0,1fr)]!"
               style={{ gridTemplateRows: `${ratio}fr ${SPLITTER_PX}px ${1 - ratio}fr` }}
             >
               <BoardSlot
                 slot="top"
+                className={tab === 'top' ? undefined : 'max-md:hidden'}
                 boards={shown}
                 boardId={slots.top}
                 linkable
@@ -205,11 +229,13 @@ export function Workspace({
               />
               <Splitter
                 ratio={ratio}
+                className="max-md:hidden"
                 onDragTo={dragTo}
                 onStep={(delta) => changeRatio(ratio + delta)}
               />
               <BoardSlot
                 slot="bottom"
+                className={tab === 'bottom' ? undefined : 'max-md:hidden'}
                 boards={shown}
                 boardId={slots.bottom}
                 linkable={!doubled}
@@ -222,7 +248,12 @@ export function Workspace({
             </div>
           </div>
         </div>
-        <NotesDrawer open={notes} onOpenChange={(open) => void showNotes(open)} />
+        <NotesDrawer
+          open={notes}
+          tabbed={tab === 'notes'}
+          onOpenChange={(open) => void showNotes(open)}
+        />
+        <MobileNav tab={tab} top={titleOf(slots.top)} bottom={titleOf(slots.bottom)} onChange={setTab} />
       </div>
     </CardDragArea>
   )

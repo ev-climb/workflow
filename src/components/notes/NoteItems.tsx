@@ -89,7 +89,7 @@ function Item({ item, editing }: { item: NoteItemView; editing: boolean }) {
             event.stopPropagation()
             remove.mutate()
           }}
-          className="btn-quiet mt-1.5 px-1 text-[11px] leading-none opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100"
+          className="btn-quiet mt-1.5 px-1 text-[11px] leading-none opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
         >
           ✕
         </button>

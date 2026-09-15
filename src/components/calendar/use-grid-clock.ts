@@ -37,8 +37,21 @@ export function useFirstScroll(
     const node = box.current
     if (!node || scrolled.current || now === null) return
 
-    scrolled.current = true
-    const minutes = nowOffset(days, now)?.minutes ?? 9 * 60
-    node.scrollTop = (minutes / MINUTES_IN_DAY) * DAY_PX - node.clientHeight * SCROLL_ANCHOR
+    const scroll = (): boolean => {
+      // скрытая сетка — на телефоне открыт другой раздел — высоты не имеет, и прокрутка ждёт,
+      // пока сетку покажут
+      if (node.clientHeight === 0) return false
+      scrolled.current = true
+      const minutes = nowOffset(days, now)?.minutes ?? 9 * 60
+      node.scrollTop = (minutes / MINUTES_IN_DAY) * DAY_PX - node.clientHeight * SCROLL_ANCHOR
+      return true
+    }
+    if (scroll()) return
+
+    const observer = new ResizeObserver(() => {
+      if (scroll()) observer.disconnect()
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
   }, [box, days, now])
 }

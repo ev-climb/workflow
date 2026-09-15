@@ -98,7 +98,7 @@ export function NoteCard({ note, folders, autoEdit = false }: Props) {
         <DropdownMenu.Trigger
           aria-label="Меню заметки"
           title="Меню заметки"
-          className="btn-quiet absolute top-2.5 right-2.5 bg-ink-deep/70 px-1.5 text-xs leading-none opacity-0 backdrop-blur-sm group-hover/note:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+          className="btn-quiet absolute top-2.5 right-2.5 bg-ink-deep/70 px-1.5 text-xs leading-none opacity-0 backdrop-blur-sm group-hover/note:opacity-100 pointer-coarse:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
         >
           ⋯
         </DropdownMenu.Trigger>

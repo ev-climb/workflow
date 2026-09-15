@@ -51,7 +51,7 @@ export function Board({ boards, boardId, slot, linkable, initial, initialAt }: P
           />
         ))}
       </SortableContext>
-      <div className="w-44 shrink-0">
+      <div className="w-44 shrink-0 max-md:snap-start">
         <Composer
           action="Список"
           label="Название нового списка"

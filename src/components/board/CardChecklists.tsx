@@ -1,21 +1,7 @@
 'use client'
 
-import {
-  closestCorners,
-  DndContext,
-  KeyboardSensor,
-  PointerSensor,
-  useDroppable,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
+import { closestCorners, DndContext, useDroppable, type DragEndEvent } from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
@@ -30,8 +16,10 @@ import {
 } from '@/lib/checklist-mutations'
 import { itemDragId, planItemMove, type ItemDragData } from '@/lib/checklist-move'
 import { checklistsQuery } from '@/lib/checklist-query'
+import { isCoarsePointer } from '@/lib/touch'
 import type { ChecklistItemView, ChecklistView } from '@/server/services/checklists'
 import { Composer } from './Composer'
+import { useDragSensors } from './drag-sensors'
 import { Failure } from './Failure'
 import { TitleField } from './TitleField'
 
@@ -46,7 +34,7 @@ type Props = {
 }
 
 /**
- * Чек-листы карточки. Пункты переставляются мышью и с клавиатуры, в том числе между
+ * Чек-листы карточки. Пункты переставляются мышью, пальцем и с клавиатуры, в том числе между
  * чек-листами одной карточки: контекст перетаскивания один на всю секцию.
  */
 export function CardChecklists({ boardId, cardId, onDragging }: Props) {
@@ -54,11 +42,7 @@ export function CardChecklists({ boardId, cardId, onDragging }: Props) {
   const create = useCreateChecklist(boardId, cardId)
   const move = useMoveChecklistItem(boardId, cardId)
 
-  const sensors = useSensors(
-    // порог обязателен: без него пункт не отметить мышью и не переименовать двойным кликом
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  )
+  const sensors = useDragSensors()
 
   function end({ active, over }: DragEndEvent) {
     onDragging(false)
@@ -145,6 +129,10 @@ function Checklist({ boardId, cardId, checklist }: ChecklistProps) {
         ) : (
           <h4
             onDoubleClick={() => setRenaming(true)}
+            // двойного касания у пальца нет: правка открывается одиночным
+            onClick={() => {
+              if (isCoarsePointer()) setRenaming(true)
+            }}
             title="Двойной клик — переименовать"
             className="min-w-0 flex-1 truncate text-sm font-medium text-fog"
           >
@@ -161,7 +149,7 @@ function Checklist({ boardId, cardId, checklist }: ChecklistProps) {
           disabled={confirming}
           onClick={() => setConfirming(true)}
           aria-label={`Удалить чек-лист «${checklist.title}»`}
-          className={`${quiet} opacity-0 group-hover/checklist:opacity-100 focus-visible:opacity-100`}
+          className={`${quiet} opacity-0 group-hover/checklist:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100`}
         >
           ×
         </button>
@@ -271,6 +259,9 @@ function Item({ boardId, cardId, checklistId, item }: ItemProps) {
             {...drag.attributes}
             {...drag.listeners}
             onDoubleClick={() => setRenaming(true)}
+            onClick={() => {
+              if (isCoarsePointer()) setRenaming(true)
+            }}
             title="Двойной клик — поправить"
             className={`min-w-0 flex-1 cursor-grab text-sm leading-snug outline-none focus-visible:ring-1 focus-visible:ring-accent-line ${
               done ? 'text-fog-dim line-through' : 'text-fog'
@@ -285,7 +276,7 @@ function Item({ boardId, cardId, checklistId, item }: ItemProps) {
           disabled={remove.isPending}
           onClick={() => remove.mutate()}
           aria-label={`Удалить пункт «${item.title}»`}
-          className={`${quiet} opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100`}
+          className={`${quiet} opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100`}
         >
           ×
         </button>

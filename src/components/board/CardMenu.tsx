@@ -15,7 +15,7 @@ type Props = {
 }
 
 /**
- * Меню карточки. Как и кнопка архива у списка, прячется до наведения, но остаётся
+ * Меню карточки. Как и кнопка архива у списка, прячется до наведения (на сенсорном экране видно всегда), но остаётся
  * в потоке табуляции: с клавиатуры её видно по фокусу. Через «Открыть» панель карточки
  * достижима без мыши: пробел и Enter на самой карточке заняты перетаскиванием.
  */
@@ -32,7 +32,7 @@ export function CardMenu({
       <DropdownMenu.Trigger
         aria-label="Меню карточки"
         title="Меню карточки"
-        className={`btn-quiet px-1.5 text-xs leading-none opacity-0 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent-line data-[state=open]:opacity-100 ${className}`}
+        className={`btn-quiet px-1.5 text-xs leading-none opacity-0 focus-visible:opacity-100 pointer-coarse:px-2.5 pointer-coarse:py-2 pointer-coarse:opacity-100 focus-visible:ring-1 focus-visible:ring-accent-line data-[state=open]:opacity-100 ${className}`}
       >
         ⋯
       </DropdownMenu.Trigger>

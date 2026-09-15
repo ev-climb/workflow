@@ -42,7 +42,7 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
             // панель закрывает только Escape снаружи.
             if (dragging || document.activeElement?.tagName === 'TEXTAREA') event.preventDefault()
           }}
-          className="surface-sheet fixed top-0 right-0 z-50 flex h-full w-112 max-w-[calc(100vw-3rem)] flex-col overflow-y-auto rounded-l-2xl border-y-0 border-r-0 p-5 outline-none"
+          className="surface-sheet fixed top-0 right-0 z-50 flex h-full w-112 max-w-[calc(100vw-3rem)] max-md:top-3 max-md:h-[calc(100%-0.75rem)] max-md:w-full max-md:max-w-none max-md:rounded-t-2xl max-md:rounded-bl-none max-md:border-t max-md:border-l-0 max-md:pb-[max(1.25rem,env(safe-area-inset-bottom))] flex-col overflow-y-auto rounded-l-2xl border-y-0 border-r-0 p-5 outline-none"
         >
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
@@ -95,7 +95,7 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
               Карточка не прочиталась: {error.message}
             </p>
           ) : isPending ? null : (
-            <div className="mt-6 space-y-5">
+            <div className="mt-6 space-y-5 max-md:flex max-md:flex-1 max-md:flex-col">
               <CardLabels boardId={boardId} cardId={cardId} labels={data.labels} />
 
               <CardDue
@@ -112,17 +112,20 @@ export function CardPanel({ boardId, cardId, title, onClose }: Props) {
 
               <CardAttachments cardId={cardId} />
 
-              <button
-                type="button"
-                aria-pressed={done}
-                disabled={setDone.isPending}
-                onClick={() => setDone.mutate(!done)}
-                className={`w-full px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-accent-line ${
-                  done ? 'btn-done-on' : 'btn-done'
-                }`}
-              >
-                {done ? '✓ Выполнено — снять отметку' : 'Выполнено'}
-              </button>
+              {/* панель на телефоне во весь экран: отметка держится у нижнего края, а не в конце прокрутки */}
+              <div className="max-md:sticky max-md:bottom-0 max-md:mt-auto max-md:-mx-5 max-md:border-t max-md:border-hair max-md:bg-ink-deep max-md:px-5 max-md:py-3">
+                <button
+                  type="button"
+                  aria-pressed={done}
+                  disabled={setDone.isPending}
+                  onClick={() => setDone.mutate(!done)}
+                  className={`w-full px-3 py-2 text-sm focus-visible:ring-1 focus-visible:ring-accent-line max-md:py-3 ${
+                    done ? 'btn-done-on' : 'btn-done'
+                  }`}
+                >
+                  {done ? '✓ Выполнено — снять отметку' : 'Выполнено'}
+                </button>
+              </div>
             </div>
           )}
         </Dialog.Content>

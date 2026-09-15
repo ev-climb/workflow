@@ -27,9 +27,10 @@ type Props = {
   /** Сегодняшняя дата, посчитанная на сервере: первая отрисовка совпадает с браузерной. */
   today: string
   onModeChange: (mode: CalendarMode) => void
+  className?: string
 }
 
-export function CalendarColumn({ mode, today, onModeChange }: Props) {
+export function CalendarColumn({ mode, today, onModeChange, className = '' }: Props) {
   const [anchor, setAnchor] = useState(today)
   const [range, setRange] = useState<Range | null>(null)
   const [opened, setOpened] = useState<{ id: string; title: string } | null>(null)
@@ -49,7 +50,7 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
     <aside
       className={`surface-panel calendar-shell flex min-h-0 shrink-0 flex-col border-r border-hair motion-reduce:transition-none ${
         full ? 'w-full' : 'w-76'
-      }`}
+      } ${className}`}
     >
       {/* шапка одинакова в обоих видах: переключатель не должен уезжать при смене вида */}
       <div className="flex h-[54px] shrink-0 items-center justify-between gap-3 border-b border-hair pr-4 pl-[18px]">
@@ -75,7 +76,7 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
             <button
               type="button"
               onClick={() => setAnchor(moscowToday())}
-              className="rounded-[10px] border border-hair bg-white/5 px-2.5 py-1 text-[12.5px] font-medium text-fog-muted transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-1 focus-visible:ring-accent-line focus-visible:outline-none"
+              className="rounded-[10px] border border-hair bg-white/5 px-2.5 py-1 text-[12.5px] font-medium text-fog-muted pointer-coarse:py-2 transition-colors hover:bg-white/10 hover:text-white focus-visible:ring-1 focus-visible:ring-accent-line focus-visible:outline-none"
             >
               Сегодня
             </button>
@@ -83,7 +84,7 @@ export function CalendarColumn({ mode, today, onModeChange }: Props) {
               ›
             </Step>
           </div>
-          <div className="segment shrink-0">
+          <div className="segment shrink-0 max-md:hidden">
             {(Object.keys(MODE_LABEL) as CalendarMode[]).map((value) => (
               <button
                 key={value}
@@ -151,7 +152,7 @@ function Step({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="grid size-[26px] place-items-center rounded-[9px] text-[14px] text-fog-muted transition-colors hover:bg-white/8 hover:text-white focus-visible:ring-1 focus-visible:ring-accent-line focus-visible:outline-none"
+      className="grid size-[26px] place-items-center rounded-[9px] pointer-coarse:size-10 text-[14px] text-fog-muted transition-colors hover:bg-white/8 hover:text-white focus-visible:ring-1 focus-visible:ring-accent-line focus-visible:outline-none"
     >
       {children}
     </button>

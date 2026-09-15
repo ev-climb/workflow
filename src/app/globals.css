@@ -251,10 +251,13 @@
       border-color 0.32s ease;
   }
 
-  .surface-card-lift:hover {
-    transform: translateY(-3px);
-    border-color: var(--color-hair-lit);
-    box-shadow: 0 14px 30px rgb(0 0 0 / 0.4);
+  /* у пальца наведения нет: подъём залипал бы на карточке после касания */
+  @media (hover: hover) {
+    .surface-card-lift:hover {
+      transform: translateY(-3px);
+      border-color: var(--color-hair-lit);
+      box-shadow: 0 14px 30px rgb(0 0 0 / 0.4);
+    }
   }
 
   /**
@@ -292,10 +295,12 @@
     box-shadow: 0 0 12px oklch(0.8 0.14 85 / 0.55);
   }
 
-  .surface-note-lift:hover {
-    transform: translateY(-3px);
-    border-color: var(--color-hair-lit);
-    box-shadow: 0 16px 36px rgb(0 0 0 / 0.42);
+  @media (hover: hover) {
+    .surface-note-lift:hover {
+      transform: translateY(-3px);
+      border-color: var(--color-hair-lit);
+      box-shadow: 0 16px 36px rgb(0 0 0 / 0.42);
+    }
   }
 
   /* завести заметку или список дел: две равные плитки над шторкой */
@@ -804,5 +809,15 @@
   *::before,
   *::after {
     animation: none;
+  }
+}
+
+/* Safari на телефоне приближает страницу к полю мельче 16px и обратно не отдаляет. Вне слоёв
+   по той же причине: размер текста полю задают утилиты. */
+@media (pointer: coarse) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
   }
 }

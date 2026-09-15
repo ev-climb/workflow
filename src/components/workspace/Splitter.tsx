@@ -9,9 +9,10 @@ type Props = {
   /** Абсолютная координата курсора: в долю высоты её переводит владелец области. */
   onDragTo: (clientY: number) => void
   onStep: (delta: number) => void
+  className?: string
 }
 
-export function Splitter({ ratio, onDragTo, onStep }: Props) {
+export function Splitter({ ratio, onDragTo, onStep, className = '' }: Props) {
   return (
     <div
       role="separator"
@@ -32,7 +33,7 @@ export function Splitter({ ratio, onDragTo, onStep }: Props) {
         event.preventDefault()
         onStep(delta)
       }}
-      className="group flex cursor-row-resize touch-none items-center outline-none select-none"
+      className={`group flex cursor-row-resize touch-none items-center outline-none select-none ${className}`}
     >
       <div className="mx-6 h-px flex-1 bg-white/8 transition-colors group-hover:bg-accent-line group-focus:h-0.5 group-focus:bg-accent group-active:bg-accent" />
     </div>

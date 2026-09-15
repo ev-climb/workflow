@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   moved,
   rangeSlot,
@@ -33,6 +33,21 @@ type Drag = {
 
 /** Удержание в записи: метка отличает его от нового удержания той же цели. */
 type Pending = Held & { stamp: number }
+
+/** Столько палец держат на сетке, прежде чем жест станет выделением или переносом. */
+const HOLD_MS = 300
+
+/** Сдвинувшись дальше, не дождавшись удержания, палец уже листает сетку. */
+const HOLD_SLOP_PX = 8
+
+/** Палец на сетке, который ещё не подержали: жест наготове, но не начат. */
+type Hold = {
+  timer: ReturnType<typeof setTimeout>
+  pointerId: number
+  x: number
+  y: number
+  start: Drag
+}
 
 export type GrabHandler = (
   event: React.PointerEvent,
@@ -93,17 +108,55 @@ export function useGridDrag(input: {
   const moveBlock = useMoveTimeBlock()
   const setSlot = useSetTaskSlot()
   const router = useRouter()
+  const hold = useRef<Hold | null>(null)
+  /** Жест пальцем начат: страница под ним не прокручивается, иначе сетка уедет из-под блока. */
+  const pinned = useRef(false)
+
+  useEffect(() => {
+    const pin = (event: TouchEvent) => {
+      if (pinned.current) event.preventDefault()
+    }
+    // из пассивного слушателя прокрутку не отменить
+    window.addEventListener('touchmove', pin, { passive: false })
+    return () => {
+      window.removeEventListener('touchmove', pin)
+      if (hold.current) clearTimeout(hold.current.timer)
+    }
+  }, [])
+
+  function release() {
+    if (hold.current) clearTimeout(hold.current.timer)
+    hold.current = null
+    pinned.current = false
+  }
 
   const grab: GrabHandler = (event, kind, base, dragging) => {
     if (event.button !== 0) return
     const column = event.currentTarget.closest<HTMLElement>('[data-day]')
     if (!column) return
 
-    event.preventDefault()
-    column.setPointerCapture(event.pointerId)
     const grabbed = minutesIn(column, event.clientY)
     const range = kind === 'select' ? selection(base.day, grabbed, grabbed) : base
-    setDrag({ kind, target: dragging, base, range, grabbed })
+    const start: Drag = { kind, target: dragging, base, range, grabbed }
+
+    // палец сначала листает сетку: жест начинается, только если его подержали на месте
+    if (event.pointerType === 'touch') {
+      release()
+      const { pointerId, clientX: x, clientY: y } = event
+      const timer = setTimeout(() => {
+        hold.current = null
+        pinned.current = true
+        column.setPointerCapture(pointerId)
+        navigator.vibrate?.(10)
+        setDrag(start)
+      }, HOLD_MS)
+      hold.current = { timer, pointerId, x, y, start }
+      return
+    }
+
+    event.preventDefault()
+    column.setPointerCapture(event.pointerId)
+    setDrag(start)
   }
 
   /**
@@ -111,6 +164,12 @@ export function useGridDrag(input: {
    * поспевшее за отрисовкой, ничего не сдвигает лишний раз.
    */
   function advance(event: React.PointerEvent) {
+    const waiting = hold.current
+    if (waiting?.pointerId === event.pointerId) {
+      if (Math.hypot(event.clientX - waiting.x, event.clientY - waiting.y) > HOLD_SLOP_PX) release()
+      return
+    }
+
     const column = event.currentTarget as HTMLElement
     if (!drag || !column.hasPointerCapture(event.pointerId)) return
 
@@ -127,34 +186,47 @@ export function useGridDrag(input: {
     setDrag({ ...drag, range: resized(drag.base, drag.kind, minutes) })
   }
 
+  /** Выделение отпустили или блок отпустили там же, где взяли: это щелчок, а не правка времени. */
+  function click({ kind, range, target }: Drag) {
+    if (kind === 'select') {
+      onSelect(range)
+      return
+    }
+    if (!target) return
+
+    if (target.type === 'event') {
+      const clicked = events.find((one) => one.id === target.id)
+      if (clicked) onOpen(clicked)
+      return
+    }
+    if (target.type === 'task') {
+      const clicked = tasks.find((one) => one.id === target.id)
+      if (clicked) onOpenTask({ id: clicked.id, title: clicked.title })
+      return
+    }
+    const clicked = blocks.find((one) => one.id === target.id)
+    if (clicked) router.push(cardHref(clicked.cardId))
+  }
+
   function finish() {
+    // палец отпустили раньше, чем жест начался: это касание
+    const waiting = hold.current
+    release()
+    if (waiting) {
+      click(waiting.start)
+      return
+    }
+
     const current = drag
     setDrag(null)
     if (!current) return
 
-    if (current.kind === 'select') {
-      onSelect(current.range)
+    if (current.kind === 'select' || sameRange(current.range, current.base)) {
+      click(current)
       return
     }
     const moving = current.target
     if (!moving) return
-
-    // отпустили там же, где взяли: это щелчок, а не правка времени
-    if (sameRange(current.range, current.base)) {
-      if (moving.type === 'event') {
-        const clicked = events.find((one) => one.id === moving.id)
-        if (clicked) onOpen(clicked)
-        return
-      }
-      if (moving.type === 'task') {
-        const clicked = tasks.find((one) => one.id === moving.id)
-        if (clicked) onOpenTask({ id: clicked.id, title: clicked.title })
-        return
-      }
-      const clicked = blocks.find((one) => one.id === moving.id)
-      if (clicked) router.push(cardHref(clicked.cardId))
-      return
-    }
 
     const key = targetKey(moving)
     const mine = ++stamp.current
@@ -195,7 +267,10 @@ export function useGridDrag(input: {
     grab,
     advance,
     finish,
-    cancel: () => setDrag(null),
+    cancel: () => {
+      release()
+      setDrag(null)
+    },
     error: setTimes.error ?? moveBlock.error ?? setSlot.error,
   }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Board } from '@/components/board/Board'
 import { BoardLabels } from '@/components/board/BoardLabels'
 import type { BoardView } from '@/lib/board-view'
@@ -9,6 +9,7 @@ import type { BoardSummary } from '@/server/services/boards'
 import type { Slot } from '@/server/services/workspace'
 import { BoardMenu } from './BoardMenu'
 import { BoardPicker } from './BoardPicker'
+import { ListStrip } from './ListStrip'
 import { NewBoardDialog } from './NewBoardDialog'
 
 const LABEL: Record<Slot, string> = { top: 'Верхняя доска', bottom: 'Нижняя доска' }
@@ -23,6 +24,7 @@ type Props = {
   onChoose: (boardId: string | null) => void
   onCreated: (board: BoardSummary) => void
   onArchived: (boardId: string) => void
+  className?: string
 }
 
 export function BoardSlot({
@@ -35,16 +37,18 @@ export function BoardSlot({
   onChoose,
   onCreated,
   onArchived,
+  className = '',
 }: Props) {
   const [creating, setCreating] = useState(false)
   const current = boards.find((board) => board.id === boardId)
+  const scroller = useRef<HTMLDivElement>(null)
 
   return (
-    <section data-slot={slot} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+    <section data-slot={slot} className={`flex min-h-0 min-w-0 flex-col overflow-hidden ${className}`}>
       {creating ? (
         <NewBoardDialog onCreated={onCreated} onClose={() => setCreating(false)} />
       ) : null}
-      <header className="flex shrink-0 items-center gap-4 px-6 pt-4 pb-3.5">
+      <header className="flex shrink-0 items-center gap-4 px-6 pt-4 pb-3.5 max-md:gap-2 max-md:px-3 max-md:pt-1.5 max-md:pb-2">
         <BoardPicker
           boards={boards}
           boardId={boardId}
@@ -69,8 +73,14 @@ export function BoardSlot({
         {/* линия добирает строку до края: шапка читается как заголовок раздела, а не как панель */}
         <div className="h-px min-w-0 flex-1 bg-linear-to-r from-white/10 to-transparent" />
       </header>
+      {boardId ? (
+        <ListStrip boardId={boardId} scroller={scroller} initial={initial} initialAt={initialAt} />
+      ) : null}
       {/* колонки доски прокручиваются здесь: страница целиком не ездит ни вбок, ни вниз */}
-      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-6 pb-5">
+      <div
+        ref={scroller}
+        className="min-h-0 flex-1 overflow-x-auto overflow-y-hidden px-6 pb-5 max-md:snap-x max-md:snap-mandatory max-md:scroll-px-4 max-md:px-4 max-md:pb-3 [:root[data-dragging]_&]:snap-none"
+      >
         {boardId ? (
           <Board
             boards={boards}

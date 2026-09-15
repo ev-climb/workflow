@@ -9,6 +9,7 @@ import { dragId, type DragData } from '@/lib/board-move'
 import type { CardView } from '@/lib/board-view'
 import { formatDue, isOverdue } from '@/lib/dates'
 import { labelColor } from '@/lib/label-colors'
+import { isCoarsePointer } from '@/lib/touch'
 import type { BoardSummary } from '@/server/services/boards'
 import { CardMenu } from './CardMenu'
 import { CardPanel } from './CardPanel'
@@ -141,7 +142,9 @@ export function BoardCard({ boards, boardId, slot, linkable, listId, card }: Pro
     if (renaming || event.detail > 1) return
     if ((event.target as HTMLElement).closest('button, input')) return
 
-    timer.current = setTimeout(() => setOpened(true), DOUBLE_CLICK_MS)
+    // пальцем двойным касанием не переименовывают: ждать второго незачем
+    if (isCoarsePointer()) setOpened(true)
+    else timer.current = setTimeout(() => setOpened(true), DOUBLE_CLICK_MS)
   }
 
   const data: DragData = { type: 'card', boardId, listId, card }
@@ -161,7 +164,7 @@ export function BoardCard({ boards, boardId, slot, linkable, listId, card }: Pro
       {...drag.attributes}
       {...(renaming ? {} : ownListeners(drag.listeners))}
       onClick={open}
-      className={`group/card relative cursor-pointer ${CARD_FRAME} outline-none focus-visible:border-accent-line ${
+      className={`group/card relative cursor-pointer ${CARD_FRAME} outline-none focus-visible:border-accent-line pointer-coarse:pr-10 pointer-coarse:select-none [-webkit-touch-callout:none] ${
         // место карточки остаётся видимым: под курсором её рисует накладка
         drag.isDragging ? 'opacity-30' : 'surface-card-lift'
       }`}
@@ -190,7 +193,7 @@ export function BoardCard({ boards, boardId, slot, linkable, listId, card }: Pro
             <p
               onDoubleClick={() => setRenaming(true)}
               title="Двойной клик — переименовать"
-              className="text-[13.5px] leading-[1.42] font-medium text-fog"
+              className="text-[13.5px] leading-[1.42] font-medium text-fog max-md:text-[15px]"
             >
               {card.title}
             </p>

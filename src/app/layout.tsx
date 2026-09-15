@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { JetBrains_Mono, Manrope } from 'next/font/google'
 import './globals.css'
 
@@ -15,6 +15,14 @@ const numeric = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'WorkFlow',
+}
+
+// стол сам отступает от выреза и полосы жестов, а клавиатура сжимает его, а не перекрывает
+// поле ввода внизу экрана
+export const viewport: Viewport = {
+  viewportFit: 'cover',
+  interactiveWidget: 'resizes-content',
+  themeColor: '#16151c',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

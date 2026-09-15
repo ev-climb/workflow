@@ -44,8 +44,9 @@ export function BoardColumn({ boards, boardId, slot, linkable, list }: Props) {
   return (
     <section
       ref={drag.setNodeRef}
+      data-list={list.id}
       style={{ transform: CSS.Translate.toString(drag.transform), transition: drag.transition }}
-      className={`surface-column group/list flex max-h-full w-72 shrink-0 flex-col p-3.5 ${
+      className={`surface-column group/list flex max-h-full w-72 shrink-0 flex-col p-3.5 max-md:w-[calc(100vw-3rem)] max-md:snap-start ${
         // место списка остаётся видимым: под курсором его рисует накладка
         drag.isDragging ? 'opacity-30' : ''
       } ${list.highlighted ? 'surface-column-lit' : ''} ${
@@ -56,7 +57,7 @@ export function BoardColumn({ boards, boardId, slot, linkable, list }: Props) {
         ref={drag.setActivatorNodeRef}
         {...drag.attributes}
         {...(renaming ? {} : ownListeners(drag.listeners))}
-        className="flex shrink-0 cursor-grab items-center gap-2 rounded-lg px-1 pb-0.5 outline-none focus-visible:ring-1 focus-visible:ring-accent-line"
+        className="flex shrink-0 cursor-grab items-center gap-2 rounded-lg px-1 pb-0.5 outline-none focus-visible:ring-1 focus-visible:ring-accent-line pointer-coarse:select-none [-webkit-touch-callout:none]"
       >
         {renaming ? (
           <TitleField

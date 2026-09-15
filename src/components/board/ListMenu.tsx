@@ -32,7 +32,7 @@ export function ListMenu({
       <DropdownMenu.Trigger
         aria-label="Меню списка"
         title="Меню списка"
-        className={`btn-quiet px-1.5 text-xs leading-none opacity-0 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent-line data-[state=open]:opacity-100 ${className}`}
+        className={`btn-quiet px-1.5 text-xs leading-none opacity-0 focus-visible:opacity-100 pointer-coarse:px-2.5 pointer-coarse:py-2 pointer-coarse:opacity-100 focus-visible:ring-1 focus-visible:ring-accent-line data-[state=open]:opacity-100 ${className}`}
       >
         ⋯
       </DropdownMenu.Trigger>

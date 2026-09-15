@@ -4,6 +4,7 @@ import { timeLabel } from '@/lib/calendar-drag'
 import { MINUTES_IN_DAY, isToday } from '@/lib/calendar-grid'
 import type { PlacedEvent } from '@/lib/calendar-layout'
 import type { GridDraft, GridItem } from '@/lib/calendar-scene'
+import { isCoarsePointer } from '@/lib/touch'
 import { EventBlock, TaskBlock, TimeBlockChip } from './Blocks'
 import { DAY_PX, HOUR_LINES, type OpenHandler, type TaskOpenHandler } from './grid'
 import type { GridDrag } from './use-grid-drag'
@@ -46,6 +47,10 @@ export function DayColumn({
       onPointerMove={drag.advance}
       onPointerUp={drag.finish}
       onPointerCancel={drag.cancel}
+      // долгое нажатие пальцем начинает жест, а не открывает меню ссылки
+      onContextMenu={(event) => {
+        if (isCoarsePointer()) event.preventDefault()
+      }}
       className={`relative border-l border-white/5 select-none first:border-l-0 ${
         isToday(day, now ?? undefined) ? 'bg-white/4' : ''
       }`}

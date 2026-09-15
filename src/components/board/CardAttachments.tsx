@@ -101,7 +101,7 @@ function Attachment({ cardId, attachment }: AttachmentProps) {
           disabled={confirming}
           onClick={() => setConfirming(true)}
           aria-label={`Удалить вложение «${attachment.name}»`}
-          className="btn-quiet shrink-0 px-1.5 py-0.5 text-xs opacity-0 group-hover/attachment:opacity-100 focus-visible:opacity-100"
+          className="btn-quiet shrink-0 px-1.5 py-0.5 text-xs opacity-0 group-hover/attachment:opacity-100 pointer-coarse:opacity-100 focus-visible:opacity-100"
         >
           ×
         </button>

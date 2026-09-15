@@ -4,17 +4,12 @@ import {
   closestCorners,
   DndContext,
   DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
   pointerWithin,
-  useSensor,
-  useSensors,
   type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useMoveCard, useMoveList } from '@/lib/board-mutations'
@@ -26,6 +21,7 @@ import { isNoteDrag, NoteDropProvider, type NoteDragData, type NoteDropTarget } 
 import { noteHeading } from '@/lib/notes'
 import { NoteDropDialog } from '@/components/notes/NoteDropDialog'
 import { CARD_FRAME, CardFace } from './BoardCard'
+import { useDragSensors } from './drag-sensors'
 
 const ACROSS_BOARDS =
   'Между досками карточка переносится через меню карточки: у досок разные метки, ' +
@@ -88,11 +84,15 @@ export function CardDragArea({ children, noteDropArchives, onNoteDropArchivesCha
     return () => clearTimeout(timer)
   }, [hint, failed, resetCard, resetList])
 
-  const sensors = useSensors(
-    // порог обязателен: без него карточку не ткнуть мышью и не переименовать двойным кликом
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  )
+  const sensors = useDragSensors()
+
+  // лента колонок на телефоне прилипает к спискам, и прилипание спорило бы с автопрокруткой
+  // у края под пальцем
+  useEffect(() => {
+    if (!dragged) return
+    document.documentElement.toggleAttribute('data-dragging', true)
+    return () => document.documentElement.removeAttribute('data-dragging')
+  }, [dragged])
 
   function start({ active }: DragStartEvent) {
     setHint(null)
@@ -199,7 +199,7 @@ export function CardDragArea({ children, noteDropArchives, onNoteDropArchivesCha
           >
             <CardFace
               card={dragged.card}
-              title={<p className="text-[13.5px] leading-[1.42] font-medium text-fog">{dragged.card.title}</p>}
+              title={<p className="text-[13.5px] leading-[1.42] font-medium text-fog max-md:text-[15px]">{dragged.card.title}</p>}
             />
           </div>
         ) : null}

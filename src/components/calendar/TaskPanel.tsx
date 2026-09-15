@@ -32,7 +32,7 @@ export function TaskPanel({ taskId, title, onClose }: Props) {
     >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px]" />
-        <Dialog.Content className="surface-sheet fixed top-0 right-0 z-50 flex h-full w-112 max-w-[calc(100vw-3rem)] flex-col overflow-y-auto rounded-l-2xl border-y-0 border-r-0 p-5 outline-none">
+        <Dialog.Content className="surface-sheet fixed top-0 right-0 z-50 flex h-full w-112 max-w-[calc(100vw-3rem)] max-md:top-3 max-md:h-[calc(100%-0.75rem)] max-md:w-full max-md:max-w-none max-md:rounded-t-2xl max-md:rounded-bl-none max-md:border-t max-md:border-l-0 max-md:pb-[max(1.25rem,env(safe-area-inset-bottom))] flex-col overflow-y-auto rounded-l-2xl border-y-0 border-r-0 p-5 outline-none">
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <Dialog.Title className="px-1.5 text-base leading-snug font-medium text-fog">

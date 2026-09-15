@@ -28,7 +28,7 @@ export function TimeBlockMenu({ blockId, cardTitle, calendarId }: Props) {
       <DropdownMenu.Trigger
         aria-label={`Меню тайм-блока: ${cardTitle}`}
         title="Меню тайм-блока"
-        className="btn-quiet absolute top-0 right-0 px-1 text-[11px] leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent-line data-[state=open]:opacity-100"
+        className="btn-quiet absolute top-0 right-0 px-1 text-[11px] leading-none opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent-line data-[state=open]:opacity-100"
       >
         ⋯
       </DropdownMenu.Trigger>

@@ -27,7 +27,12 @@ function viewOf(value: string): NotesView {
 const folderOf = (value: string): string | null =>
   value === ALL || value === ARCHIVE || value === LOOSE ? null : value
 
-type Props = { open: boolean; onOpenChange: (open: boolean) => void }
+type Props = {
+  open: boolean
+  /** На телефоне шторка — раздел стола: полоски нет, панель стоит на месте во весь экран. */
+  tabbed: boolean
+  onOpenChange: (open: boolean) => void
+}
 
 /**
  * Шторка заметок у правого края. Свёрнутая — полоска во всю высоту, и щёлкнуть по ней
@@ -37,7 +42,7 @@ type Props = { open: boolean; onOpenChange: (open: boolean) => void }
  * Полоска остаётся в потоке и раскрытой: иначе доска дёргалась бы на её ширину при
  * каждом открытии.
  */
-export function NotesDrawer({ open, onOpenChange }: Props) {
+export function NotesDrawer({ open, tabbed, onOpenChange }: Props) {
   const [view, setView] = useState<string>(ALL)
   const [managing, setManaging] = useState(false)
   const [fresh, setFresh] = useState<string | null>(null)
@@ -75,7 +80,7 @@ export function NotesDrawer({ open, onOpenChange }: Props) {
         // под раскрытой шторкой полоска гаснет: её видно сквозь размытие панели, и с
         // клавиатуры она была бы вторым способом закрыть то, что и так закрывают стрелкой
         inert={open}
-        className={`surface-notes group/rail flex w-[54px] shrink-0 flex-col items-center gap-4 py-4 outline-none transition-[opacity,background-color] duration-[420ms] ease-[var(--ease-glide)] hover:bg-white/4 motion-reduce:transition-none focus-visible:ring-1 focus-visible:ring-accent-line ${
+        className={`surface-notes group/rail flex w-[54px] shrink-0 max-md:hidden flex-col items-center gap-4 py-4 outline-none transition-[opacity,background-color] duration-[420ms] ease-[var(--ease-glide)] hover:bg-white/4 motion-reduce:transition-none focus-visible:ring-1 focus-visible:ring-accent-line ${
           open ? 'opacity-0' : 'opacity-100'
         }`}
       >
@@ -96,9 +101,13 @@ export function NotesDrawer({ open, onOpenChange }: Props) {
         aria-label="Заметки"
         // свёрнутая шторка остаётся в разметке ради выезда, но целиком выключена:
         // фокус в неё не заходит, и с клавиатуры её нет
-        inert={!open}
+        inert={!open && !tabbed}
         className={`surface-notes absolute inset-y-0 right-0 z-40 flex w-[372px] max-w-[calc(100vw-3rem)] flex-col rounded-l-2xl transition-[transform,opacity] duration-[420ms] ease-[var(--ease-glide)] motion-reduce:transition-none ${
           open ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-full opacity-0'
+        } ${
+          tabbed
+            ? 'max-md:pointer-events-auto max-md:static max-md:min-h-0 max-md:w-full max-md:max-w-none max-md:flex-1 max-md:translate-x-0 max-md:rounded-none max-md:border-l-0 max-md:opacity-100 max-md:shadow-none'
+            : 'max-md:hidden'
         }`}
       >
         <div className="flex items-center gap-2 border-b border-hair px-[18px] py-3.5">
@@ -161,7 +170,7 @@ export function NotesDrawer({ open, onOpenChange }: Props) {
             onClick={() => onOpenChange(false)}
             title="Свернуть заметки"
             aria-label="Свернуть заметки"
-            className="btn-quiet px-2 py-1 text-sm leading-none"
+            className="btn-quiet px-2 py-1 text-sm leading-none max-md:hidden"
           >
             →
           </button>
