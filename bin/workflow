@@ -74,8 +74,42 @@ case "${1:-start}" in
     echo "пароль сменён, старые сессии больше не действуют"
     exec "$0" restart
     ;;
+  backup)
+    dir=$(sed -n 's/^BACKUP_DIR=//p' .env | tail -1)
+    if [[ -z $dir ]]; then
+      echo "задай BACKUP_DIR в .env: каталог вне проекта, git clean его не тронет" >&2
+      exit 1
+    fi
+    stamp=$(date +%F-%H%M)
+    # недописанный бэкап лежит под точкой и не выглядит готовым
+    tmp="$dir/.$stamp"
+    mkdir -p "$tmp"
+    docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" "$POSTGRES_DB"' >"$tmp/db.dump"
+    # вложения пишет пользователь контейнера, поэтому и читаются из контейнера
+    docker compose run --rm --no-deps -T --entrypoint tar app czf - -C /app attachments >"$tmp/attachments.tar.gz"
+    mv "$tmp" "$dir/$stamp"
+    find "$dir" -mindepth 1 -maxdepth 1 -type d -not -name '.*' | sort | head -n -14 | xargs -r rm -rf --
+    echo "$dir/$stamp"
+    ;;
+  restore)
+    src=${2:-}
+    if [[ ! -f $src/db.dump || ! -f $src/attachments.tar.gz ]]; then
+      echo "workflow restore <каталог бэкапа с db.dump и attachments.tar.gz>" >&2
+      exit 1
+    fi
+    docker compose stop app
+    docker compose up -d --wait db
+    # база пересоздаётся, а не накатывается поверх: таблицы из миграций новее дампа
+    # иначе остались бы, и migrate упал бы на них
+    docker compose exec -T db sh -c 'dropdb --force -U "$POSTGRES_USER" "$POSTGRES_DB" &&
+      createdb -U "$POSTGRES_USER" "$POSTGRES_DB" &&
+      pg_restore --no-owner --exit-on-error -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <"$src/db.dump"
+    docker compose run --rm --no-deps -T --entrypoint sh app -c \
+      'rm -rf /app/attachments/* && tar xzf - -C /app' <"$src/attachments.tar.gz"
+    exec "$0" start
+    ;;
   *)
-    echo "workflow [start|stop|restart|logs|password]" >&2
+    echo "workflow [start|stop|restart|logs|password|backup|restore <каталог>]" >&2
     exit 1
     ;;
 esac
