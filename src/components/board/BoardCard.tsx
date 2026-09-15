@@ -13,6 +13,7 @@ import type { BoardSummary } from '@/server/services/boards'
 import { CardMenu } from './CardMenu'
 import { CardPanel } from './CardPanel'
 import { Failure } from './Failure'
+import { ownListeners } from './own-listeners'
 import { TitleField } from './TitleField'
 import { TransferDialog } from './TransferDialog'
 
@@ -158,7 +159,7 @@ export function BoardCard({ boards, boardId, slot, linkable, listId, card }: Pro
       }}
       style={{ transform: CSS.Translate.toString(drag.transform), transition: drag.transition }}
       {...drag.attributes}
-      {...(renaming ? {} : drag.listeners)}
+      {...(renaming ? {} : ownListeners(drag.listeners))}
       onClick={open}
       className={`group/card relative cursor-pointer ${CARD_FRAME} outline-none focus-visible:border-accent-line ${
         // место карточки остаётся видимым: под курсором её рисует накладка

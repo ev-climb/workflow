@@ -16,6 +16,7 @@ import { BoardCard } from './BoardCard'
 import { Composer } from './Composer'
 import { Failure } from './Failure'
 import { ListMenu } from './ListMenu'
+import { ownListeners } from './own-listeners'
 import { TitleField } from './TitleField'
 
 type Props = {
@@ -54,7 +55,7 @@ export function BoardColumn({ boards, boardId, slot, linkable, list }: Props) {
       <header
         ref={drag.setActivatorNodeRef}
         {...drag.attributes}
-        {...(renaming ? {} : drag.listeners)}
+        {...(renaming ? {} : ownListeners(drag.listeners))}
         className="flex shrink-0 cursor-grab items-center gap-2 rounded-lg px-1 pb-0.5 outline-none focus-visible:ring-1 focus-visible:ring-accent-line"
       >
         {renaming ? (
