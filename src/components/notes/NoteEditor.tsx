@@ -47,7 +47,7 @@ export function NoteEditor({ note, onDone }: Props) {
           rows={6}
           placeholder="Текст заметки"
           aria-label="Текст заметки"
-          className="field w-full resize-y px-2.5 py-2 text-[13px] leading-[1.55]"
+          className="field field-sizing-content min-h-34 w-full resize-y px-2.5 py-2 text-[13px] leading-[1.55]"
         />
       ) : (
         <>

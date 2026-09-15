@@ -270,6 +270,7 @@
     box-shadow: 0 4px 18px rgb(0 0 0 / 0.22);
     transition:
       transform 0.34s var(--ease-glide),
+      height 0.34s var(--ease-glide),
       box-shadow 0.34s ease,
       border-color 0.34s ease;
   }
@@ -284,6 +285,11 @@
 
   .surface-note-list::before {
     background: linear-gradient(180deg, oklch(0.78 0.12 195), oklch(0.62 0.11 215 / 0.2));
+  }
+
+  .surface-note-daily::before {
+    background: linear-gradient(180deg, oklch(0.86 0.14 88), oklch(0.68 0.13 70 / 0.25));
+    box-shadow: 0 0 12px oklch(0.8 0.14 85 / 0.55);
   }
 
   .surface-note-lift:hover {
