@@ -6,7 +6,7 @@ import {
   type DragEndEvent,
   type DragMoveEvent,
 } from '@dnd-kit/core'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DragData } from '@/lib/board-move'
 import type { CardView } from '@/lib/board-view'
 import {
@@ -30,15 +30,6 @@ type GridDrop =
   | { kind: 'card'; card: CardView; range: Range }
   | { kind: 'note'; note: NoteView; range: Range }
 
-/** Точка курсора в конце жеста dnd-kit: с клавиатуры её нет, и бросок на сетку не считается. */
-function pointerOf(
-  activator: Event,
-  delta: { x: number; y: number },
-): { x: number; y: number } | null {
-  if (!(activator instanceof MouseEvent)) return null
-  return { x: activator.clientX + delta.x, y: activator.clientY + delta.y }
-}
-
 export type GridDropState = {
   /** Карточка или заметка над сеткой: под курсором её ждёт заготовка тайм-блока. */
   dropping: { title: string; range: Range } | null
@@ -53,6 +44,22 @@ export function useGridDrop(columns: DayColumns): GridDropState {
   const dropNote = useNoteDrop()
   const grid = useDroppable({ id: CALENDAR_DROP, data: { type: CALENDAR_DROP } })
 
+  /**
+   * Курсор берётся из событий указателя, а не из `delta` жеста: dnd-kit подмешивает в неё
+   * сдвиг прокрутки, но опору снимает с контейнеров колонки, а над сеткой сравнивает с
+   * прокруткой календаря. Бросок из прокрученной колонки уезжал на полночь.
+   * С клавиатуры курсора нет — `null`, и бросок на сетку не считается.
+   */
+  const pointer = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    const follow = (event: PointerEvent) => {
+      if (pointer.current) pointer.current = { x: event.clientX, y: event.clientY }
+    }
+    window.addEventListener('pointermove', follow, { capture: true, passive: true })
+    return () => window.removeEventListener('pointermove', follow, { capture: true })
+  }, [])
+
   function dropOf(drag: DragMoveEvent | DragEndEvent): GridDrop | null {
     const data = drag.active.data.current
     if (!isCalendarDrop(drag.over?.data.current)) return null
@@ -63,7 +70,7 @@ export function useGridDrop(columns: DayColumns): GridDropState {
       : card && ({ kind: 'card', card } as const)
     if (!dragged) return null
 
-    const point = pointerOf(drag.activatorEvent, drag.delta)
+    const point = pointer.current
     if (!point) return null
 
     const hit = columns.columnAt(point.x)
@@ -76,6 +83,12 @@ export function useGridDrop(columns: DayColumns): GridDropState {
   }
 
   useDndMonitor({
+    onDragStart: ({ activatorEvent }) => {
+      pointer.current =
+        activatorEvent instanceof MouseEvent
+          ? { x: activatorEvent.clientX, y: activatorEvent.clientY }
+          : null
+    },
     onDragMove: (drag) => {
       const target = dropOf(drag)
       setDropping(
@@ -87,6 +100,7 @@ export function useGridDrop(columns: DayColumns): GridDropState {
     },
     onDragEnd: (drag) => {
       const target = dropOf(drag)
+      pointer.current = null
       setDropping(null)
       if (!target) return
 
@@ -103,7 +117,10 @@ export function useGridDrop(columns: DayColumns): GridDropState {
         endsAt: times.endsAt,
       })
     },
-    onDragCancel: () => setDropping(null),
+    onDragCancel: () => {
+      pointer.current = null
+      setDropping(null)
+    },
   })
 
   return { dropping, setNodeRef: grid.setNodeRef, error: createBlock.error }
