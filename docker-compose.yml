@@ -55,8 +55,9 @@ services:
     restart: unless-stopped
     # standalone-сервер не разбирает SIGTERM: ждать его десять секунд по умолчанию незачем
     stop_grace_period: 3s
+    # только петля: с других устройств стол открывается через tailscale serve, см. ADR-016
     ports:
-      - "${APP_PORT:-8477}:3000"
+      - "127.0.0.1:${APP_PORT:-8477}:3000"
     mem_limit: 640m
     depends_on:
       db:
