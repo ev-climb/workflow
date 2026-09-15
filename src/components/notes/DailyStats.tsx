@@ -5,21 +5,23 @@ import { Popover } from 'radix-ui'
 import type { SyntheticEvent } from 'react'
 import { Failure } from '@/components/board/Failure'
 import { dailyStatsQuery } from '@/lib/notes-query'
-import type { DailyPeriod, DayState } from '@/server/services/daily'
+import type { DayState } from '@/server/services/daily'
 
-const WEEKDAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
+const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+const WEEKDAYS = ['пн', '', 'ср', '', 'пт', '', '']
 
 const CELL: Record<DayState, string> = {
-  complete: 'bg-done/75 shadow-[0_0_8px_oklch(0.75_0.14_168/0.55)]',
-  partial: 'bg-done/20',
+  complete: 'bg-done/80',
+  partial: 'bg-done/25',
   empty: 'bg-white/6',
-  future: 'border border-dashed border-white/8',
+  future: '',
 }
 
-function periodLabel(days: number | null): string {
-  if (days === null) return 'Всё время'
-  if (days === 365) return 'Год'
-  return `${days} дней`
+const STATE: Record<DayState, string> = {
+  complete: 'закрыт целиком',
+  partial: 'закрыт частично',
+  empty: 'пусто',
+  future: '',
 }
 
 function daysWord(count: number): string {
@@ -31,7 +33,7 @@ function daysWord(count: number): string {
 // щелчок по ней раскрывал бы список «Сегодня» в правку
 const keep = (event: SyntheticEvent) => event.stopPropagation()
 
-/** Статистика списка «Сегодня»: сколько дней закрыто целиком за каждый период. */
+/** Статистика списка «Сегодня»: год по дням, как сетка вкладов на GitHub. */
 export function DailyStats() {
   return (
     <Popover.Root>
@@ -62,7 +64,8 @@ export function DailyStats() {
           sideOffset={8}
           onClick={keep}
           onKeyDown={keep}
-          className="surface-menu z-50 w-72 p-4 outline-none"
+          collisionPadding={16}
+          className="surface-menu z-50 w-max max-w-[calc(100vw-2rem)] p-4 outline-none"
         >
           <Stats />
         </Popover.Content>
@@ -83,58 +86,64 @@ function Stats() {
     )
   }
 
-  const { periods, streak, weeks } = stats.data
+  const { complete, weeks } = stats.data
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="text-[13px] font-semibold text-fog">Список закрыт целиком</p>
-        <p className="text-[11.5px] text-fog-dim">Сегодня в счёт, только когда уже закрыто</p>
-      </div>
-
-      <ul className="flex flex-col gap-2.5">
-        {periods.map((period) => (
-          <Period key={period.days ?? 'all'} period={period} />
-        ))}
-      </ul>
-
-      <p className="text-xs text-fog-muted">
-        Серия — <span className="font-semibold text-fog">{streak.current}</span>{' '}
-        {daysWord(streak.current)}, лучшая — {streak.best}
+    <div className="flex flex-col gap-3">
+      <p className="text-[13px] font-semibold text-fog">
+        Список закрыт целиком{' '}
+        <span className="font-normal text-fog-dim">
+          — {complete} {daysWord(complete)} за год
+        </span>
       </p>
 
-      <div className="grid grid-cols-7 gap-1">
-        {WEEKDAYS.map((day) => (
-          <span key={day} className="text-center font-mono text-[9.5px] text-fog-faint uppercase">
-            {day}
+      {/* на узком экране год не влезает: открываем прокрученным к сегодняшней неделе */}
+      <div
+        ref={(node) => {
+          if (node) node.scrollLeft = node.scrollWidth
+        }}
+        className="overflow-x-auto"
+      >
+        <div className="flex w-max gap-[3px]">
+          <div className="mr-1 flex flex-col gap-[3px] pt-4">
+            {WEEKDAYS.map((day, at) => (
+              <span key={at} className="h-2.5 font-mono text-[9px] leading-2.5 text-fog-faint">
+                {day}
+              </span>
+            ))}
+          </div>
+          {weeks.map((week, at) => (
+            <div key={week[0].day} className="relative flex flex-col gap-[3px] pt-4">
+              <span className="absolute top-0 left-0 font-mono text-[9px] whitespace-nowrap text-fog-faint">
+                {monthLabel(week[0].day, weeks[at - 1]?.[0].day)}
+              </span>
+              {week.map(({ day, state }) => (
+                <span
+                  key={day}
+                  title={state === 'future' ? undefined : `${day} — ${STATE[state]}`}
+                  className={`size-2.5 rounded-[2px] ${CELL[state]}`}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-1.5 text-[10.5px] text-fog-dim">
+        {(['empty', 'partial', 'complete'] as const).map((state) => (
+          <span key={state} className="flex items-center gap-1 not-first:ml-2">
+            <span className={`size-2.5 rounded-[2px] ${CELL[state]}`} />
+            {STATE[state]}
           </span>
-        ))}
-        {weeks.flat().map(({ day, state }) => (
-          <span key={day} title={day} className={`aspect-square rounded-[5px] ${CELL[state]}`} />
         ))}
       </div>
     </div>
   )
 }
 
-function Period({ period }: { period: DailyPeriod }) {
-  const share = period.counted ? Math.round((period.complete / period.counted) * 100) : 0
-
-  return (
-    <li className="flex flex-col gap-1">
-      <div className="flex items-baseline gap-2 text-xs">
-        <span className="text-fog-muted">{periodLabel(period.days)}</span>
-        <span className="flex-1" />
-        <span className="font-mono text-[11px] text-fog-dim tabular-nums">
-          {period.complete} из {period.counted}
-        </span>
-        <span className="w-9 text-right font-mono text-[11px] font-semibold text-fog tabular-nums">
-          {share}%
-        </span>
-      </div>
-      <div className="note-progress note-progress-done">
-        <span style={{ width: `${share}%` }} />
-      </div>
-    </li>
-  )
+/** Подпись месяца над первой его неделей; у самой левой колонки подписи нет — она обрезана. */
+function monthLabel(monday: string, previous: string | undefined): string {
+  if (!previous) return ''
+  const month = Number(monday.slice(5, 7))
+  return month === Number(previous.slice(5, 7)) ? '' : MONTHS[month - 1]
 }

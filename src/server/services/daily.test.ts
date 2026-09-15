@@ -116,47 +116,28 @@ describe('список «Сегодня»', () => {
     await updateNoteItem(item.id, { done: true })
 
     const stats = await dailyStats('2026-09-10')
-    expect(stats.periods[0]).toEqual({ days: 7, complete: 1, counted: 1 })
-    expect(stats.streak).toEqual({ current: 1, best: 1 })
+    expect(stats.complete).toBe(1)
   })
 })
 
 describe('сводка по дням', () => {
   const day = (date: string, done: number, total = 2) => ({ day: date, total, done })
 
-  it('без единой отметки — нули', () => {
+  it('без единой отметки — пустой год', () => {
     const stats = summarize([], '2026-09-10')
 
-    expect(stats.periods.every((period) => period.counted === 0)).toBe(true)
-    expect(stats.streak).toEqual({ current: 0, best: 0 })
+    expect(stats.complete).toBe(0)
+    expect(stats.weeks).toHaveLength(53)
+    expect(stats.weeks[0][0].day).toBe('2025-09-08')
   })
 
-  it('считает с первого дня, незакрытое сегодня не в счёт', () => {
+  it('считает закрытые дни только внутри года', () => {
     const stats = summarize(
-      [day('2026-09-07', 2), day('2026-09-08', 1), day('2026-09-09', 2)],
+      [day('2025-09-07', 2), day('2025-09-08', 2), day('2026-09-08', 1), day('2026-09-09', 2)],
       '2026-09-10',
     )
 
-    expect(stats.periods[0]).toEqual({ days: 7, complete: 2, counted: 3 })
-    expect(stats.streak).toEqual({ current: 1, best: 1 })
-  })
-
-  it('окно не берёт дни раньше себя, всё время — с первого дня', () => {
-    const stats = summarize([day('2026-08-01', 2), day('2026-09-09', 2)], '2026-09-10')
-
-    expect(stats.periods[0]).toEqual({ days: 7, complete: 1, counted: 6 })
-    expect(stats.periods[3]).toEqual({ days: null, complete: 2, counted: 40 })
-  })
-
-  it('серия тянется со вчера и растёт закрытым сегодня', () => {
-    const rows = [day('2026-09-08', 2), day('2026-09-09', 2)]
-
-    expect(summarize(rows, '2026-09-10').streak).toEqual({ current: 2, best: 2 })
-    expect(summarize([...rows, day('2026-09-10', 2)], '2026-09-10').streak).toEqual({
-      current: 3,
-      best: 3,
-    })
-    expect(summarize(rows, '2026-09-11').streak).toEqual({ current: 0, best: 2 })
+    expect(stats.complete).toBe(2)
   })
 
   it('сетка недель кончается текущей и знает состояние дня', () => {
