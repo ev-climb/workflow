@@ -24,11 +24,13 @@ function refreshNotes(client: QueryClient): Promise<unknown> {
   ])
 }
 
-function useNoteChange<T = void, R = unknown>(request: (input: T) => Promise<R>) {
+/** `queue` — мутации с одним именем уходят на сервер по очереди, а не наперегонки. */
+function useNoteChange<T = void, R = unknown>(request: (input: T) => Promise<R>, queue?: string) {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: request,
+    ...(queue ? { scope: { id: queue } } : {}),
     onSuccess: () => void refreshNotes(client),
   })
 }
@@ -61,8 +63,13 @@ export const useArchiveNote = (noteId: string) =>
 export const useDeleteNote = (noteId: string) =>
   useNoteChange(() => sendJson('DELETE', `/api/notes/${noteId}`))
 
+// пункты набирают подряд через Enter: параллельные запросы делят конец списка, встают
+// вразнобой, а проигравший все повторы коллизии ранга пропадает
 export const useAddNoteItem = (noteId: string) =>
-  useNoteChange((title: string) => sendJson('POST', `/api/notes/${noteId}/items`, { title }))
+  useNoteChange(
+    (title: string) => sendJson('POST', `/api/notes/${noteId}/items`, { title }),
+    `note-items:${noteId}`,
+  )
 
 export const useUpdateNoteItem = (itemId: string) =>
   useNoteChange((changes: { title?: string; done?: boolean }) =>

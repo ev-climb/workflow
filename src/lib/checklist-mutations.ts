@@ -15,11 +15,13 @@ function useChecklistChange<T = void>(
   boardId: string,
   cardId: string,
   request: (input: T) => Promise<unknown>,
+  queue?: string,
 ) {
   const client = useQueryClient()
 
   return useMutation({
     mutationFn: request,
+    ...(queue ? { scope: { id: queue } } : {}),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: boardKey(boardId) })
       void client.invalidateQueries({ queryKey: checklistsKey(cardId) })
@@ -40,9 +42,13 @@ export const useRenameChecklist = (boardId: string, cardId: string, checklistId:
 export const useDeleteChecklist = (boardId: string, cardId: string, checklistId: string) =>
   useChecklistChange(boardId, cardId, () => sendJson('DELETE', `/api/checklists/${checklistId}`))
 
+// по очереди, как и пункты заметок: при наборе подряд параллельные запросы путают порядок
 export const useAddChecklistItem = (boardId: string, cardId: string, checklistId: string) =>
-  useChecklistChange(boardId, cardId, (title: string) =>
-    sendJson('POST', `/api/checklists/${checklistId}/items`, { title }),
+  useChecklistChange(
+    boardId,
+    cardId,
+    (title: string) => sendJson('POST', `/api/checklists/${checklistId}/items`, { title }),
+    `checklist-items:${checklistId}`,
   )
 
 export const useUpdateChecklistItem = (boardId: string, cardId: string, itemId: string) =>
