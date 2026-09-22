@@ -1,3 +1,4 @@
+import { headers } from 'next/headers'
 import { ReauthBanner } from '@/components/workspace/ReauthBanner'
 import { Workspace } from '@/components/workspace/Workspace'
 import { toBoardView, type BoardView } from '@/lib/board-view'
@@ -15,7 +16,12 @@ export const dynamic = 'force-dynamic'
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> }
 
 export default async function WorkspacePage({ searchParams }: Props) {
-  const splash = splashFloor()
+  /**
+   * Заставка нужна только загрузке документа: мягкий переход по ссылке на карточку ждал бы
+   * её зря. Свои заголовки RSC Next из `headers()` вырезает, поэтому смотрим на браузерный.
+   */
+  const loading = (await headers()).get('sec-fetch-dest') !== 'empty'
+  const splash = loading ? splashFloor() : null
   const { card } = await searchParams
   const cardId = typeof card === 'string' && isUuid(card) ? card : null
 

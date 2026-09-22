@@ -114,6 +114,20 @@ export function BoardCard({ boards, boardId, slot, linkable, listId, card }: Pro
     if (linkable && linked === card.id) setOpened(true)
   }, [linkable, linked, card.id])
 
+  /**
+   * Адрес карточки уходит вместе с панелью: иначе повторный переход на неё не меняет адрес
+   * и панель не открывается.
+   */
+  function close() {
+    setOpened(false)
+    if (linked !== card.id) return
+
+    const params = new URLSearchParams(window.location.search)
+    params.delete('card')
+    const rest = params.toString()
+    window.history.replaceState(null, '', rest ? `?${rest}` : window.location.pathname)
+  }
+
   /** Буфер обмена бывает недоступен — без разрешения или вне защищённого адреса. */
   async function copyLink() {
     let done = true
@@ -215,7 +229,7 @@ export function BoardCard({ boards, boardId, slot, linkable, listId, card }: Pro
           boardId={boardId}
           cardId={card.id}
           title={card.title}
-          onClose={() => setOpened(false)}
+          onClose={close}
         />
       ) : null}
 
