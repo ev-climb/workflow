@@ -60,6 +60,8 @@ export function Workspace({
   }
   const [ratio, setRatio] = useState(topBoardRatio)
   const [mode, setMode] = useState(calendarMode)
+  // сегодняшняя дата посчитана на сервере: первая отрисовка совпадает с браузерной
+  const [anchor, setAnchor] = useState(today)
   const [notes, setNotes] = useState(notesOpen)
   const [archives, setArchives] = useState(noteDropArchives)
   const [failure, setFailure] = useState<string | null>(null)
@@ -199,7 +201,8 @@ export function Workspace({
         >
           <CalendarColumn
             mode={shownMode}
-            today={today}
+            anchor={anchor}
+            onAnchorChange={setAnchor}
             className={tab === 'calendar' ? 'max-md:w-full max-md:border-r-0' : 'max-md:hidden'}
             onModeChange={(next) => void chooseMode(next)}
           />
@@ -260,6 +263,7 @@ export function Workspace({
         <NotesDrawer
           open={notes}
           tabbed={tab === 'notes'}
+          day={anchor}
           onOpenChange={(open) => void showNotes(open)}
         />
         <MobileNav tab={tab} top={titleOf(slots.top)} bottom={titleOf(slots.bottom)} onChange={setTab} />

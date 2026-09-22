@@ -231,10 +231,14 @@ export const notePatchBody = z.union([noteFieldsBody, z.object({ archived: z.boo
   error: 'ожидается {title}, {body}, {folderId} или {archived}',
 })
 
-/** Правка пункта списка дел: заголовок, отметка или оба сразу. */
-export const noteItemPatchBody = z.union([titleBody, z.object({ done: z.boolean() })], {
-  error: 'ожидается {title} или {done}',
-})
+/**
+ * Правка пункта списка дел: заголовок, отметка или оба сразу. `day` у отметки — день списка
+ * «Сегодня», за который она ставится; формат и границы сверяет сервис.
+ */
+export const noteItemPatchBody = z.union(
+  [titleBody, z.object({ done: z.boolean(), day: z.string().optional() })],
+  { error: 'ожидается {title} или {done}' },
+)
 
 /**
  * Заметка в карточку: колонка-приёмник и то, что человек поправил в окне переноса.

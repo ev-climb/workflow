@@ -5,7 +5,7 @@ import { db } from '../db/client.ts'
 import { cards, checklistItems, checklists, noteFolders, noteItems, notes } from '../db/schema.ts'
 import { publishBoardChanged } from './board-events.ts'
 import { cardDescription, locateList } from './cards.ts'
-import { recordDay } from './daily.ts'
+import { dailyDay, dailyItems, markDay, recordDay } from './daily.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
 import { rankAfter, rankBefore, rankSequence, withRankRetry } from './rank.ts'
 import { TITLE_MAX, title } from './validation.ts'
@@ -66,22 +66,11 @@ const ITEM_SELECT = {
   id: noteItems.id,
   title: noteItems.title,
   done: noteItems.done,
-  doneOn: noteItems.doneOn,
   rank: noteItems.rank,
 }
 
 const DAILY_TITLE = 'Сегодня'
 const DAILY_STAYS = 'список «Сегодня» закреплён и в архив не уходит'
-
-type ItemRow = NoteItemView & { doneOn: string | null }
-
-/**
- * `today` передаётся только для списка «Сегодня»: там отметка держится до конца дня, а
- * вчерашняя читается как снятая — список каждое утро начинается заново.
- */
-function toItem({ doneOn, ...item }: ItemRow, today: string | null = null): NoteItemView {
-  return today === null ? item : { ...item, done: item.done && doneOn === today }
-}
 
 async function locateNote(noteId: string): Promise<{ id: string; kind: NoteKind; daily: boolean }> {
   const [found] = await db
@@ -240,8 +229,7 @@ export async function listNotes(filter: {
     .orderBy(asc(noteItems.rank))
 
   const byNote = new Map<string, NoteItemView[]>()
-  for (const { noteId, ...row } of items) {
-    const item = toItem(row)
+  for (const { noteId, ...item } of items) {
     const bucket = byNote.get(noteId)
     if (bucket) bucket.push(item)
     else byNote.set(noteId, [item])
@@ -250,30 +238,29 @@ export async function listNotes(filter: {
   return rows.map((row) => toView(row, byNote.get(row.id) ?? []))
 }
 
-export async function getNote(noteId: string): Promise<NoteView> {
+/** Список «Сегодня» читается за сегодня, если не спрошен другой день. */
+export async function getNote(noteId: string, day?: string): Promise<NoteView> {
   const [found] = await db.select(NOTE_SELECT).from(notes).where(eq(notes.id, noteId))
   if (!found) throw new NotFoundError(`заметки ${noteId} нет`)
 
-  const items = await db
-    .select(ITEM_SELECT)
-    .from(noteItems)
-    .where(eq(noteItems.noteId, noteId))
-    .orderBy(asc(noteItems.rank))
+  const items = found.daily
+    ? await dailyItems(noteId, dailyDay(day))
+    : await db
+        .select(ITEM_SELECT)
+        .from(noteItems)
+        .where(eq(noteItems.noteId, noteId))
+        .orderBy(asc(noteItems.rank))
 
-  const today = found.daily ? moscowToday() : null
-  return toView(
-    found,
-    items.map((item) => toItem(item, today)),
-  )
+  return toView(found, items)
 }
 
 /**
  * Список «Сегодня» заводится сам при первом чтении: он нужен всегда. Две первые выдачи
  * наперегонки упрутся в уникальный индекс, и вторая вставка просто ничего не сделает.
  */
-export async function getDailyNote(): Promise<NoteView> {
+export async function getDailyNote(day?: string): Promise<NoteView> {
   const [found] = await db.select({ id: notes.id }).from(notes).where(eq(notes.daily, true))
-  if (found) return getNote(found.id)
+  if (found) return getNote(found.id, day)
 
   await withRankRetry(async () =>
     db
@@ -281,7 +268,7 @@ export async function getDailyNote(): Promise<NoteView> {
       .values({ kind: 'list', title: DAILY_TITLE, daily: true, rank: rankBefore(await firstNoteRank()) })
       .onConflictDoNothing({ target: notes.daily, where: sql`${notes.daily}` }),
   )
-  return getDailyNote()
+  return getDailyNote(day)
 }
 
 /**
@@ -411,39 +398,62 @@ export async function addNoteItem(input: {
   const item = await withRankRetry(async () => {
     const [inserted] = await db
       .insert(noteItems)
-      .values({ noteId: input.noteId, title: name, rank: rankAfter(await lastItemRank(input.noteId)) })
+      .values({
+        noteId: input.noteId,
+        title: name,
+        rank: rankAfter(await lastItemRank(input.noteId)),
+        // по времени заведения решается, с какого дня пункт есть в списке «Сегодня»,
+        // а границу дня проводят часы приложения, не базы
+        createdAt: new Date(),
+      })
       .returning(ITEM_SELECT)
 
     return inserted
   })
 
   if (note.daily) await recordDay(input.noteId, moscowToday())
-  return toItem(item)
+  return item
 }
 
+/**
+ * `day` — только для списка «Сегодня»: отметка ставится или снимается за этот день, а не
+ * за сегодняшний. Так закрывается прошедший день, в который пункты не отметили вовремя.
+ */
 export async function updateNoteItem(
   itemId: string,
-  changes: { title?: string; done?: boolean },
+  changes: { title?: string; done?: boolean; day?: string },
 ): Promise<NoteItemView> {
-  const today = moscowToday()
-  const patch: { title?: string; done?: boolean; doneOn?: string | null } = {}
-  if (changes.title !== undefined) patch.title = title(changes.title, 'пункт')
-  if (changes.done !== undefined) {
-    patch.done = changes.done
-    patch.doneOn = changes.done ? today : null
+  const name = changes.title === undefined ? undefined : title(changes.title, 'пункт')
+  if (name === undefined && changes.done === undefined) {
+    throw new InvalidInputError('пункт: править нечего')
   }
-  if (!Object.keys(patch).length) throw new InvalidInputError('пункт: править нечего')
 
   const item = await locateItem(itemId)
+  if (!item.daily && changes.day !== undefined) {
+    throw new InvalidInputError('день отметки бывает только у списка «Сегодня»')
+  }
+  const day = item.daily ? dailyDay(changes.day) : null
+  const [before] = day === null ? [] : await dailyItems(item.noteId, day, itemId)
+  if (day !== null && !before) throw new InvalidInputError(`пункта в списке за ${day} ещё не было`)
+  const patch = {
+    ...(name === undefined ? {} : { title: name }),
+    ...(day === null && changes.done !== undefined ? { done: changes.done } : {}),
+  }
 
-  const [updated] = await db
-    .update(noteItems)
-    .set({ ...patch, updatedAt: new Date() })
-    .where(eq(noteItems.id, itemId))
-    .returning(ITEM_SELECT)
+  const [updated] = Object.keys(patch).length
+    ? await db
+        .update(noteItems)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(eq(noteItems.id, itemId))
+        .returning(ITEM_SELECT)
+    : await db.select(ITEM_SELECT).from(noteItems).where(eq(noteItems.id, itemId))
 
-  if (item.daily && changes.done !== undefined) await recordDay(item.noteId, today)
-  return toItem(updated, item.daily ? today : null)
+  if (day === null) return updated
+  if (changes.done === undefined) return { ...updated, done: before.done }
+
+  await markDay(itemId, day, changes.done)
+  await recordDay(item.noteId, day)
+  return { ...updated, done: changes.done }
 }
 
 /** Пункт удаляется совсем: он часть заметки, своего архива у него нет. */

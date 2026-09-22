@@ -72,7 +72,7 @@ export const useAddNoteItem = (noteId: string) =>
   )
 
 export const useUpdateNoteItem = (itemId: string) =>
-  useNoteChange((changes: { title?: string; done?: boolean }) =>
+  useNoteChange((changes: { title?: string; done?: boolean; day?: string }) =>
     sendJson('PATCH', `/api/note-items/${itemId}`, changes),
   )
 

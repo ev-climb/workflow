@@ -24,14 +24,20 @@ const MODE_LABEL: Record<CalendarMode, string> = { day: 'День', week: 'Не�
 
 type Props = {
   mode: CalendarMode
-  /** Сегодняшняя дата, посчитанная на сервере: первая отрисовка совпадает с браузерной. */
-  today: string
+  /** Показанный день; по нему же шторка показывает список «Сегодня» за этот день. */
+  anchor: string
+  onAnchorChange: (anchor: string) => void
   onModeChange: (mode: CalendarMode) => void
   className?: string
 }
 
-export function CalendarColumn({ mode, today, onModeChange, className = '' }: Props) {
-  const [anchor, setAnchor] = useState(today)
+export function CalendarColumn({
+  mode,
+  anchor,
+  onAnchorChange: setAnchor,
+  onModeChange,
+  className = '',
+}: Props) {
   const [range, setRange] = useState<Range | null>(null)
   const [opened, setOpened] = useState<{ id: string; title: string } | null>(null)
   const [openedTask, setOpenedTask] = useState<{ id: string; title: string } | null>(null)

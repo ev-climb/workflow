@@ -10,9 +10,11 @@ export const foldersKey = ['note-folders'] as const
 /** Список «Сегодня» и всё, что из него считается: закрытые дни и статистика. */
 export const dailyKey = ['daily'] as const
 
-export const dailyNoteQuery = {
-  queryKey: [...dailyKey, 'note'] as const,
-  queryFn: (): Promise<NoteView> => getJson<NoteView>('/api/daily'),
+export function dailyNoteQuery(day: string) {
+  return {
+    queryKey: [...dailyKey, 'note', day] as const,
+    queryFn: (): Promise<NoteView> => getJson<NoteView>(`/api/daily?day=${day}`),
+  }
 }
 
 export function completeDaysQuery(from: string, to: string) {

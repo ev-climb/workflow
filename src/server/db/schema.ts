@@ -435,14 +435,29 @@ export const noteItems = pgTable(
       .notNull()
       .references(() => notes.id, { onDelete: 'cascade' }),
     title: text().notNull(),
+    // у пунктов «Сегодня» не используется: их отметки по дням лежат в daily_marks
     done: boolean().notNull().default(false),
-    // московский день отметки: в списке «Сегодня» вчерашняя отметка уже не считается
-    doneOn: date({ mode: 'string' }),
     rank: rankText().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [uniqueIndex('note_items_note_id_rank_key').on(t.noteId, t.rank)],
+)
+
+/**
+ * Отметки списка «Сегодня», по строке на пункт и московский день. Своя строка у каждого
+ * дня нужна, чтобы прошлый день можно было закрыть задним числом, не трогая сегодняшний.
+ */
+export const dailyMarks = pgTable(
+  'daily_marks',
+  {
+    itemId: uuid()
+      .notNull()
+      .references(() => noteItems.id, { onDelete: 'cascade' }),
+    day: date({ mode: 'string' }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ name: 'daily_marks_pkey', columns: [t.itemId, t.day] })],
 )
 
 /**

@@ -31,6 +31,8 @@ type Props = {
   open: boolean
   /** На телефоне шторка — раздел стола: полоски нет, панель стоит на месте во весь экран. */
   tabbed: boolean
+  /** День календаря: список «Сегодня» показывается за него. */
+  day: string
   onOpenChange: (open: boolean) => void
 }
 
@@ -42,7 +44,7 @@ type Props = {
  * Полоска остаётся в потоке и раскрытой: иначе доска дёргалась бы на её ширину при
  * каждом открытии.
  */
-export function NotesDrawer({ open, tabbed, onOpenChange }: Props) {
+export function NotesDrawer({ open, tabbed, day, onOpenChange }: Props) {
   const [view, setView] = useState<string>(ALL)
   const [managing, setManaging] = useState(false)
   const [fresh, setFresh] = useState<string | null>(null)
@@ -198,7 +200,7 @@ export function NotesDrawer({ open, tabbed, onOpenChange }: Props) {
           </div>
         )}
 
-        {view === ARCHIVE ? null : <DailyNote />}
+        {view === ARCHIVE ? null : <DailyNote day={day} />}
 
         <Failure error={notes.error ?? create.error} className="px-[18px] pt-2" />
 

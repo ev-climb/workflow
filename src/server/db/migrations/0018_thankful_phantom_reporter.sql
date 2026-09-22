@@ -1,0 +1,1 @@
+ALTER TABLE "note_items" DROP COLUMN "done_on";

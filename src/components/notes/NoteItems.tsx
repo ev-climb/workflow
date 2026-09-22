@@ -13,7 +13,7 @@ import type { NoteItemView } from '@/server/services/notes'
  * не отмечают, и двойной клик ради этого искать не хочется. Удаление показывается только
  * в правке: в списке крестик у каждой строки был бы шумом.
  */
-function Item({ item, editing }: { item: NoteItemView; editing: boolean }) {
+function Item({ item, editing, day }: { item: NoteItemView; editing: boolean; day?: string }) {
   const [renaming, setRenaming] = useState(false)
   const update = useUpdateNoteItem(item.id)
   const remove = useDeleteNoteItem(item.id)
@@ -37,7 +37,7 @@ function Item({ item, editing }: { item: NoteItemView; editing: boolean }) {
       <Checkbox.Root
         checked={item.done}
         disabled={update.isPending}
-        onCheckedChange={(next) => update.mutate({ done: next === true })}
+        onCheckedChange={(next) => update.mutate({ done: next === true, day })}
         // щелчок по пункту не должен раскрывать заметку в правку: отметить дело — не то же
         // самое, что сесть её редактировать
         onClick={(event) => event.stopPropagation()}
@@ -98,13 +98,22 @@ function Item({ item, editing }: { item: NoteItemView; editing: boolean }) {
   )
 }
 
-export function NoteItems({ items, editing }: { items: NoteItemView[]; editing: boolean }) {
+/** `day` — только у списка «Сегодня»: за какой день ставится отметка. */
+export function NoteItems({
+  items,
+  editing,
+  day,
+}: {
+  items: NoteItemView[]
+  editing: boolean
+  day?: string
+}) {
   if (!items.length) return null
 
   return (
     <ul className="flex flex-col gap-0.5">
       {items.map((item) => (
-        <Item key={item.id} item={item} editing={editing} />
+        <Item key={item.id} item={item} editing={editing} day={day} />
       ))}
     </ul>
   )

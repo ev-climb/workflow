@@ -65,6 +65,10 @@ export function weekdayLabel(date: string): string {
   return WEEKDAY.format(utcOf(date))
 }
 
+export function shortDayLabel(date: string): string {
+  return DAY_MONTH.format(utcOf(date))
+}
+
 export function dayNumber(date: string): string {
   return String(utcOf(date).getUTCDate())
 }

@@ -4,6 +4,7 @@ import { InvalidInputError } from './errors.ts'
 import {
   addNoteItem,
   archiveNote,
+  createNote,
   deleteNoteItem,
   getDailyNote,
   listNotes,
@@ -108,6 +109,53 @@ describe('список «Сегодня»', () => {
     await updateNoteItem(two.id, { done: true })
 
     expect(await closed('2026-09-11')).toEqual([])
+  })
+
+  it('прошедший день закрывается задним числом', async () => {
+    at('2026-09-10')
+    const [one, two] = await itemsOf('один', 'два')
+    await updateNoteItem(one.id, { done: true })
+
+    at('2026-09-11')
+    await updateNoteItem(two.id, { done: true, day: '2026-09-10' })
+
+    expect(await closed('2026-09-10', '2026-09-11')).toEqual(['2026-09-10'])
+    expect((await getDailyNote('2026-09-10')).items.map((item) => item.done)).toEqual([true, true])
+    expect((await getDailyNote()).items.map((item) => item.done)).toEqual([false, false])
+  })
+
+  it('в прошедшем дне нет пунктов, заведённых позже', async () => {
+    at('2026-09-10')
+    const [one] = await itemsOf('один')
+
+    at('2026-09-11')
+    const [two] = await itemsOf('два')
+    await updateNoteItem(one.id, { done: true, day: '2026-09-10' })
+
+    expect((await getDailyNote('2026-09-10')).items.map((item) => item.title)).toEqual(['один'])
+    expect(await closed('2026-09-10')).toEqual(['2026-09-10'])
+    await expect(updateNoteItem(two.id, { done: true, day: '2026-09-10' })).rejects.toThrow(
+      InvalidInputError,
+    )
+  })
+
+  it('будущий день не отмечается', async () => {
+    at('2026-09-10')
+    const [item] = await itemsOf('один')
+
+    await expect(getDailyNote('2026-09-11')).rejects.toThrow(InvalidInputError)
+    await expect(updateNoteItem(item.id, { done: true, day: '2026-09-11' })).rejects.toThrow(
+      InvalidInputError,
+    )
+  })
+
+  it('день отметки есть только у списка «Сегодня»', async () => {
+    const list = await createNote({ kind: 'list' })
+    const item = await addNoteItem({ noteId: list.id, title: 'один' })
+
+    await expect(updateNoteItem(item.id, { done: true, day: '2026-09-10' })).rejects.toThrow(
+      InvalidInputError,
+    )
   })
 
   it('статистика считается из итогов дней', async () => {
