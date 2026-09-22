@@ -4,10 +4,11 @@ import { applyReorder, type Group, planReorder } from './move'
 /**
  * Что таскают и на что кладут. Список — и то и другое: его переставляют мышью, и на него
  * же кладут карточку. Доска в данных названа явно: по ней узнаётся попытка перетащить
- * через границу между досками — её отменяем с подсказкой (ADR-005).
+ * через границу между досками — её отменяем с подсказкой (ADR-005). Цвет доски нужен
+ * календарю: заготовка блока под курсором красится им ещё до броска.
  */
 export type DragData =
-  | { type: 'card'; boardId: string; listId: string; card: CardView }
+  | { type: 'card'; boardId: string; boardColor: string | null; listId: string; card: CardView }
   | { type: 'list'; boardId: string; listId: string; list: ListView }
 
 /**

@@ -27,6 +27,7 @@ const list = (id: string, cards: string[]): ListView => ({
 const board = (...lists: ListView[]): BoardView => ({
   id: 'board',
   title: 'board',
+  color: null,
   rank: 'a0',
   labels: [],
   lists,
@@ -35,6 +36,7 @@ const board = (...lists: ListView[]): BoardView => ({
 const ontoCard = (listId: string, cardId: string): DragData => ({
   type: 'card',
   boardId: 'board',
+  boardColor: null,
   listId,
   card: card(cardId),
 })

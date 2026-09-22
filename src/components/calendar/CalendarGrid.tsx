@@ -78,7 +78,14 @@ export function CalendarGrid({
   const drafts: GridDraft[] = [
     ...scene.drafts,
     ...(drop.dropping
-      ? [{ range: drop.dropping.range, event: null, title: drop.dropping.title }]
+      ? [
+          {
+            range: drop.dropping.range,
+            event: null,
+            title: drop.dropping.title,
+            tint: drop.dropping.tint,
+          },
+        ]
       : []),
   ]
 

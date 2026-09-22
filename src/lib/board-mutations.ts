@@ -43,6 +43,11 @@ export const useCreateBoard = () =>
     mutationFn: (title: string) => sendJson<BoardSummary>('POST', '/api/boards', { title }),
   })
 
+export const useSetBoardColor = (boardId: string) =>
+  useBoardChange(boardId, (color: string) =>
+    sendJson('PATCH', `/api/boards/${boardId}`, { color }),
+  )
+
 /** Саму доску не перечитываем: слот опустеет, а запрос вернул бы 404. */
 export function useArchiveBoard(boardId: string) {
   const client = useQueryClient()

@@ -20,6 +20,7 @@ import {
   listBoards,
   moveList,
   restoreList,
+  setBoardColor,
 } from './boards.ts'
 import { archiveCard, createCard } from './cards.ts'
 import { InvalidInputError, NotFoundError } from './errors.ts'
@@ -218,6 +219,32 @@ describe('списки', () => {
     const board = await createBoard({ title: 'Доска' })
     const list = await createList({ boardId: board.id, title: 'Список' })
     await expect(restoreList(list.id)).rejects.toThrow(NotFoundError)
+  })
+})
+
+describe('цвет доски', () => {
+  it('новая доска берёт цвет, которого нет у живых досок', async () => {
+    const first = await createBoard({ title: 'Первая' })
+    const second = await createBoard({ title: 'Вторая' })
+
+    expect(first.color).not.toBeNull()
+    expect(second.color).not.toBeNull()
+    expect(second.color).not.toBe(first.color)
+  })
+
+  it('цвет меняется только на цвет из набора', async () => {
+    const board = await createBoard({ title: 'Доска' })
+
+    expect((await setBoardColor(board.id, 'pink')).color).toBe('pink')
+    expect((await getBoard(board.id)).color).toBe('pink')
+    await expect(setBoardColor(board.id, '#ff0000')).rejects.toBeInstanceOf(InvalidInputError)
+  })
+
+  it('архивной доске цвет не меняют', async () => {
+    const board = await createBoard({ title: 'Доска' })
+    await archiveBoard(board.id)
+
+    await expect(setBoardColor(board.id, 'pink')).rejects.toBeInstanceOf(NotFoundError)
   })
 })
 

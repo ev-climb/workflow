@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, gt, isNull, sql } from 'drizzle-orm'
+import { LABEL_COLORS, isLabelColor } from '../../lib/label-colors.ts'
 import { db } from '../db/client.ts'
 import {
   boards,
@@ -15,7 +16,9 @@ import { moveWithinCollection, rankAfter, withRankRetry } from './rank.ts'
 import { unmirrorCardBlocks } from './time-blocks.ts'
 import { title } from './validation.ts'
 
-export type BoardSummary = { id: string; title: string; rank: string }
+export type BoardSummary = { id: string; title: string; rank: string; color: string | null }
+
+const BOARD_SELECT = { id: boards.id, title: boards.title, rank: boards.rank, color: boards.color }
 
 export type LabelSummary = { id: string; name: string; color: string }
 
@@ -49,7 +52,7 @@ export type BoardWithLists = BoardSummary & {
 /** Доски в порядке рангов. Заархивированные не показываются. */
 export async function listBoards(): Promise<BoardSummary[]> {
   return db
-    .select({ id: boards.id, title: boards.title, rank: boards.rank })
+    .select(BOARD_SELECT)
     .from(boards)
     .where(isNull(boards.archivedAt))
     .orderBy(asc(boards.rank))
@@ -62,7 +65,7 @@ export async function listBoards(): Promise<BoardSummary[]> {
  */
 export async function getBoard(boardId: string): Promise<BoardWithLists> {
   const [board] = await db
-    .select({ id: boards.id, title: boards.title, rank: boards.rank })
+    .select(BOARD_SELECT)
     .from(boards)
     .where(and(eq(boards.id, boardId), isNull(boards.archivedAt)))
 
@@ -166,9 +169,16 @@ export async function getBoard(boardId: string): Promise<BoardWithLists> {
   }
 }
 
-/** Новая доска встаёт в конец списка досок. */
+/** Новая доска встаёт в конец списка досок и берёт первый цвет, которого нет у живых досок. */
 export async function createBoard(input: { title: string }): Promise<BoardSummary> {
   const name = title(input.title, 'доска')
+
+  const taken = await db
+    .select({ color: boards.color })
+    .from(boards)
+    .where(isNull(boards.archivedAt))
+  const used = new Set(taken.map((board) => board.color))
+  const color = (LABEL_COLORS.find((one) => !used.has(one.id)) ?? LABEL_COLORS[0]).id
 
   return withRankRetry(async () => {
     const [last] = await db
@@ -179,8 +189,8 @@ export async function createBoard(input: { title: string }): Promise<BoardSummar
 
     const [created] = await db
       .insert(boards)
-      .values({ title: name, rank: rankAfter(last?.rank ?? null) })
-      .returning({ id: boards.id, title: boards.title, rank: boards.rank })
+      .values({ title: name, rank: rankAfter(last?.rank ?? null), color })
+      .returning(BOARD_SELECT)
 
     return created
   })
@@ -344,6 +354,22 @@ export async function highlightList(listId: string, highlighted: boolean): Promi
   const { boardId, ...list } = updated
   publishBoardChanged(boardId)
   return list
+}
+
+/** Цвет доски — из набора цветов меток: им на сетке окрашены её сроки и тайм-блоки. */
+export async function setBoardColor(boardId: string, color: string): Promise<BoardSummary> {
+  if (!isLabelColor(color)) throw new InvalidInputError(`доска: цвета «${color}» нет в наборе`)
+
+  const [updated] = await db
+    .update(boards)
+    .set({ color, updatedAt: new Date() })
+    .where(and(eq(boards.id, boardId), isNull(boards.archivedAt)))
+    .returning(BOARD_SELECT)
+
+  if (!updated) throw new NotFoundError(`доски ${boardId} нет или она в архиве`)
+
+  publishBoardChanged(updated.id)
+  return updated
 }
 
 /** Доска уезжает в архив целиком: списки и карточки внутри остаются как были. */

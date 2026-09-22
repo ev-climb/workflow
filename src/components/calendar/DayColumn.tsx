@@ -4,6 +4,7 @@ import { timeLabel } from '@/lib/calendar-drag'
 import { MINUTES_IN_DAY, isToday } from '@/lib/calendar-grid'
 import type { PlacedEvent } from '@/lib/calendar-layout'
 import type { GridDraft, GridItem } from '@/lib/calendar-scene'
+import { labelColor } from '@/lib/label-colors'
 import { isCoarsePointer } from '@/lib/touch'
 import { EventBlock, TaskBlock, TimeBlockChip } from './Blocks'
 import { DAY_PX, HOUR_LINES, type OpenHandler, type TaskOpenHandler } from './grid'
@@ -109,8 +110,9 @@ export function DayColumn({
  * Заготовка под курсором: выделение под новое событие или блок, который тащат. Событий не
  * ловит — иначе она закрывала бы колонку, над которой её держат.
  */
-function Draft({ range, event, title }: GridDraft) {
+function Draft({ range, event, title, tint }: GridDraft) {
   const color = event?.color ?? null
+  const board = !color && tint ? labelColor(tint) : null
 
   return (
     <div
@@ -125,7 +127,9 @@ function Draft({ range, event, title }: GridDraft) {
               border: `1px solid ${color}66`,
               background: `linear-gradient(135deg, ${color}a6, ${color}66)`,
             }
-          : {}),
+          : board
+            ? { borderColor: `${board}b3`, backgroundColor: `${board}2e` }
+            : {}),
       }}
     >
       <div className="truncate font-mono text-[9.5px] text-white/70 tabular-nums">

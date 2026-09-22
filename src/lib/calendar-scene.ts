@@ -180,8 +180,16 @@ function stripeTasks(tasks: CalendarTask[], events: CalendarEventView[]): Calend
   return tasks.filter((task) => !hasSlot(task) && !mirrored.has(task.id))
 }
 
-/** Заготовка вместо удержанного куска: отрезок и то, что за ним стоит. */
-export type GridDraft = { range: Range; event: TimedView | TimedTask | null; title?: string }
+/**
+ * Заготовка вместо удержанного куска: отрезок и то, что за ним стоит. `tint` — цвет доски
+ * у заготовки тайм-блока: события у неё нет, а цвет нужен.
+ */
+export type GridDraft = {
+  range: Range
+  event: TimedView | TimedTask | null
+  title?: string
+  tint?: string | null
+}
 
 export type GridScene = {
   /** События, тайм-блоки и задачи с часами вперемешку: раскладка идёт по ним разом. */
@@ -214,14 +222,15 @@ export function gridScene(input: {
 
   return {
     items,
-    drafts: held.map(({ target, range }) => ({
-      range,
-      event: draftBehind(target, timed, slotted),
-      title:
-        target?.type === 'block'
-          ? blocks.find((one) => one.id === target.id)?.cardTitle
-          : undefined,
-    })),
+    drafts: held.map(({ target, range }) => {
+      const block = target?.type === 'block' ? blocks.find((one) => one.id === target.id) : undefined
+      return {
+        range,
+        event: draftBehind(target, timed, slotted),
+        title: block?.cardTitle,
+        tint: block?.boardColor,
+      }
+    }),
   }
 }
 

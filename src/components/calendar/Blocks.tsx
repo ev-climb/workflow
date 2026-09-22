@@ -8,6 +8,7 @@ import type { PlacedEvent } from '@/lib/calendar-layout'
 import { useSetTaskDone } from '@/lib/calendar-mutations'
 import type { TimedView } from '@/lib/calendar-scene'
 import type { TimeBlockView } from '@/lib/calendar-view'
+import { labelColor } from '@/lib/label-colors'
 import {
   BOTH_HANDLES_PX,
   DAY_PX,
@@ -69,7 +70,13 @@ export function TimeBlockChip({
   return (
     <div
       className="timeblock group absolute flex items-start gap-1 overflow-hidden px-1.5 py-0.5"
-      style={{ ...box(placed), opacity: done ? 0.5 : undefined }}
+      style={
+        {
+          ...box(placed),
+          opacity: done ? 0.5 : undefined,
+          ...(block.boardColor ? { '--tint': labelColor(block.boardColor) } : {}),
+        } as React.CSSProperties
+      }
     >
       <button
         type="button"
@@ -79,7 +86,7 @@ export function TimeBlockChip({
         onClick={() => setDone.mutate(!block.cardDone)}
         // квадрат в 10px мышью не поймать: невидимая рамка вокруг него расширяет цель нажатия
         className={`relative mt-0.5 grid size-2.5 shrink-0 cursor-default place-items-center rounded-[3px] border text-[8px] leading-none outline-none transition-colors before:absolute before:-inset-1 before:content-[''] hover:bg-white/20 focus-visible:ring-1 focus-visible:ring-accent-line ${
-          done ? 'border-done text-done' : 'border-accent text-accent'
+          done ? 'border-done text-done' : 'border-(--tint) text-(--tint)'
         }`}
       >
         {done ? <span aria-hidden>✓</span> : null}
@@ -100,7 +107,7 @@ export function TimeBlockChip({
         }`}
       >
         {height >= TIME_VISIBLE_PX ? (
-          <span className="block truncate font-mono text-[9.5px] text-accent tabular-nums">
+          <span className="block truncate font-mono text-[9.5px] text-(--tint) tabular-nums">
             {time}
           </span>
         ) : null}

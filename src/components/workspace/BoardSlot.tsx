@@ -24,6 +24,7 @@ type Props = {
   onChoose: (boardId: string | null) => void
   onCreated: (board: BoardSummary) => void
   onArchived: (boardId: string) => void
+  onRecolored: (boardId: string, color: string) => void
   className?: string
 }
 
@@ -37,6 +38,7 @@ export function BoardSlot({
   onChoose,
   onCreated,
   onArchived,
+  onRecolored,
   className = '',
 }: Props) {
   const [creating, setCreating] = useState(false)
@@ -66,7 +68,11 @@ export function BoardSlot({
               Архив
             </Link>
             {current ? (
-              <BoardMenu board={current} onArchived={() => onArchived(current.id)} />
+              <BoardMenu
+                board={current}
+                onArchived={() => onArchived(current.id)}
+                onRecolored={(color) => onRecolored(current.id, color)}
+              />
             ) : null}
           </div>
         ) : null}

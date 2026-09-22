@@ -69,10 +69,13 @@ export function Workspace({
   // учитываются здесь
   const [created, setCreated] = useState<BoardSummary[]>([])
   const [archived, setArchived] = useState<string[]>([])
+  const [colors, setColors] = useState<Record<string, string>>({})
   const shown = [
     ...boards,
     ...created.filter((board) => !boards.some(({ id }) => id === board.id)),
-  ].filter((board) => !archived.includes(board.id))
+  ]
+    .filter((board) => !archived.includes(board.id))
+    .map((board) => (colors[board.id] ? { ...board, color: colors[board.id] } : board))
   const area = useRef<HTMLDivElement>(null)
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -128,6 +131,10 @@ export function Workspace({
   function addBoard(slot: Slot, board: BoardSummary) {
     setCreated((current) => [...current, board])
     void chooseBoard(slot, board.id)
+  }
+
+  function recolorBoard(boardId: string, color: string) {
+    setColors((current) => ({ ...current, [boardId]: color }))
   }
 
   // в базе слот продолжает указывать на доску, но стол при загрузке такой слот и так показывает пустым
@@ -226,6 +233,7 @@ export function Workspace({
                 onChoose={(boardId) => void chooseBoard('top', boardId)}
                 onCreated={(board) => addBoard('top', board)}
                 onArchived={dropBoard}
+                onRecolored={recolorBoard}
               />
               <Splitter
                 ratio={ratio}
@@ -244,6 +252,7 @@ export function Workspace({
                 onChoose={(boardId) => void chooseBoard('bottom', boardId)}
                 onCreated={(board) => addBoard('bottom', board)}
                 onArchived={dropBoard}
+                onRecolored={recolorBoard}
               />
             </div>
           </div>

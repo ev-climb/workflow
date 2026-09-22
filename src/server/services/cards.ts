@@ -381,6 +381,7 @@ export type CardDue = {
   dueDone: boolean
   boardId: string
   boardTitle: string
+  boardColor: string | null
 }
 
 /**
@@ -403,6 +404,7 @@ export async function listDueCards(from: string, to: string): Promise<CardDue[]>
       dueDone: cards.dueDone,
       boardId: boards.id,
       boardTitle: boards.title,
+      boardColor: boards.color,
     })
     .from(cards)
     .innerJoin(lists, eq(cards.listId, lists.id))

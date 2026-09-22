@@ -475,18 +475,20 @@
    * Google и может оказаться тем же, что у акцента, — тогда одинаковыми остались бы
    * оба прямоугольника. Материал различается всегда, цвет — как повезёт.
    */
+  /* --tint — цвет доски карточки; у доски без цвета блок остаётся акцентным */
   .timeblock {
-    border: 1px solid var(--color-accent-line);
-    border-left-width: 3px;
+    --tint: var(--color-accent);
+    border: 1px solid color-mix(in oklab, var(--tint) 45%, transparent);
+    border-left: 3px solid var(--tint);
     border-radius: 11px;
     background:
       repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.06) 0 2px, transparent 2px 7px),
-      var(--color-accent-wash);
+      color-mix(in oklab, var(--tint) 16%, transparent);
     transition: background-color 0.2s ease;
   }
 
   .timeblock:hover {
-    background-color: oklch(0.55 0.12 300 / 0.28);
+    background-color: color-mix(in oklab, var(--tint) 28%, transparent);
   }
 
   /* пунктирная кнопка «добавить»: список, карточка, чек-лист, пункт */

@@ -147,7 +147,8 @@ export function BoardCard({ boards, boardId, slot, linkable, listId, card }: Pro
     else timer.current = setTimeout(() => setOpened(true), DOUBLE_CLICK_MS)
   }
 
-  const data: DragData = { type: 'card', boardId, listId, card }
+  const boardColor = boards.find((board) => board.id === boardId)?.color ?? null
+  const data: DragData = { type: 'card', boardId, boardColor, listId, card }
   const drag = useSortable({ id: dragId(slot, 'card', card.id), data, disabled: renaming })
 
   return (

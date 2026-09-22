@@ -7,8 +7,11 @@ import { z } from 'zod'
 /** Заголовок сервис сам обрежет и проверит: схема следит только за формой запроса. */
 export const titleBody = z.object({ title: z.string() })
 
-/** Возврата доски из архива нет: принимается только отправка туда. */
-export const archiveBoardBody = z.object({ archived: z.literal(true) })
+/** Возврата доски из архива нет: принимается только отправка туда. Цвет сверяет сервис. */
+export const boardPatchBody = z.union(
+  [z.object({ archived: z.literal(true) }), z.object({ color: z.string() })],
+  { error: 'ожидается {archived: true} или {color}' },
+)
 
 /**
  * Позиция списка после броска: соседи по доске. Ранга здесь нет и не будет — его считает

@@ -15,6 +15,7 @@ export type TimeBlock = {
   cardTitle: string
   boardId: string
   boardTitle: string
+  boardColor: string | null
   startsAt: Date
   endsAt: Date
   /** Отметка «выполнено» карточки: на сетке блок гасится и перечёркивается вместе с ней. */
@@ -31,6 +32,7 @@ const LISTED = {
   cardTitle: cards.title,
   boardId: boards.id,
   boardTitle: boards.title,
+  boardColor: boards.color,
   startsAt: timeBlocks.startsAt,
   endsAt: timeBlocks.endsAt,
   cardDone: cards.dueDone,

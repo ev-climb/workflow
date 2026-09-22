@@ -6,6 +6,7 @@ import { useSetTaskDone } from '@/lib/calendar-mutations'
 import type { AllDayView, StripePlace, StripeTarget } from '@/lib/calendar-scene'
 import type { CardDueView } from '@/lib/calendar-view'
 import { isOverdue, moscowParts } from '@/lib/dates'
+import { labelColor } from '@/lib/label-colors'
 import type { CalendarTask } from '@/server/services/google-tasks'
 import { RAIL, cardHref, columns, type OpenHandler, type TaskOpenHandler } from './grid'
 import { RepeatMark, hintOf } from './RepeatMark'
@@ -164,6 +165,8 @@ function DueStripe({
   const router = useRouter()
   const overdue = now !== null && isOverdue(due.dueAt, due.dueDone, due.dueHasTime, now.getTime())
   const time = due.dueHasTime ? moscowParts(due.dueAt).time : null
+  // просрочка и отметка «выполнено» важнее доски: их цвет не перебивается
+  const tint = !overdue && !due.dueDone && due.boardColor ? labelColor(due.boardColor) : null
 
   return (
     <a
@@ -183,9 +186,17 @@ function DueStripe({
             ? 'border-hair text-fog-faint line-through hover:bg-white/6'
             : 'border-hair-lit text-fog-muted hover:bg-white/6'
       }`}
-      style={{ gridColumn: placed.index + 1, gridRow: placed.lane + 1 }}
+      style={{
+        gridColumn: placed.index + 1,
+        gridRow: placed.lane + 1,
+        ...(tint ? { borderColor: `${tint}99` } : {}),
+      }}
     >
-      <span aria-hidden className="size-1.5 shrink-0 rotate-45 border border-current" />
+      <span
+        aria-hidden
+        className="size-1.5 shrink-0 rotate-45 border border-current"
+        style={tint ? { borderColor: tint, backgroundColor: `${tint}66` } : undefined}
+      />
       {time ? <span className="shrink-0 font-mono tabular-nums">{time}</span> : null}
       <span className="truncate">{due.title}</span>
     </a>

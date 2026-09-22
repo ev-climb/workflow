@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { toBoardView } from '@/lib/board-view'
 import { errorResponse, jsonBody, uuidParam } from '@/lib/http'
-import { archiveBoardBody } from '@/lib/schemas'
-import { archiveBoard, getBoard } from '@/server/services/boards'
+import { boardPatchBody } from '@/lib/schemas'
+import { archiveBoard, getBoard, setBoardColor } from '@/server/services/boards'
 
 /** Разбирает вход, зовёт сервис, сериализует ответ. Логики здесь нет — инвариант 2. */
 export async function GET(_request: Request, { params }: { params: Promise<{ boardId: string }> }) {
@@ -19,8 +19,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ bo
   const { boardId } = await params
 
   try {
-    await jsonBody(request, archiveBoardBody)
-    return NextResponse.json(await archiveBoard(uuidParam(boardId, 'доски')))
+    const body = await jsonBody(request, boardPatchBody)
+    const id = uuidParam(boardId, 'доски')
+    return NextResponse.json(
+      'color' in body ? await setBoardColor(id, body.color) : await archiveBoard(id),
+    )
   } catch (error) {
     return errorResponse(error)
   }

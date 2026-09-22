@@ -2,6 +2,7 @@
 
 import { Select } from 'radix-ui'
 import type { BoardSummary } from '@/server/services/boards'
+import { Dot } from './BoardMenu'
 
 // Radix не принимает пустую строку как значение пункта: пустой слот получает своё имя
 const EMPTY = 'empty'
@@ -44,7 +45,10 @@ export function BoardPicker({ boards, boardId, label, onChoose, onCreate }: Prop
             <Item value={EMPTY}>Пусто</Item>
             {boards.map((board) => (
               <Item key={board.id} value={board.id}>
-                {board.title}
+                <span className="flex items-center gap-2">
+                  {board.color ? <Dot color={board.color} /> : null}
+                  {board.title}
+                </span>
               </Item>
             ))}
             <Select.Separator className="my-1 h-px bg-hair" />

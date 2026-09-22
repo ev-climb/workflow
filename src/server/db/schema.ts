@@ -36,6 +36,8 @@ export const boards = pgTable(
     id: pk(),
     title: text().notNull(),
     rank: rankText().notNull(),
+    // имя из набора цветов меток; у досок, заведённых до цветов, пусто
+    color: text(),
     // источник импорта; идентификатор Trello первичным ключом не становится
     trelloId: text(),
     archivedAt: tstz(),

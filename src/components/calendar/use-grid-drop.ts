@@ -27,19 +27,21 @@ type CardDrag = Extract<DragData, { type: 'card' }>
 
 /** Что бросили на сетку: у карточки из этого выйдет тайм-блок, у заметки — окно переноса. */
 type GridDrop =
-  | { kind: 'card'; card: CardView; range: Range }
+  | { kind: 'card'; card: CardView; boardColor: string | null; range: Range }
   | { kind: 'note'; note: NoteView; range: Range }
 
 export type GridDropState = {
   /** Карточка или заметка над сеткой: под курсором её ждёт заготовка тайм-блока. */
-  dropping: { title: string; range: Range } | null
+  dropping: Dropping | null
   setNodeRef: (node: HTMLElement | null) => void
   error: Error | null
 }
 
+type Dropping = { title: string; tint: string | null; range: Range }
+
 /** Приём броска с доски и из заметок: сетка объявлена одной целью на все свои колонки. */
 export function useGridDrop(columns: DayColumns): GridDropState {
-  const [dropping, setDropping] = useState<{ title: string; range: Range } | null>(null)
+  const [dropping, setDropping] = useState<Dropping | null>(null)
   const createBlock = useCreateTimeBlock()
   const dropNote = useNoteDrop()
   const grid = useDroppable({ id: CALENDAR_DROP, data: { type: CALENDAR_DROP } })
@@ -64,10 +66,10 @@ export function useGridDrop(columns: DayColumns): GridDropState {
     const data = drag.active.data.current
     if (!isCalendarDrop(drag.over?.data.current)) return null
 
-    const card = (data as DragData | undefined)?.type === 'card' ? (data as CardDrag).card : null
+    const card = (data as DragData | undefined)?.type === 'card' ? (data as CardDrag) : null
     const dragged = isNoteDrag(data)
       ? ({ kind: 'note', note: data.note } as const)
-      : card && ({ kind: 'card', card } as const)
+      : card && ({ kind: 'card', card: card.card, boardColor: card.boardColor } as const)
     if (!dragged) return null
 
     const point = pointer.current
@@ -94,6 +96,7 @@ export function useGridDrop(columns: DayColumns): GridDropState {
       setDropping(
         target && {
           title: target.kind === 'card' ? target.card.title : noteHeading(target.note) || 'Заметка',
+          tint: target.kind === 'card' ? target.boardColor : null,
           range: target.range,
         },
       )

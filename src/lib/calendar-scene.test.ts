@@ -39,6 +39,7 @@ function block(id: string, from: string, to: string, day = DAYS[0]): TimeBlockVi
     cardTitle: 'Починить пуши',
     boardId: 'b1',
     boardTitle: 'Работа',
+    boardColor: null,
     startsAt: moment(day, from),
     endsAt: moment(day, to),
     cardDone: false,
@@ -55,6 +56,7 @@ function due(id: string, day: string): CardDueView {
     dueDone: false,
     boardId: 'b1',
     boardTitle: 'Работа',
+    boardColor: null,
   }
 }
 
